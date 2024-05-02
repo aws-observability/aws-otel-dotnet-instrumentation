@@ -10,7 +10,23 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
     steps:
-      - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build on Linux
+        if: runner.os == 'Linux'
+        run: bash build.sh
+
+      - name: Build on Windows
+        if: runner.os == 'Windows'
+        run: .\build.cmd
