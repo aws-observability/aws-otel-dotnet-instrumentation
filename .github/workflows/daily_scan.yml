@@ -5,14 +5,57 @@ on:
 #    - cron: '0 18 * * *' # scheduled to run at 18:00 UTC every day
   workflow_dispatch: # be able to run the workflow on demand
 
+env:
+  AWS_DEFAULT_REGION: us-east-1
+
 permissions:
   contents: read
 
 jobs:
   scan_and_report:
-    runs-on: windows-2022
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo for dependency scan
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install java for dependency scan
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Configure AWS credentials for dependency scan
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SECRET_MANAGER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Get NVD API key for dependency scan
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        id: nvd_api_key
+        with:
+          secret-ids: ${{ secrets.NVD_API_KEY_SECRET_ARN }}
+          parse-json-secrets: true
+
+      # See http://jeremylong.github.io/DependencyCheck/dependency-check-cli/ for installation explanation
+      - name: Install and run dependency scan
+        id: dep_scan
+        if: always()
+        run: |
+          gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 259A55407DD6C00299E6607EFFDE55BE73A2D1ED
+          VERSION=$(curl -s https://jeremylong.github.io/DependencyCheck/current.txt)
+          curl -Ls "https://github.com/jeremylong/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip" --output dependency-check.zip
+          curl -Ls "https://github.com/jeremylong/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip.asc" --output dependency-check.zip.asc
+          gpg --verify dependency-check.zip.asc
+          unzip dependency-check.zip
+          
+      - name: Run Dependency Check
+        run: |
+          ./dependency-check/bin/dependency-check.sh --project "MyProject" --out . --scan "**/*.csproj"
