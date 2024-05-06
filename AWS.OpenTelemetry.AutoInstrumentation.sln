@@ -27,6 +27,16 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		stylecop.json = stylecop.json
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sample-applications", "sample-applications", "{7E420F1D-B6D6-47AF-A430-5368FE14D2AA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "integration-test-app", "integration-test-app", "{A42EEB69-8F92-4852-BA43-C38615AAD342}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "integration-test-app", "sample-applications\integration-test-app\integration-test-app\integration-test-app.csproj", "{EF72D346-BBFA-4037-B844-88D8927A9E6E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{DD015346-5FF7-4298-AD31-326B18040908}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.OpenTelemetry.AutoInstrumentation.Tests", "test\AWS.OpenTelemetry.AutoInstrumentation.Tests\AWS.OpenTelemetry.AutoInstrumentation.Tests.csproj", "{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -37,11 +47,22 @@ Global
 		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{04FD4DB8-550B-480C-B974-4AECA5988FFB} = {BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}
+		{A42EEB69-8F92-4852-BA43-C38615AAD342} = {7E420F1D-B6D6-47AF-A430-5368FE14D2AA}
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E} = {A42EEB69-8F92-4852-BA43-C38615AAD342}
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849} = {DD015346-5FF7-4298-AD31-326B18040908}
 	EndGlobalSection
 EndGlobal

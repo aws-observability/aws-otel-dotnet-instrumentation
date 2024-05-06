@@ -40,7 +40,9 @@ This package uses [StyleCop](https://github.com/DotNetAnalyzers/StyleCopAnalyzer
 
 ## Testing
 
-TBD
+For Integration Testing, follow README under `sample-applications/integration-test-app`
+
+For Unit Testing, followed this [doc](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-with-dotnet-test) to create test/AWS.OpenTelemetry.AutoInstrumentation.Tests directory. You can use that doc to add more unit tests. To run the unit tests, run `dotnet test`
 
 ## Security
 
