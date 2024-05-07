@@ -11,6 +11,10 @@ exporters:
     region: us-west-2
   awsemf:
     region: us-west-2
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
 
 service:
   pipelines:
