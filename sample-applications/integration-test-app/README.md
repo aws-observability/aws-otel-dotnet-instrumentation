@@ -28,11 +28,9 @@ If you want to run it locally, follow steps below:
     docker-compose up
     ```
 
-2. Run `bash build.sh` in the root directory. This will build the latest AWS Otel DotNet Distro.
+2. Run `bash build-and-start-application.sh` in the sample app directory. This will build the distribution, copy over the instrumentation dlls and start up 2 docker containers: One for the integration test application and one for the collector (NEEDS TO BE FIXED).
 
-3. Run `bash build-application.sh` in the sample app directory. This will copy over the instrumentation dlls and start up 2 docker containers: One for the integration test application and one for the collector (NEEDS TO BE FIXED).
-
-4. Visit the following endpoints when containers start:
+3. Visit the following endpoints when containers start:
 
     `localhost:8080/aws-sdk-call` and `localhost:8080/outgoing-http-call`
 
