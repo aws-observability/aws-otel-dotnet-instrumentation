@@ -231,7 +231,7 @@ internal sealed class AwsSpanProcessingUtil
                 operation = ExtractAPIPathValue((string)httpTarget);
                 if (IsKeyPresent(span, AttributeHttpMethod))
                 {
-                    object? httpMethod = span.GetTagItem(AttributeHttpTarget);
+                    string? httpMethod = (string?)span.GetTagItem(AttributeHttpMethod);
                     if (httpMethod != null)
                     {
                         operation = httpMethod + " " + operation;
