@@ -17,7 +17,7 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /// to count or otherwise measure all spans produced in a service, without incurring the cost of 100%
 /// sampling.
 /// </summary>
-public class AlwaysRecordSampler : Sampler
+public sealed class AlwaysRecordSampler : Sampler
 {
     private readonly Sampler rootSampler;
 
@@ -40,8 +40,13 @@ public class AlwaysRecordSampler : Sampler
     /// <inheritdoc/>
     public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
     {
-        // TODO implement this function
-        throw new NotImplementedException();
+        SamplingResult result = this.rootSampler.ShouldSample(samplingParameters);
+        if (result.Decision == SamplingDecision.Drop)
+        {
+            result = WrapResultWithRecordOnlyResult(result);
+        }
+
+        return result;
     }
 
     private static SamplingResult WrapResultWithRecordOnlyResult(SamplingResult result)
