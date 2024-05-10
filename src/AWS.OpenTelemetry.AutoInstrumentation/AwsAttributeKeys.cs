@@ -11,7 +11,9 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSLocalOperation = "aws.local.operation";
     internal static readonly string AttributeAWSRemoteService = "aws.remote.service";
     internal static readonly string AttributeAWSRemoteOperation = "aws.remote.operation";
-    internal static readonly string AttributeAWSRemoteTarget = "aws.remote.target";
+
+    internal static readonly string AttributeAWSRemoteResourceIdentifier = "aws.remote.resource.identifier";
+    internal static readonly string AttributeAWSRemoteResourceType = "aws.remote.resource.type";
     internal static readonly string AttributeAWSSdkDescendant = "aws.sdk.descendant";
     internal static readonly string AttributeAWSConsumerParentSpanKind = "aws.consumer.parent.span.kind";
 
