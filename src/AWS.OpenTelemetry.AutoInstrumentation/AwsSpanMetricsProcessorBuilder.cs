@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics.Metrics;
 using OpenTelemetry.Resources;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation;
@@ -10,9 +11,26 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public class AwsSpanMetricsProcessorBuilder
 {
+    // Metric instrument configuration constants
+    private static readonly string Error = "Error";
+    private static readonly string Fault = "Fault";
+    private static readonly string Latency = "Latency";
+    private static readonly string LatencyUnits = "Milliseconds";
+
+    // Defaults
+    private static readonly IMetricAttributeGenerator DefaultGenerator = new AwsMetricAttributeGenerator();
+
+    // ActivitySource.Name?
+    private static readonly string DefaultScopeName = "AwsSpanMetricsProcessor";
+    private readonly Resource resource;
+
+    // Optional builder elements
+    private IMetricAttributeGenerator generator = DefaultGenerator;
+    private string scopeName = DefaultScopeName;
+
     private AwsSpanMetricsProcessorBuilder(Resource resource)
     {
-        // TODO: implement this
+        this.resource = resource;
     }
 
     /// <summary>
@@ -33,7 +51,12 @@ public class AwsSpanMetricsProcessorBuilder
     /// <returns>Returns this instance of the builder</returns>
     public AwsSpanMetricsProcessorBuilder SetGenerator(IMetricAttributeGenerator generator)
     {
-        // TODO: implement this
+        if (generator == null)
+        {
+            throw new ArgumentNullException("generator must not be null", nameof(generator));
+        }
+
+        this.generator = generator;
         return this;
     }
 
@@ -45,7 +68,12 @@ public class AwsSpanMetricsProcessorBuilder
     /// <returns>Returns this instance of the builder</returns>
     public AwsSpanMetricsProcessorBuilder SetScopeName(string scopeName)
     {
-        // TODO: implement this
+        if (scopeName == null)
+        {
+            throw new ArgumentNullException("generator must not be null", nameof(scopeName));
+        }
+
+        this.scopeName = scopeName;
         return this;
     }
 
@@ -56,8 +84,12 @@ public class AwsSpanMetricsProcessorBuilder
     /// <returns>Returns this instance of the builder</returns>
     public AwsSpanMetricsProcessor Build()
     {
-        // TODO: implement this
-        throw new NotImplementedException();
+        Meter meter = new Meter(this.scopeName);
+        Histogram<long> errorHistogram = meter.CreateHistogram<long>(Error);
+        Histogram<long> faultHistogram = meter.CreateHistogram<long>(Fault);
+        Histogram<double> latencyHistogram = meter.CreateHistogram<double>(Latency, LatencyUnits);
+        return AwsSpanMetricsProcessor.Create(
+            errorHistogram, faultHistogram, latencyHistogram, this.generator, this.resource);
     }
 
     /// <summary>
@@ -66,7 +98,6 @@ public class AwsSpanMetricsProcessorBuilder
     /// <returns>Returns this scope name set in the meter</returns>
     public string GetScopeName()
     {
-        // TODO: implement this
-        return string.Empty;
+        return this.scopeName;
     }
 }
