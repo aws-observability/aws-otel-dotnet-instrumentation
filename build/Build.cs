@@ -119,10 +119,13 @@ internal partial class Build : NukeBuild
         .After(this.Compile)
         .Executes(() =>
         {
-            FileSystemTasks.CopyFileToDirectory(
+            FileSystemTasks.CopyDirectoryRecursively(
                 RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "AWS.OpenTelemetry.AutoInstrumentation.dll",
-                this.openTelemetryDistributionFolder / "net");
+                "net8.0",
+                this.openTelemetryDistributionFolder / "net",
+                DirectoryExistsPolicy.Merge,
+                FileExistsPolicy.Skip
+            );
 
             // TODO: fix build script to copy dependencies without manually setting them here.
             FileSystemTasks.CopyFileToDirectory(
@@ -147,10 +150,13 @@ internal partial class Build : NukeBuild
 
             if (EnvironmentInfo.IsWin)
             {
-                FileSystemTasks.CopyFileToDirectory(
+                FileSystemTasks.CopyDirectoryRecursively(
                     RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                    "net8.0" / "AWS.OpenTelemetry.AutoInstrumentation.dll",
-                    this.openTelemetryDistributionFolder / "netfx");
+                    "net8.0",
+                    this.openTelemetryDistributionFolder / "netfx",
+                    DirectoryExistsPolicy.Merge,
+                    FileExistsPolicy.Skip
+                );
             }
         });
 
