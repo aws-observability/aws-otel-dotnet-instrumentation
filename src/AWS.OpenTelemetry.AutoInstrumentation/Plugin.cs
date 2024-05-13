@@ -58,8 +58,6 @@ public class Plugin
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
         // My custom logic here
-        AwsSpanMetricsProcessor testProcessor = new AwsSpanMetricsProcessor();
-        builder.AddProcessor(testProcessor);
         return builder;
     }
 
