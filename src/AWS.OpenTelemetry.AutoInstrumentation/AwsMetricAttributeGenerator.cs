@@ -35,9 +35,8 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
-    // As per
-    // https://github.com/open-telemetry/opentelemetry-java/tree/main/sdk-extensions/autoconfigure#opentelemetry-resource
-    // If service name is not specified, SDK defaults the service name to unknown_service
+    // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
+    // If service name is not specified, SDK defaults the service name starting with unknown_service
     private static readonly string OtelUnknownServicePrefix = "unknown_service";
 
     // This is currently not in latest version of the Opentelemetry.SemanticConventions library.
@@ -85,7 +84,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         return attributes;
     }
 
-    // Service is always derived from {@link ResourceAttributes#SERVICE_NAME}
+    /// Service is always derived from <see cref="AttributeServiceName"/>
 #pragma warning disable SA1204 // Static elements should appear before instance elements
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
@@ -120,8 +119,8 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     /// <summary>
     /// Egress operation(i.e.operation for Client and Producer spans) is always derived from a
-    /// special span attribute, {@link AwsAttributeKeys#AWS_LOCAL_OPERATION}. This attribute is
-    /// generated with a separate SpanProcessor, {@link AttributePropagatingSpanProcessor}
+    /// special span attribute, <see cref="AttributeAWSLocalOperation"/>. This attribute is
+    /// generated with a separate SpanProcessor, <see cref="AttributePropagatingSpanProcessor"/>
     /// </summary>
     private static void SetEgressOperation(Activity span, ActivityTagsCollection attributes)
     {
@@ -153,8 +152,8 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     ///   <li>DB
     ///   <li>FAAS
     ///   <li>Messaging
-    ///   <li>GraphQL - Special case, if {@link SemanticAttributes#GRAPHQL_OPERATION_TYPE} is present,
-    ///       we use it for RemoteOperation and set RemoteService to {@link #GRAPHQL}.
+    ///   <li>GraphQL - Special case, if <see cref="AttributeGraphqlOperationType"/> is present,
+    ///       we use it for RemoteOperation and set RemoteService to <see cref="GraphQL"/>.
     /// </ul>
     ///
     /// <p>In each case, these span attributes were selected from the OpenTelemetry trace semantic
@@ -359,6 +358,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         return serviceName;
     }
 
+    // This function is used to check for AWS specific attributes and set the RemoteResourceType
+    // and RemoteResourceIdentifier accordingly. Right now, this sets it for DDB, S3, Kinesis,
+    // and SQS (using QueueName or QueueURL)
     private static void SetRemoteResourceTypeAndIdentifier(Activity span, ActivityTagsCollection attributes)
     {
         string? remoteResourceType = null;
@@ -437,6 +439,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         return remoteOperation;
     }
 
+    /// This function extracts the DBStatement from the remote operation attribute value by trying to match it
+    /// SqlDialectPattern which is a list of SQL Dialect keywords (SELECT, DROP, etc). For more details about
+    /// those keywords, check <see cref="SqlDialectPattern"/>
     private static string GetDBStatementRemoteOperation(Activity span, string remoteOperationKey)
     {
         string remoteOperation;
