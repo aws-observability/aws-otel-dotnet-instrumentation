@@ -43,7 +43,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // although it's available here:
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.SemanticConventions/Attributes/ServiceAttributes.cs#L48C25-L48C45
     // TODO: Open an issue to ask about this discrepancy and when will the latest version be released.
-    private static readonly string AttributeServiceName = "service.name";
+    public static readonly string AttributeServiceName = "service.name";
 
     /// <inheritdoc/>
     public Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
@@ -89,7 +89,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
     {
-        string? service = (string?)resource.Attributes.First(attribute => attribute.Key == AttributeServiceName).Value;
+        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeServiceName).Value;
 
         // In practice the service name is never null, but we can be defensive here.
         if (service == null || service.StartsWith(OtelUnknownServicePrefix))
@@ -402,7 +402,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Span kind is needed for differentiating metrics in the EMF exporter
     private static void SetSpanKindForService(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString();
         if (IsLocalRoot(span))
         {
             spanKind = LocalRoot;
@@ -413,7 +413,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     private static void SetSpanKindForDependency(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString();
         attributes.Add(AttributeAWSSpanKind, spanKind);
     }
 
