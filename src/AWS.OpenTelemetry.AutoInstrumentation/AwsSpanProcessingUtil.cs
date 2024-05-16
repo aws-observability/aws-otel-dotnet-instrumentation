@@ -190,7 +190,7 @@ internal sealed class AwsSpanProcessingUtil
             }
 
             object? parentSpanKind = span.GetTagItem(AttributeAWSConsumerParentSpanKind);
-            return !ActivityKind.Consumer.GetType().Name.Equals((string?)parentSpanKind);
+            return !ActivityKind.Consumer.ToString().Equals((string?)parentSpanKind);
         }
 
         return true;

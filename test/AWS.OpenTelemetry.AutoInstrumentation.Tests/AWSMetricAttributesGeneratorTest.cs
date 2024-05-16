@@ -547,6 +547,8 @@ public class AWSMetricAttributesGeneratorTest
         };
         validateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
     }
+    
+    
 
     private void validateRemoteResourceAttributes(Dictionary<string, object> attributesCombination,String type, String identifier)
     {
@@ -564,6 +566,102 @@ public class AWSMetricAttributesGeneratorTest
         spanDataMock.Dispose();
     }
 
+    // private void validateHttpStatusForNonLocalRootWithThrowableForClient(ActivityKind activityKind, long expectedStatusCode)
+    // {
+    //     spanDataMock = testSource.StartActivity("test", activityKind);
+    //     var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
+    //     ActivityTagsCollection actualMetric = new ActivityTagsCollection();
+    //     if (attributeMap.Count > 0)
+    //     {
+    //         switch (spanDataMock.Kind)
+    //         {
+    //             case ActivityKind.Producer:
+    //             case ActivityKind.Client:
+    //             case ActivityKind.Consumer:
+    //                 attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out actualMetric);
+    //                 break;
+    //             default:
+    //                 attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out actualMetric);
+    //                 break;
+    //         }
+    //     }
+    //
+    //     if (expectedStatusCode < 0)
+    //     {
+    //         Assert.False(actualMetric.TryGetValue(AwsAttributeKeys.AttributeHttpStatusCode, out object value));
+    //     }
+    //     else
+    //     {
+    //         Assert.True(actualMetric.TryGetValue(AwsAttributeKeys.AttributeHttpStatusCode, out object value));
+    //         Assert.Equal(expectedStatusCode, value);
+    //     }
+    //     
+    // }
+
+    [Fact]
+    public void testNormalizeRemoteServiceName_NoNormalization()
+    {
+        string serviceName = "non aws service";
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeRpcService, serviceName);
+        var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
+        Assert.Equal(serviceName, actualServiceName);
+    }
+
+    [Fact]
+    public void testNormalizeRemoteServiceName_AwsSdk()
+    {
+        // AWS SDK V2
+        testAwsSdkServiceNormalization("AmazonDynamoDBv2", "AWS::DynamoDB");
+        testAwsSdkServiceNormalization("AmazonKinesis", "AWS::Kinesis");
+        testAwsSdkServiceNormalization("Amazon S3", "AWS::S3");
+        testAwsSdkServiceNormalization("AmazonSQS", "AWS::SQS");
+        
+        // AWS SDK V1
+        testAwsSdkServiceNormalization("DynamoDb", "AWS::DynamoDB");
+        testAwsSdkServiceNormalization("Kinesis", "AWS::Kinesis");
+        testAwsSdkServiceNormalization("S3", "AWS::S3");
+        testAwsSdkServiceNormalization("Sqs", "AWS::SQS");
+    }
+
+    [Fact]
+    public void testNoMetricWhenConsumerProcessWithConsumerParent()
+    {
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Consumer);
+        Activity childSpan = testSource.StartActivity("test", ActivityKind.Consumer);
+        childSpan.SetParentId(spanDataMock.TraceId, spanDataMock.SpanId);
+        childSpan.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
+        childSpan.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString());
+        var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(childSpan, _resource);
+        Assert.Equal(0, attributeMap.Count);
+    }
+    
+    [Fact]
+    public void testBothMetricsWhenLocalRootConsumerProcess()
+    {
+        parentSpan.Dispose();
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Consumer);
+        spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
+        spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString());
+        spanDataMock.Start();
+        var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
+        Assert.Equal(2, attributeMap.Count);
+    }
+
+    private void testAwsSdkServiceNormalization(String serviceName, String expectedRemoteService)
+    {
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+        spanDataMock.SetTag(AttributeRpcService, serviceName);
+        var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
+        Assert.Equal(expectedRemoteService, actualServiceName);
+        spanDataMock.Dispose();
+    }
+    
 
     private void validatePeerServiceDoesOverride(string remoteServiceKey)
     {
@@ -628,19 +726,14 @@ public class AWSMetricAttributesGeneratorTest
         spanDataMock.Dispose();
 
     }
-
-    private void validRemoteAttributes()
-    {
-        
-    }
     
     private void validateAttributesProducedForNonLocalRootSpanOfKind(ActivityTagsCollection expectedAttributes, Activity span)
     {
-        Dictionary<string, ActivityTagsCollection> attribteMap =
+        Dictionary<string, ActivityTagsCollection> attributeMap =
             Generator.GenerateMetricAttributeMapFromSpan(span, this._resource);
-        attribteMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
-        attribteMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
-        if (attribteMap.Count > 0)
+        attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        if (attributeMap.Count > 0)
         {
             switch (span.Kind)
             {
@@ -665,10 +758,10 @@ public class AWSMetricAttributesGeneratorTest
     private void validateAttributesProducedForLocalRootSpanOfKind(ActivityTagsCollection expectServiceAttributes,
         ActivityTagsCollection expectDependencyAttributes, Activity span)
     {
-        Dictionary<string, ActivityTagsCollection> attribteMap =
+        Dictionary<string, ActivityTagsCollection> attributeMap =
             Generator.GenerateMetricAttributeMapFromSpan(span, this._resource);
-        attribteMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
-        attribteMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         
         Assert.True(serviceMetric != null);
         Assert.True(serviceMetric.Count == expectServiceAttributes.Count);
