@@ -515,6 +515,56 @@ public class AWSMetricAttributesGeneratorTest
         spanDataMock.Dispose();
     }
 
+    [Fact]
+    public void testClientSpanWithRemoteResourceAttributes()
+    {
+        Dictionary<string, object> attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSS3Bucket, "aws_s3_bucket_name" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name");
+        
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSQSQueueName, "aws_queue_name" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
+        attributesCombination[AttributeAWSSQSQueueUrl] = "https://sqs.us-east-2.amazonaws.com/123456789012/Queue";
+        validateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
+
+        attributesCombination[AttributeAWSSQSQueueUrl] = "invalidUrl";
+        validateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
+        
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSKinesisStreamName, "aws_stream_name" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name");
+        
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableName, "aws_table_name" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
+    }
+
+    private void validateRemoteResourceAttributes(Dictionary<string, object> attributesCombination,String type, String identifier)
+    {
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        foreach (var attribute in attributesCombination)
+        {
+            spanDataMock.SetTag(attribute.Key, attribute.Value);
+        }
+        var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
+        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteResourceType, out var actualAWSRemoteResourceType);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteResourceIdentifier, out var actualAWSRemoteResourceIdentifier);
+        Assert.Equal(type, actualAWSRemoteResourceType);
+        Assert.Equal(identifier, actualAWSRemoteResourceIdentifier);
+        spanDataMock.Dispose();
+    }
+
+
     private void validatePeerServiceDoesOverride(string remoteServiceKey)
     {
         spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
