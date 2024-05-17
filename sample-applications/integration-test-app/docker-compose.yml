@@ -4,7 +4,7 @@ services:
     image: public.ecr.aws/aws-observability/aws-otel-collector:latest
     command: ["--config=/etc/otel-config.yaml"]
     volumes:
-      - ../config.yaml:/etc/otel-config.yaml // use default config
+      - ./collector-config-local.yml:/etc/otel-config.yaml
       - ~/.aws:/root/.aws:ro
     environment:
       - AWS_REGION=us-west-2 
@@ -18,7 +18,7 @@ services:
       - INSTANCE_ID
       - LISTEN_ADDRESS=0.0.0.0:8080
       - OTEL_RESOURCE_ATTRIBUTES=service.name=aws-otel-integ-test
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318
       - ASPNETCORE_URLS=http://+:8080
     ports:
       - '8080:8080'     
