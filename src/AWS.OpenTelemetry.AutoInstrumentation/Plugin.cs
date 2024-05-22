@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Contrib.Extensions.AWSXRay.Resources;
@@ -27,6 +28,7 @@ public class Plugin
     private static readonly int DefaultMetricExportInternal = 60000;
     private static readonly string OtelTracesSampler = "OTEL_TRACES_SAMPLER";
     private static readonly string OtelTracesSamplerArg = "OTEL_TRACES_SAMPLER_ARG";
+    private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -44,6 +46,13 @@ public class Plugin
     {
         if (this.IsApplicationSignalsEnabled())
         {
+            // add new export processor here.
+            // https://stackoverflow.com/questions/12993962/set-value-of-private-field
+            // use reflection to get the internal exporter and set the new modified exporter.
+            // I need to get the composite processor after SDK init and replace the exporter.
+            var processor = tracerProvider.GetType().GetProperty("Processor", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).GetValue(tracerProvider);
+            var exporter = processor.GetType().GetField("exporter", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(processor);
+
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
             string? intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
@@ -86,6 +95,31 @@ public class Plugin
         // https://github.com/open-telemetry/opentelemetry-dotnet/tree/main/docs/metrics/customizing-the-sdk#configuring-the-aggregation-of-a-histogram
         // use the above to check about adding aggregation type.
         var options = new OtlpExporterOptions();
+
+        Logger.Log(
+          LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
+
+        string? applicationSignalsEndpoint = System.Environment.GetEnvironmentVariable(ApplicationSignalsExporterEndpointConfig);
+        string? protocolString = System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+        OtlpExportProtocol protocol = OtlpExportProtocol.HttpProtobuf;
+        if (protocolString == "http/protobuf")
+        {
+            applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
+            protocol = OtlpExportProtocol.HttpProtobuf;
+        }
+        else if (protocolString == "grpc")
+        {
+            applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4315";
+            protocol = OtlpExportProtocol.Grpc;
+        }
+        else
+        {
+            throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + options.Protocol);
+        }
+
+        options.Endpoint = new Uri(applicationSignalsEndpoint);
+        options.Protocol = protocol;
+
         return new OtlpMetricExporter(options);
     }
 
@@ -173,37 +207,6 @@ public class Plugin
         }
     }
 
-    /// <summary>
-    /// To configure any traces options used by OpenTelemetry .NET Automatic Instrumentation
-    /// We can set the OTLP endpoint configs to point to the cloudwatch agent here as default so that we don't need
-    /// to use env vars.
-    /// </summary>
-    /// <param name="options"><see cref="OtlpExporterOptions"/> options to configure</param>
-    public void ConfigureTracesOptions(OtlpExporterOptions options)
-    {
-        if (this.IsApplicationSignalsEnabled())
-        {
-            Logger.Log(
-          LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
-
-            string? applicationSignalsEndpoint = System.Environment.GetEnvironmentVariable(ApplicationSignalsExporterEndpointConfig);
-            if (options.Protocol == OtlpExportProtocol.HttpProtobuf)
-            {
-                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
-            }
-            else if (options.Protocol == OtlpExportProtocol.Grpc)
-            {
-                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4315";
-            }
-            else
-            {
-                throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + options.Protocol);
-            }
-
-            options.Endpoint = new Uri(applicationSignalsEndpoint);
-        }
-    }
-
     // To configure any metrics options used by OpenTelemetry .NET Automatic Instrumentation
     public void ConfigureMetricsOptions(MetricReaderOptions options)
     {
@@ -231,18 +234,6 @@ public class Plugin
     {
         // My custom logic here
         return builder;
-    }
-
-    /// <summary>
-    /// To configure any metrics options used by OpenTelemetry .NET Automatic Instrumentation
-    /// We can set the OTLP endpoint configs to point to the cloudwatch agent here as default so that we don't need
-    /// to use env vars.
-    /// </summary>
-    /// <param name="options"><see cref="OtlpExporterOptions"/> options to configure</param>
-    public void ConfigureMetricsOptions(OtlpExporterOptions options)
-    {
-        // My custom logic here
-        // Find supported options below
     }
 
     /// <summary>
