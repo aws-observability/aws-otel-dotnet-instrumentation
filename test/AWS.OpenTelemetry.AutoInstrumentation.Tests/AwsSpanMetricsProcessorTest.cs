@@ -16,6 +16,7 @@ namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 /// </summary>
 public class AwsSpanMetricsProcessorTest
 {
+    public static int count;
     private AwsSpanMetricsProcessor awsSpanMetricsProcessor;
     private Mock<AwsMetricAttributeGenerator> Generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
@@ -37,6 +38,25 @@ public class AwsSpanMetricsProcessorTest
         errorHistogram = meter.CreateHistogram<long>("error");
         faultHistogram = meter.CreateHistogram<long>("fault");
         latencyHistogram = meter.CreateHistogram<double>("latency");
+        var meterListener = new MeterListener();
+        meterListener.EnableMeasurementEvents(errorHistogram);
+        meterListener.EnableMeasurementEvents(faultHistogram);
+        meterListener.EnableMeasurementEvents(latencyHistogram);
+        meter.Tags.AddItem(new KeyValuePair<string, object?>("test", "test"));
+        meterListener.SetMeasurementEventCallback<long>(((instrument, measurement, tags, state) =>
+                {
+                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
+                    list.Add(new KeyValuePair<string, object>(instrument.Name, tags[0]));
+                    GlobalCallbackData.CallList = list;
+                }
+                ));
+        meterListener.SetMeasurementEventCallback<double>(((instrument, measurement, tags, state) =>
+                {
+                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
+                    list.Add(new KeyValuePair<string, object>(instrument.Name, tags[0]));
+                    GlobalCallbackData.CallList = list;
+                }
+            ));
         awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(errorHistogram, faultHistogram, latencyHistogram, Generator.Object, resource);
     }
 
@@ -66,8 +86,24 @@ public class AwsSpanMetricsProcessorTest
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
             .Returns(expectAttributes);
         awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        verifyHistogramRecords(expectAttributes, 0,0);
         // var result = Generator.Object.GenerateMetricAttributeMapFromSpan(spanDataMock, resource);
         // Assert.Equal(CallLogger.CallCount, 0);
+    }
+
+    private void verifyHistogramRecords(Dictionary<string, ActivityTagsCollection> metricAttributesMap,
+        int wantedServiceMetricInvocation,
+        int wantedDependencyMetricInvocation)
+    {
+        var serviceMetrics = metricAttributesMap[IMetricAttributeGenerator.ServiceMetric];
+        var serviceKVP = new KeyValuePair<string, object>(serviceMetrics.Keys.FirstOrDefault(),
+            serviceMetrics.Values.FirstOrDefault());
+        var dependencyMetrics = metricAttributesMap[IMetricAttributeGenerator.DependencyMetric];
+        var dependencyKVP = new KeyValuePair<string, object>(dependencyMetrics.Keys.FirstOrDefault(),
+            dependencyMetrics.Values.FirstOrDefault());
+        Assert.Equal(1,1);
+        
+
     }
 
     private Dictionary<string, ActivityTagsCollection> buildMetricAttributes(bool containAttributes, Activity span)
@@ -88,6 +124,12 @@ public class AwsSpanMetricsProcessorTest
         return attributes;
     }
 
+}
+
+public static class GlobalCallbackData
+{
+    public static List<KeyValuePair<string, object?>> CallList { get; set; }
+    public static Dictionary<string, object?> Dictionary { get; set; }
 }
 
 
