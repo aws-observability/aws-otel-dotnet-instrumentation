@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 using HarmonyLib;
+using Moq;
 using OpenTelemetry.Resources;
 
 
@@ -16,7 +17,7 @@ namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 public class AwsSpanMetricsProcessorTest
 {
     private AwsSpanMetricsProcessor awsSpanMetricsProcessor;
-    private AwsMetricAttributeGenerator Generator = new AwsMetricAttributeGenerator();
+    private Mock<AwsMetricAttributeGenerator> Generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
     private Meter meter = new Meter("test");
     private Histogram<long> errorHistogram;
@@ -36,7 +37,7 @@ public class AwsSpanMetricsProcessorTest
         errorHistogram = meter.CreateHistogram<long>("error");
         faultHistogram = meter.CreateHistogram<long>("fault");
         latencyHistogram = meter.CreateHistogram<double>("latency");
-        awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(errorHistogram, faultHistogram, latencyHistogram, Generator, resource);
+        awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(errorHistogram, faultHistogram, latencyHistogram, Generator.Object, resource);
     }
 
     [Fact]
@@ -58,23 +59,58 @@ public class AwsSpanMetricsProcessorTest
     [Fact]
     public void testOnEndMetricsGenerationWithoutSpanAttributes()
     {
+        var harmony = new Harmony("patch");
+        // harmony.Patch(typeof(Histogram<long>).GetMethod("Record"), new HarmonyMethod(Patch.Prefix));
         spanDataMock = activitySource.StartActivity("test");
-        Dictionary<string, ActivityTagsCollection> expectAttributes = new Dictionary<string, ActivityTagsCollection>();
-        var generateMethod = Generator.GetType().GetMethod(nameof(Generator.GenerateMetricAttributeMapFromSpan));
-        var harmony = new HarmonyLib.Harmony("generateMetricAttribute.Patch");
-        var prefixMethod = typeof(AwsSpanMetricsProcessorTest).GetMethod(nameof(GenerateMetricAttributeMapFromSpan_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
-        harmony.Patch(generateMethod, new HarmonyMethod(prefixMethod));
-        var result = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, resource);
-        Assert.NotEmpty(result); 
+        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
+        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+            .Returns(expectAttributes);
+        awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        // var result = Generator.Object.GenerateMetricAttributeMapFromSpan(spanDataMock, resource);
+        // Assert.Equal(CallLogger.CallCount, 0);
     }
-    private static bool GenerateMetricAttributeMapFromSpan_Prefix(Activity span, Resource resource, ref Dictionary<string, ActivityTagsCollection> __result)
+
+    private Dictionary<string, ActivityTagsCollection> buildMetricAttributes(bool containAttributes, Activity span)
     {
-        
-        __result = new Dictionary<string, ActivityTagsCollection>
+        Dictionary<string, ActivityTagsCollection> attributes = new Dictionary<string, ActivityTagsCollection>();
+        if (containAttributes)
         {
-            { "key", new ActivityTagsCollection(new Dictionary<string, object> { { "tagKey", "tagValue" } }) }
-        };
-        return false;
+            if (AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(span))
+            {
+                attributes.Add(IMetricAttributeGenerator.DependencyMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new dependency key", "new dependency value")]));
+            }
+            
+            if (AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(span))
+            {
+                attributes.Add(IMetricAttributeGenerator.ServiceMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new service key", "new service value")]));
+            }
+        }
+        return attributes;
     }
+
 }
 
+
+
+// public static class CallLogger
+// {
+//     public static int CallCount { get; private set; } = 0;
+//     public static List<string> CallDetails { get; } = new List<string>();
+//
+//     public static void LogCall(params object[] args)
+//     {
+//         CallCount++;
+//         CallDetails.Add($"Call #{CallCount}: {string.Join(", ", args)}");
+//     }
+// }
+//
+// [HarmonyPatch(typeof(Histogram<long>), nameof(Histogram<long>.Record))] 
+// class Patch
+// {
+//     [HarmonyPrefix]
+//     [HarmonyPatch("Record", new Type[] { typeof(long) })]
+//     public static void Prefix(long value)
+//     {
+//         CallLogger.LogCall(value);
+//     }
+// }
