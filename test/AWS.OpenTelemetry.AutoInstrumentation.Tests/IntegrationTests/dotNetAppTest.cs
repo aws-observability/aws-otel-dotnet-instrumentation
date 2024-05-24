@@ -33,6 +33,7 @@ public class DotNetAppTest(ITestOutputHelper output, AWSFixture awsFixture)
         // Check if exported items had correct trace format
         var (standardOutput, _, _) = this.RunTestApplication();
         standardOutput.Should().Contain("Amazon.AWS.AWSClientInstrumentation");
+        Console.WriteLine(standardOutput);
     }
 
     private static string GetTestApplicationFilePath(string applicationName)

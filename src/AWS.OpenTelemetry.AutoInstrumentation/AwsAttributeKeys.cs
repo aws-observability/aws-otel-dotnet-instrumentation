@@ -47,7 +47,6 @@ internal sealed class AwsAttributeKeys
 
     internal static readonly string AttributeAWSS3Bucket = "aws.s3.bucket";
 
-    internal static readonly string AttributeHttpStatusCode = "http.status_code";
     internal static readonly string AttributeHttpResponseContentLength = "http.response_content_length";
 
     internal static readonly string AttributeValueDynamoDb = "dynamodb";

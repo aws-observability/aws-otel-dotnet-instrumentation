@@ -70,7 +70,7 @@ public class AwsSpanMetricsProcessorBuilder
     {
         if (scopeName == null)
         {
-            throw new ArgumentNullException("generator must not be null", nameof(scopeName));
+            throw new ArgumentNullException("scopeName must not be null", nameof(scopeName));
         }
 
         this.scopeName = scopeName;

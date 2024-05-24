@@ -23,3 +23,6 @@ ENV DOTNET_SHARED_STORE=${INSTALL_DIR}/store
 ENV DOTNET_STARTUP_HOOKS=${INSTALL_DIR}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
 ENV OTEL_DOTNET_AUTO_HOME=${INSTALL_DIR}
 ENV OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.AutoInstrumentation.Plugin, AWS.OpenTelemetry.AutoInstrumentation"
+ENV OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
+ENV OTEL_TRACES_SAMPLER="always_on"
+ENV OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
