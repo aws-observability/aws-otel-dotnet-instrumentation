@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
-using static OpenTelemetry.Trace.TraceSemanticConventions;
+using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation;
 
@@ -97,12 +97,14 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private void RecordErrorOrFault(Activity span, ActivityTagsCollection attributes)
     {
         KeyValuePair<string, object?>[] attributesArray = attributes.ToArray();
-        object? httpStatusCode = span.GetTagItem(AttributeHttpStatusCode);
+        object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode);
         ActivityStatusCode statusCode = span.Status;
+
+        Console.WriteLine("Inside the metric processor: " + httpStatusCode);
 
         if (httpStatusCode == null)
         {
-            attributes.TryGetValue(AttributeHttpStatusCode, out httpStatusCode);
+            attributes.TryGetValue(AttributeHttpResponseStatusCode, out httpStatusCode);
         }
 
         if (httpStatusCode == null

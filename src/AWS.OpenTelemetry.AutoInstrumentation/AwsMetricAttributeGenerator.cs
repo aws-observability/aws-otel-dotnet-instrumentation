@@ -241,9 +241,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static string GenerateRemoteOperation(Activity span)
     {
         string remoteOperation = UnknownRemoteOperation;
-        if (IsKeyPresent(span, AttributeHttpUrl))
+        if (IsKeyPresent(span, AttributeUrlFull))
         {
-            string? httpUrl = (string?)span.GetTagItem(AttributeHttpUrl);
+            string? httpUrl = (string?)span.GetTagItem(AttributeUrlFull);
             try
             {
                 Uri url;
@@ -259,9 +259,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             }
         }
 
-        if (IsKeyPresent(span, AttributeHttpMethod))
+        if (IsKeyPresent(span, AttributeHttpRequestMethod))
         {
-            string? httpMethod = (string?)span.GetTagItem(AttributeHttpMethod);
+            string? httpMethod = (string?)span.GetTagItem(AttributeHttpRequestMethod);
             remoteOperation = httpMethod + " " + remoteOperation;
         }
 
@@ -294,9 +294,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteService += ":" + port;
             }
         }
-        else if (IsKeyPresent(span, AttributeHttpUrl))
+        else if (IsKeyPresent(span, AttributeUrlFull))
         {
-            string? httpUrl = (string?)span.GetTagItem(AttributeHttpUrl);
+            string? httpUrl = (string?)span.GetTagItem(AttributeUrlFull);
             try
             {
                 if (httpUrl != null)

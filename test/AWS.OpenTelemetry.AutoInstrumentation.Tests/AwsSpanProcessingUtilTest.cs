@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
+using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using System.Reflection;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
@@ -10,10 +11,10 @@ using Xunit;
 public class AwsSpanProcessingUtilTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
-    private readonly string internalOperation = "InternalOperation";    
+    private readonly string internalOperation = "InternalOperation";
     private readonly string unknownOperation = "UnknownOperation";
     private readonly string defaultPathValue = "/";
-    
+
     public AwsSpanProcessingUtilTest()
     {
         var listener = new ActivityListener
@@ -45,20 +46,20 @@ public class AwsSpanProcessingUtilTest
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(internalOperation, actualOperation);
     }
-    
-    [Fact]    
+
+    [Fact]
     public void TestGetIngressOperationHttpMethodNameAndNoFallback()
     {
         string validName = "GET";
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpMethod, validName);
+        spanDataMock.SetTag(AttributeHttpRequestMethod, validName);
         spanDataMock.DisplayName = validName;
         spanDataMock.Start();
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(unknownOperation, actualOperation);
     }
-    
-    [Fact]    
+
+    [Fact]
     public void TestGetIngressOperationEmptyNameAndNoFallback()
     {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
@@ -67,8 +68,8 @@ public class AwsSpanProcessingUtilTest
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(unknownOperation, actualOperation);
     }
-    
-    [Fact]    
+
+    [Fact]
     public void TestGetIngressOperationUnknownNameAndNoFallback()
     {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
@@ -77,22 +78,22 @@ public class AwsSpanProcessingUtilTest
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(unknownOperation, actualOperation);
     }
-    
-    [Fact]    
+
+    [Fact]
     public void testGetIngressOperationInvalidNameAndValidTarget()
     {
         string invalidName = "";
         string validTarget = "/";
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.DisplayName = invalidName;
-        spanDataMock.SetTag(AttributeHttpTarget, validTarget);
+        spanDataMock.SetTag(AttributeUrlPath, validTarget);
         spanDataMock.Start();
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
-        Assert.Equal( validTarget, actualOperation);
-    }   
+        Assert.Equal(validTarget, actualOperation);
+    }
 
-    
-    [Fact]    
+
+    [Fact]
     public void testGetIngressOperationInvalidNameAndValidTargetAndMethod()
     {
         string invalidName = "";
@@ -100,13 +101,13 @@ public class AwsSpanProcessingUtilTest
         string validMethod = "GET";
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.DisplayName = invalidName;
-        spanDataMock.SetTag(AttributeHttpMethod, validMethod);
-        spanDataMock.SetTag(AttributeHttpTarget, validTarget);
+        spanDataMock.SetTag(AttributeHttpRequestMethod, validMethod);
+        spanDataMock.SetTag(AttributeUrlPath, validTarget);
         spanDataMock.Start();
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(validMethod + " " + validTarget, actualOperation);
-    }   
-    
+    }
+
     [Fact]
     public void TestGetEgressOperationUseInternalOperation()
     {
@@ -115,8 +116,8 @@ public class AwsSpanProcessingUtilTest
         spanDataMock.Start();
         string actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
         Assert.Equal(internalOperation, actualOperation);
-    }    
-    
+    }
+
     [Fact]
     public void TestGetEgressOperationUseLocalOperation()
     {
@@ -127,7 +128,7 @@ public class AwsSpanProcessingUtilTest
         string actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
         Assert.Equal(operation, actualOperation);
     }
-    
+
     [Fact]
     public void TestExtractAPIPathValueEmptyTarget()
     {
@@ -135,7 +136,7 @@ public class AwsSpanProcessingUtilTest
         string pathValue = AwsSpanProcessingUtil.ExtractAPIPathValue(invalidTarget);
         Assert.Equal(defaultPathValue, pathValue);
     }
-    
+
     [Fact]
     public void TestExtractAPIPathValueNullTarget()
     {
@@ -143,7 +144,7 @@ public class AwsSpanProcessingUtilTest
         string pathValue = AwsSpanProcessingUtil.ExtractAPIPathValue(invalidTarget);
         Assert.Equal(defaultPathValue, pathValue);
     }
-    
+
     [Fact]
     public void TestExtractAPIPathValueNoSlash()
     {
@@ -175,32 +176,36 @@ public class AwsSpanProcessingUtilTest
         string pathValue = AwsSpanProcessingUtil.ExtractAPIPathValue(validTarget);
         Assert.Equal("/users", pathValue);
     }
-    
+
     [Fact]
-    public void testIsKeyPresentKeyPresent() {
+    public void testIsKeyPresentKeyPresent()
+    {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpTarget, "target");
+        spanDataMock.SetTag(AttributeUrlPath, "target");
         spanDataMock.Start();
-        Assert.True(AwsSpanProcessingUtil.IsKeyPresent(spanDataMock, AttributeHttpTarget));
-    }    
-    
+        Assert.True(AwsSpanProcessingUtil.IsKeyPresent(spanDataMock, AttributeUrlPath));
+    }
+
     [Fact]
-    public void testIsKeyPresentKeyAbsent() {
+    public void testIsKeyPresentKeyAbsent()
+    {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.Start();
-        Assert.False(AwsSpanProcessingUtil.IsKeyPresent(spanDataMock, AttributeHttpTarget));
-    }    
-    
+        Assert.False(AwsSpanProcessingUtil.IsKeyPresent(spanDataMock, AttributeUrlPath));
+    }
+
     [Fact]
-    public void testIsAwsSpanTrue() {
+    public void testIsAwsSpanTrue()
+    {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
         spanDataMock.Start();
         Assert.True(AwsSpanProcessingUtil.IsAwsSDKSpan(spanDataMock));
-    }    
-    
+    }
+
     [Fact]
-    public void testIsAwsSpanFalse() {
+    public void testIsAwsSpanFalse()
+    {
         var spanDataMock = testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.Start();
         Assert.False(AwsSpanProcessingUtil.IsAwsSDKSpan(spanDataMock));
@@ -295,7 +300,7 @@ public class AwsSpanProcessingUtilTest
             spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.GetType().Name);
             Assert.False(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
         }
-        
+
         using (var spanDataMock = testSource.StartActivity("test", ActivityKind.Consumer))
         {
             spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
@@ -317,7 +322,7 @@ public class AwsSpanProcessingUtilTest
             spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
             Assert.False(AwsSpanProcessingUtil.IsLocalRoot(spanDataMock));
         }
-        
+
         using (var spanDataMock = testSource.StartActivity("test"))
         {
             spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
@@ -353,7 +358,7 @@ public class AwsSpanProcessingUtilTest
         Assert.False(AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(spanDataMock));
         Assert.False(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
     }
-    
+
     [Fact]
     public void testMetricAttributesGeneratedForOtherInstrumentationSqsConsumerSpan()
     {
@@ -363,7 +368,7 @@ public class AwsSpanProcessingUtilTest
         Assert.True(AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(spanDataMock));
         Assert.True(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
     }
-    
+
     [Fact]
     public void testNoMetricAttributesForAwsSdkSqsConsumerProcessSpan()
     {
@@ -375,7 +380,7 @@ public class AwsSpanProcessingUtilTest
         Assert.False(AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(spanDataMock));
         Assert.False(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
         spanDataMock.Dispose();
-        
+
         spanDataMock = awsActivitySource.StartActivity("SQS.ReceiveMessage", ActivityKind.Consumer);
         spanDataMock.SetTag(AttributeAWSServiceName, "SQS");
         spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Receive);
@@ -397,7 +402,7 @@ public class AwsSpanProcessingUtilTest
             prevKeywordLength = currKeywordLength;
         }
     }
-    
+
     [Fact]
     public void TestSqlDialectKeywordsMaxLength()
     {

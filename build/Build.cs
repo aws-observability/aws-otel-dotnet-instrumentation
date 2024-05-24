@@ -85,6 +85,7 @@ internal partial class Build : NukeBuild
                 fileName = "opentelemetry-dotnet-instrumentation-windows.zip";
                 break;
             case PlatformFamily.Linux:
+            case PlatformFamily.OSX:
                 var architecture = RuntimeInformation.ProcessArchitecture;
                 string architectureSuffix;
                 switch (architecture)
@@ -103,9 +104,6 @@ internal partial class Build : NukeBuild
                     ? $"opentelemetry-dotnet-instrumentation-linux-musl-{architectureSuffix}.zip"
                     : $"opentelemetry-dotnet-instrumentation-linux-glibc-{architectureSuffix}.zip";
                 break;
-            case PlatformFamily.OSX:
-                fileName = "opentelemetry-dotnet-instrumentation-macos.zip";
-                break;
             case PlatformFamily.Unknown:
                 throw new NotSupportedException();
             default:
@@ -122,6 +120,27 @@ internal partial class Build : NukeBuild
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "AWS.OpenTelemetry.AutoInstrumentation.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            //TODO: fix build script to copy dependencies without manually setting them here.
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "Newtonsoft.Json.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "OpenTelemetry.Extensions.AWS.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "OpenTelemetry.ResourceDetectors.AWS.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "OpenTelemetry.SemanticConventions.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             if (EnvironmentInfo.IsWin)
