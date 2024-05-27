@@ -37,7 +37,7 @@ internal sealed class AwsSpanProcessingUtil
     // If we add a longer keyword to the sql dialect keyword list, need to update the constant below.
     internal static readonly int MaxKeywordLength = 27;
 
-    internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords() + ")\\b");
+    internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
     private const string SqlDialectKeywordsJson = "configuration/sql_dialect_keywords.json";
 
@@ -54,7 +54,7 @@ internal sealed class AwsSpanProcessingUtil
                 return keywordList;
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
             return new List<string>();
         }

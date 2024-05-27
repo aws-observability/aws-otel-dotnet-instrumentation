@@ -36,4 +36,10 @@
     <ProjectReference Include="..\..\src\AWS.OpenTelemetry.AutoInstrumentation\AWS.OpenTelemetry.AutoInstrumentation.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="configuration\sql_dialect_keywords.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

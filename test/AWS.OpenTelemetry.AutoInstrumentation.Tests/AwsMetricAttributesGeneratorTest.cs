@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Xunit;
 using Moq;
 using AWS.OpenTelemetry.AutoInstrumentation;
@@ -9,7 +10,7 @@ using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 
-public class AWSMetricAttributesGeneratorTest
+public class AwsMetricAttributesGeneratorTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
     private Activity spanDataMock;
@@ -23,7 +24,7 @@ public class AWSMetricAttributesGeneratorTest
     private string awsLocalServiceValue = "AWS local operation";
     private string awsLocalOperationValue = "AWS local operation";
     
-    public AWSMetricAttributesGeneratorTest()
+    public AwsMetricAttributesGeneratorTest()
     {
         var listener = new ActivityListener
         {
@@ -67,7 +68,21 @@ public class AWSMetricAttributesGeneratorTest
         validateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
     }
     
-    // Dotnet seems don't have a default resource, so skip 'testSpanAttributesForEmptyResource'
+    [Fact]
+    public void testSpanAttributesForEmptyResource()
+    {
+        _resource = Resource.Empty;
+        List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
+        {
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
+            new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
+        };
+        ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
+        spanDataMock = testSource.StartActivity("", ActivityKind.Server);
+        spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
+        validateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
+    }
     
     [Fact]
     public void testProducerSpanWithoutAttributes()
@@ -472,20 +487,93 @@ public class AWSMetricAttributesGeneratorTest
     }
     
     
-    // [Fact]
-    // // Validate behaviour of various combinations of DB attributes.
-    // private void testGetDBStatementRemoteOperation()
-    // {
-    //     Dictionary<string, object> attributesCombination = new Dictionary<string, object>
-    //     {
-    //         { AttributeDbSystem, "DB system" },
-    //         { AttributeDbStatement, "SELECT DB statement" },
-    //         { AttributeDbOperation, null },
-    //     };
-    //     validateExpectedRemoteAttributes(attributesCombination, "DB system", "SELECT");
-    //     
-    //     
-    // }
+    [Fact]
+    // Validate behaviour of various combinations of DB attributes.
+    public void testGetDBStatementRemoteOperation()
+    {
+        Dictionary<string, object> attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "SELECT DB statement" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "SELECT");
+        
+        // Case 2: More than 1 valid keywords match, we want to pick the longest match
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "DROP VIEW DB statement" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "DROP VIEW");        
+        
+        // Case 3: More than 1 valid keywords match, but the other keywords is not
+        // at the start of the SpanAttributes.DB_STATEMENT. We want to only pick start match
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "SELECT data FROM domains" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "SELECT");        
+        
+        // Case 4: Have valid keywords，but it is not at the start of SpanAttributes.DB_STATEMENT
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "invalid SELECT DB statement" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", AwsSpanProcessingUtil.UnknownRemoteOperation);        
+        
+        // Case 5: Have valid keywords, match the longest word
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "UUID" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "UUID");
+        
+        // Case 6: Have valid keywords, match with first word
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "FROM SELECT *" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "FROM");
+        
+        // Case 7: Have valid keyword, match with first word
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "SELECT FROM *" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "SELECT");
+        
+        // Case 8: Have valid keywords, match with upper case
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "seLeCt *" },
+            { AttributeDbOperation, null },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "SELECT");
+        
+        // Case 9: Both DB_OPERATION and DB_STATEMENT are set but the former takes precedence
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "DB system" },
+            { AttributeDbStatement, "SELECT FROM *" },
+            { AttributeDbOperation, "DB operation" },
+        };
+        validateExpectedRemoteAttributes(attributesCombination, "DB system", "DB operation");
+        
+    }
 
     [Fact]
     public void testPeerServiceDoesOverrideOtherRemoteServices()
@@ -565,6 +653,8 @@ public class AWSMetricAttributesGeneratorTest
         Assert.Equal(identifier, actualAWSRemoteResourceIdentifier);
         spanDataMock.Dispose();
     }
+    
+    //Test regarding throwable cannot be done because that part is not implemented yet.
 
     // private void validateHttpStatusForNonLocalRootWithThrowableForClient(ActivityKind activityKind, long expectedStatusCode)
     // {
