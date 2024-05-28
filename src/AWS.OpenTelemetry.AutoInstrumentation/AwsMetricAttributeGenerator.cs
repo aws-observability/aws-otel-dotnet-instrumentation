@@ -448,7 +448,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         object? remoteOperationObject = span.GetTagItem(remoteOperationKey);
         if (remoteOperationObject == null)
         {
-            remoteOperation = "Unknown";
+            remoteOperation = UnknownRemoteOperation;
         }
         else
         {
