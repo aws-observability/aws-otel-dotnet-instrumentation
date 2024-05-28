@@ -9,7 +9,17 @@ using OpenTelemetry.Trace;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+// There are 6 tests in this class cannot be done in dotnet:
 
+// 1. testDBClientSpanWithRemoteResourceAttributes
+// Related logic for generate Db span in AwsMetricAttributesGenerator is not implemented
+
+// 2. testHttpStatusAttributeNotAwsSdk
+// 3. testHttpStatusAttributeStatusAlreadyPresent
+// 4. testHttpStatusAttributeGetStatusCodeException
+// 5. testHttpStatusAttributeStatusCodeException
+// 6. testHttpStatusAttributeNoStatusCodeException
+// Throwable related logic is not implemented or not supported in dotnet
 public class AwsMetricAttributesGeneratorTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
@@ -276,6 +286,23 @@ public class AwsMetricAttributesGeneratorTest
     
     [Fact]
     public void testServerSpanWithAttributes()
+    {
+        updateResourceWithServiceName();
+        List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
+        {
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSLocalService, serviceNameValue),
+            new (AttributeAWSLocalOperation, spanNameValue)
+        };
+        ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
+        spanDataMock = testSource.StartActivity(spanNameValue, ActivityKind.Server);
+        spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
+        validateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
+    }
+    
+    // Equal to testServerSpanWithNullSpanName, dotnet do not allow null name, test empty instead
+    [Fact]
+    public void testServerSpanWithEmptySpanName()
     {
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
@@ -604,7 +631,7 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
-    public void testClientSpanWithRemoteResourceAttributes()
+    public void testSdkClientSpanWithRemoteResourceAttributes()
     {
         Dictionary<string, object> attributesCombination = new Dictionary<string, object>
         {
@@ -636,8 +663,6 @@ public class AwsMetricAttributesGeneratorTest
         validateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
     }
     
-    
-
     private void validateRemoteResourceAttributes(Dictionary<string, object> attributesCombination,String type, String identifier)
     {
         spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
@@ -653,40 +678,6 @@ public class AwsMetricAttributesGeneratorTest
         Assert.Equal(identifier, actualAWSRemoteResourceIdentifier);
         spanDataMock.Dispose();
     }
-    
-    //Test regarding throwable cannot be done because that part is not implemented yet.
-
-    // private void validateHttpStatusForNonLocalRootWithThrowableForClient(ActivityKind activityKind, long expectedStatusCode)
-    // {
-    //     spanDataMock = testSource.StartActivity("test", activityKind);
-    //     var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
-    //     ActivityTagsCollection actualMetric = new ActivityTagsCollection();
-    //     if (attributeMap.Count > 0)
-    //     {
-    //         switch (spanDataMock.Kind)
-    //         {
-    //             case ActivityKind.Producer:
-    //             case ActivityKind.Client:
-    //             case ActivityKind.Consumer:
-    //                 attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out actualMetric);
-    //                 break;
-    //             default:
-    //                 attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out actualMetric);
-    //                 break;
-    //         }
-    //     }
-    //
-    //     if (expectedStatusCode < 0)
-    //     {
-    //         Assert.False(actualMetric.TryGetValue(AwsAttributeKeys.AttributeHttpStatusCode, out object value));
-    //     }
-    //     else
-    //     {
-    //         Assert.True(actualMetric.TryGetValue(AwsAttributeKeys.AttributeHttpStatusCode, out object value));
-    //         Assert.Equal(expectedStatusCode, value);
-    //     }
-    //     
-    // }
 
     [Fact]
     public void testNormalizeRemoteServiceName_NoNormalization()
