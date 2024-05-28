@@ -14,9 +14,21 @@ using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 
-/// <summary>
-/// TODO: Add documentation here
-/// </summary>
+// There is two test that is not implemented in this Class, comparing with Java:
+
+// 1. testIsRequired()
+// Implementation of AwsSpanMetricsProcessor.isStartRequired() and isEndRequired() do not exist
+
+// 2. testsOnEndMetricsGenerationLocalRootServerSpan()
+// This test cannot be done here because there is no difference (or cannot set difference) in dotnet for
+// a null parent information and a invalid parent information
+// Found no way to setup a Activity.Parent to a default/invalid value,
+// It either valid (set by passing a parent ID and automatically matching Activity.Parent field)
+// or just Null
+
+
+
+
 public class AwsSpanMetricsProcessorTest: IDisposable
 {
     public static int count;
@@ -85,7 +97,11 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         Assert.True(awsSpanMetricsProcessor.Shutdown());
         Assert.True(awsSpanMetricsProcessor.ForceFlush());
     }
-
+    
+    /**
+     * Tests starting with testOnEndMetricsGeneration are testing the logic in
+     * AwsSpanMetricsProcessor's onEnd method pertaining to metrics generation.
+     */
     [Fact]
     public void testOnEndMetricsGenerationWithoutSpanAttributes()
     {
@@ -111,24 +127,6 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         awsSpanMetricsProcessor.OnEnd(spanDataMock);
         verifyHistogramRecords(expectAttributes, 0,0);
     }
-    
-    // This test is meanless here because there is no difference (or cannot set difference) in dotnet for
-    // a null parent information and a invalid parent information
-    // Found no way to setup a Activity.Parent to a default/invalid value,
-    // It either valid (set by passing a parent ID and automatically matching Activity.Parent field)
-    // or just Null
-    
-    // [Fact]
-    // public void testsOnEndMetricsGenerationLocalRootServerSpan()
-    // {
-    //     spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-    //     setLatency();
-    //     Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-    //     Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
-    //         .Returns(expectAttributes);
-    //     awsSpanMetricsProcessor.OnEnd(spanDataMock);
-    //     verifyHistogramRecords(expectAttributes, 1,0);
-    // }
 
     [Fact]
     public void testsOnEndMetricsGenerationLocalRootConsumerSpan()
@@ -267,7 +265,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     }
 
     [Fact]
-    public void testOnEndMetricsGenerationWithAwsStatusCodes()
+    public void testOnEndMetricsGenerationWithStatusCodes()
     {
         validateMetricsGeneratedForHttpStatusCode(null, ExpectedStatusMetric.NEITHER);
 
@@ -297,6 +295,20 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     }
     
     [Fact]
+    public void testOnEndMetricsGenerationWithAwsStatusCodes() {
+        // Invalid HTTP status codes
+        validateMetricsGeneratedForAttributeStatusCode(null, ExpectedStatusMetric.NEITHER);
+
+        // Valid HTTP status codes
+        validateMetricsGeneratedForAttributeStatusCode(399L, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForAttributeStatusCode(400L, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForAttributeStatusCode(499L, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForAttributeStatusCode(500L, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForAttributeStatusCode(599L, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForAttributeStatusCode(600L, ExpectedStatusMetric.NEITHER);
+    }
+    
+    [Fact]
     public void testOnEndMetricsGenerationWithStatusDataOk() {
         // Empty Status and HTTP with Ok Status
         validateMetricsGeneratedForStatusDataOk(null, ExpectedStatusMetric.NEITHER);
@@ -310,8 +322,34 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         validateMetricsGeneratedForStatusDataOk(599L, ExpectedStatusMetric.FAULT);
         validateMetricsGeneratedForStatusDataOk(600L, ExpectedStatusMetric.NEITHER);
     }
-    
-    
+
+    private void validateMetricsGeneratedForAttributeStatusCode(
+        long? awsStatusCode, ExpectedStatusMetric expectedStatusMetric)
+    {
+        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
+        spanDataMock.SetTag("new key", "new value");
+        setLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
+        if (awsStatusCode != null)
+        {
+            expectAttributes[IMetricAttributeGenerator.ServiceMetric]["new service key"] = "new service value";
+
+            expectAttributes[IMetricAttributeGenerator.ServiceMetric]
+                .Add(new KeyValuePair<string, object?>(AttributeHttpStatusCode, awsStatusCode));
+
+            expectAttributes[IMetricAttributeGenerator.DependencyMetric]["new dependency key"] = "new dependency value";
+            
+            expectAttributes[IMetricAttributeGenerator.DependencyMetric]
+                .Add(new KeyValuePair<string, object?>(AttributeHttpStatusCode, awsStatusCode));
+        }
+        
+        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+            .Returns(expectAttributes);
+        
+        awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        validMetrics(expectAttributes, expectedStatusMetric);
+        spanDataMock.Dispose();
+    }
     
     private void validateMetricsGeneratedForStatusDataOk(
         long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
@@ -475,6 +513,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         return attributes;
     }
 
+    // Configure latency
     private void setLatency(double latency = -1)
     {
         if (latency == -1)
