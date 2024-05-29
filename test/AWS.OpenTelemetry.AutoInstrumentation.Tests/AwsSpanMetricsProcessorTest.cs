@@ -9,6 +9,7 @@ using Moq;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 
 
@@ -120,7 +121,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
         setLatency();
-        spanDataMock.SetTag(AwsAttributeKeys.AttributeHttpStatusCode, (long)500);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)500);
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(false, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
             .Returns(expectAttributes);
@@ -226,7 +227,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     public void testOnEndMetricsGenerationWithoutEndRequired()
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpStatusCode, (long)500);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)500);
         setLatency();
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
@@ -247,7 +248,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     public void testOnEndMetricsGenerationWithLatency()
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpStatusCode, (long)200);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)200);
         setLatency(5.5);
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
@@ -335,12 +336,12 @@ public class AwsSpanMetricsProcessorTest: IDisposable
             expectAttributes[IMetricAttributeGenerator.ServiceMetric]["new service key"] = "new service value";
 
             expectAttributes[IMetricAttributeGenerator.ServiceMetric]
-                .Add(new KeyValuePair<string, object?>(AttributeHttpStatusCode, awsStatusCode));
+                .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
 
             expectAttributes[IMetricAttributeGenerator.DependencyMetric]["new dependency key"] = "new dependency value";
             
             expectAttributes[IMetricAttributeGenerator.DependencyMetric]
-                .Add(new KeyValuePair<string, object?>(AttributeHttpStatusCode, awsStatusCode));
+                .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
         }
         
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
@@ -354,7 +355,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     private void validateMetricsGeneratedForStatusDataOk(
         long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpStatusCode, httpStatusCode);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
         spanDataMock.SetStatus(ActivityStatusCode.Ok);
         setLatency();
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
@@ -369,7 +370,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     private void validateMetricsGeneratedForStatusDataError(
         long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpStatusCode, httpStatusCode);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
         spanDataMock.SetStatus(ActivityStatusCode.Error);
         setLatency();
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
@@ -384,7 +385,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpStatusCode, httpStatusCode);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
         setLatency();
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))

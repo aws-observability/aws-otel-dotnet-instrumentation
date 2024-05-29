@@ -24,8 +24,8 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public class AwsMetricAttributesSpanProcessor : BaseProcessor<Activity>
 {
-    private IMetricAttributeGenerator generator;
-    private Resource resource;
+    private readonly IMetricAttributeGenerator generator;
+    private readonly Resource resource;
 
     private AwsMetricAttributesSpanProcessor(
       IMetricAttributeGenerator generator,
@@ -46,8 +46,9 @@ public class AwsMetricAttributesSpanProcessor : BaseProcessor<Activity>
     /// <summary>
     /// Configure Resource Builder for Logs, Metrics and Traces
     /// TODO: There is an OTEL discussion to add BeforeEnd to allow us to write to spans. Below is a hack and goes
-    /// against the otel specs (not to edit span in OnEnd)
+    /// against the otel specs (not to edit span in OnEnd) but is required for the time being.
     /// Add BeforeEnd to have a callback where the span is still writeable open-telemetry/opentelemetry-specification#1089
+    /// https://github.com/open-telemetry/opentelemetry-specification/issues/1089
     /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
     /// </summary>
     /// <param name="activity"><see cref="Activity"/> to configure</param>
