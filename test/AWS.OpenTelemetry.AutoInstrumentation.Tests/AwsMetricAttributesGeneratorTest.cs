@@ -5,21 +5,17 @@ using Moq;
 using AWS.OpenTelemetry.AutoInstrumentation;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsMetricAttributeGenerator;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
-// There are 6 tests in this class cannot be done in dotnet:
+// There are 5 tests in this class cannot be done in dotnet:
 
-// 1. testDBClientSpanWithRemoteResourceAttributes
-// Related logic for generate Db span in AwsMetricAttributesGenerator is not implemented
-
-// 2. testHttpStatusAttributeNotAwsSdk
-// 3. testHttpStatusAttributeStatusAlreadyPresent
-// 4. testHttpStatusAttributeGetStatusCodeException
-// 5. testHttpStatusAttributeStatusCodeException
-// 6. testHttpStatusAttributeNoStatusCodeException
+// 1. testHttpStatusAttributeNotAwsSdk
+// 2. testHttpStatusAttributeStatusAlreadyPresent
+// 3. testHttpStatusAttributeGetStatusCodeException
+// 4. testHttpStatusAttributeStatusCodeException
+// 5. testHttpStatusAttributeNoStatusCodeException
 // Throwable related logic is not implemented or not supported in dotnet
 public class AwsMetricAttributesGeneratorTest
 {
