@@ -11,11 +11,6 @@ using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using static AWS.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
-using System;
-using System.Net;
-using System.Web;
-using System.Collections.Generic;
-using System.Net.Http;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation;
 
