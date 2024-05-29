@@ -242,4 +242,15 @@ internal sealed class AwsSpanProcessingUtil
 
         return operation;
     }
+
+    public static bool isDBSpan(Activity span)
+    {
+        return IsKeyPresent(span, AttributeDbSystem) || IsKeyPresent(span, AttributeDbOperation) ||
+               IsKeyPresent(span, AttributeDbStatement);
+    }
+    
+    public static bool isAwsSDKSpan(Activity span) {
+        // https://opentelemetry.io/docs/specs/otel/trace/semantic_conventions/instrumentation/aws-sdk/#common-attributes
+        return span.GetTagItem(AttributeRpcSystem) == "aws-api";
+    }
 }

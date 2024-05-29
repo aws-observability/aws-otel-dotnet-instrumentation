@@ -6,6 +6,7 @@ using AWS.OpenTelemetry.AutoInstrumentation;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using static AWS.OpenTelemetry.AutoInstrumentation.AwsMetricAttributeGenerator;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
@@ -512,7 +513,184 @@ public class AwsMetricAttributesGeneratorTest
         
         validateExpectedRemoteAttributes(attributesCombination,AwsSpanProcessingUtil.UnknownRemoteService, AwsSpanProcessingUtil.UnknownRemoteOperation);
     }
-    
+
+    [Fact]
+    public void testDBClientSpanWithRemoteResourceAttributes()
+    {
+        // Validate behaviour of DB_NAME, SERVER_ADDRESS and SERVER_PORT exist
+        Dictionary<string, object> attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, (long)3306 },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        
+        // Validate behaviour of DB_NAME with '|' char, SERVER_ADDRESS and SERVER_PORT exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name|special" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, (long)3306 },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^|special|abc.com|3306", false);
+                
+        // Validate behaviour of DB_NAME with '^' char, SERVER_ADDRESS and SERVER_PORT exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name^special" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, (long)3306 },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^^special|abc.com|3306", false);
+                        
+        // Validate behaviour of DB_NAME, SERVER_ADDRESS exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+        
+        // Validate behaviour of SERVER_ADDRESS exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeServerAddress, "abc.com" },
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", false);
+        
+        // Validate behaviour of SERVER_PORT exist
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeDbSystem, "mysql");
+        spanDataMock.SetTag(AttributeServerPort, (long)3306);
+
+        Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource)
+            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
+        spanDataMock.Dispose();
+        
+        // Validate behaviour of DB_NAME, NET_PEER_NAME and NET_PEER_PORT exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeNetPeerName, "abc.com"},
+            { AttributeNetPeerPort, (long)3306}
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
+        // Validate behaviour of DB_NAME, NET_PEER_NAME exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeNetPeerName, "abc.com"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+
+        // Validate behaviour of NET_PEER_NAME exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeNetPeerName, "abc.com"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", false);
+
+        // Validate behaviour of NET_PEER_PORT exist
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeDbSystem, "mysql");
+        spanDataMock.SetTag(AttributeServerPort, (long)3306);
+
+        Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource)
+            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
+        spanDataMock.Dispose();
+        
+        // Validate behaviour of DB_NAME, SERVER_SOCKET_ADDRESS and SERVER_SOCKET_PORT exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerSocketAddress, "abc.com"},
+            { AttributeServerSocketPort, (long)3306}
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        
+        // Validate behaviour of DB_NAME, SERVER_SOCKET_ADDRESS exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerSocketAddress, "abc.com"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+        
+        // Validate behaviour of SERVER_SOCKET_PORT exist
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeDbSystem, "mysql");
+        spanDataMock.SetTag(AttributeServerSocketPort, (long)3306);
+
+        Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource)
+            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
+        spanDataMock.Dispose();
+        
+        // Validate behaviour of only DB_NAME exist
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeDbSystem, "mysql");
+        spanDataMock.SetTag(AttributeDbName, "db_name");
+
+        Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource)
+            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
+        spanDataMock.Dispose();
+        
+        // Validate behaviour of DB_NAME and DB_CONNECTION_STRING exist
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeDbConnectionString, "mysql://test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com:3306/petclinic"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
+
+        // Validate behaviour of DB_CONNECTION_STRING
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbConnectionString, "mysql://test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com:3306/petclinic"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
+
+        // Validate behaviour of DB_CONNECTION_STRING exist without port
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbConnectionString, "http://dbserver"},
+        };
+        validateRemoteResourceAttributes(attributesCombination, "DB::Connection", "dbserver|80", false);
+
+        // Validate behaviour of DB_NAME and invalid DB_CONNECTION_STRING exist
+        spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeDbSystem, "mysql");
+        spanDataMock.SetTag(AttributeDbName, "db_name");
+        spanDataMock.SetTag(AttributeDbConnectionString, "hsqldb:mem:");
+
+        Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource)
+            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
+        Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
+        spanDataMock.Dispose();
+    }
     
     [Fact]
     // Validate behaviour of various combinations of DB attributes.
@@ -663,12 +841,17 @@ public class AwsMetricAttributesGeneratorTest
         validateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
     }
     
-    private void validateRemoteResourceAttributes(Dictionary<string, object> attributesCombination,String type, String identifier)
+    private void validateRemoteResourceAttributes(Dictionary<string, object> attributesCombination,String type, String identifier, bool isAwsServiceTest = true)
     {
         spanDataMock = testSource.StartActivity("test", ActivityKind.Client);
         foreach (var attribute in attributesCombination)
         {
             spanDataMock.SetTag(attribute.Key, attribute.Value);
+        }
+        if (isAwsServiceTest)
+        {
+            spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+
         }
         var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
         attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
