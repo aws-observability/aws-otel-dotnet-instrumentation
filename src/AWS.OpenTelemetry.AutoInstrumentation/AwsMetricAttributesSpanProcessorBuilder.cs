@@ -52,10 +52,9 @@ public class AwsMetricAttributesSpanProcessorBuilder
     }
 
     /// <summary>
-    /// Sets the scope name used in the creation of metrics by the span metrics processor. If unset,
-    /// defaults to <see cref="DefaultScopeName"/>. Must not be null.
+    /// Creates an instance of AwsMetricAttributesSpanProcessor
     /// </summary>
-    /// <returns>Returns this instance of the builder</returns>
+    /// <returns>Returns AwsMetricAttributesSpanProcessor</returns>
     public AwsMetricAttributesSpanProcessor Build()
     {
         return AwsMetricAttributesSpanProcessor.Create(this.generator, this.resource);

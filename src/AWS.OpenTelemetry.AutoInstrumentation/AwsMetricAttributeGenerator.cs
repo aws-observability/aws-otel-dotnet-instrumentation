@@ -21,7 +21,7 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /// represent "incoming" traffic, {<see cref="SpanKind.Client"/> and <see cref="SpanKind.Producer"/> spans
 /// represent "outgoing" traffic, and <see cref="SpanKind.Internal"/> spans are ignored.
 /// </summary>
-internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
+internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
@@ -46,7 +46,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string AttributeServiceName = "service.name";
 
     /// <inheritdoc/>
-    public Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
+    public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
     {
         Dictionary<string, ActivityTagsCollection> attributesMap = new Dictionary<string, ActivityTagsCollection>();
         if (ShouldGenerateServiceMetricAttributes(span))
@@ -89,7 +89,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
     {
-        string? service = (string?)resource.Attributes.First(attribute => attribute.Key == AttributeServiceName).Value;
+        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeServiceName).Value;
 
         // In practice the service name is never null, but we can be defensive here.
         if (service == null || service.StartsWith(OtelUnknownServicePrefix))

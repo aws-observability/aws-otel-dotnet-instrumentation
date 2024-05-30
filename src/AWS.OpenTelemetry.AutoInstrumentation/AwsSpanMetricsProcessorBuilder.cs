@@ -78,10 +78,9 @@ public class AwsSpanMetricsProcessorBuilder
     }
 
     /// <summary>
-    /// Sets the scope name used in the creation of metrics by the span metrics processor. If unset,
-    /// defaults to <see cref="DefaultScopeName"/>. Must not be null.
+    /// Creates AwsSpanMetricsProcessor with Histograms subscribed the meter with this.scopeName
     /// </summary>
-    /// <returns>Returns this instance of the builder</returns>
+    /// <returns>Returns AwsSpanMetricsProcessor</returns>
     public AwsSpanMetricsProcessor Build()
     {
         Meter meter = new Meter(this.scopeName);
