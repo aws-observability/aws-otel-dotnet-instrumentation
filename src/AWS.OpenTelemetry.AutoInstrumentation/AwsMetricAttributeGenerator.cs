@@ -402,7 +402,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Span kind is needed for differentiating metrics in the EMF exporter
     private static void SetSpanKindForService(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString().ToUpper();
         if (IsLocalRoot(span))
         {
             spanKind = LocalRoot;
@@ -413,7 +413,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     private static void SetSpanKindForDependency(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString().ToUpper();
         attributes.Add(AttributeAWSSpanKind, spanKind);
     }
 

@@ -227,7 +227,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     public void testOnEndMetricsGenerationWithoutEndRequired()
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)500);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, 500);
         setLatency();
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
@@ -248,7 +248,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     public void testOnEndMetricsGenerationWithLatency()
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)200);
+        spanDataMock.SetTag(AttributeHttpResponseStatusCode, 200);
         setLatency(5.5);
         Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
         Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
@@ -271,13 +271,13 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         validateMetricsGeneratedForHttpStatusCode(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP status codes
-        validateMetricsGeneratedForHttpStatusCode(200L, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForHttpStatusCode(399L, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForHttpStatusCode(400L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForHttpStatusCode(499L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForHttpStatusCode(500L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForHttpStatusCode(599L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForHttpStatusCode(600L, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForHttpStatusCode(200, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForHttpStatusCode(399, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForHttpStatusCode(400, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForHttpStatusCode(499, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForHttpStatusCode(500, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForHttpStatusCode(599, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForHttpStatusCode(600, ExpectedStatusMetric.NEITHER);
     }
     
     [Fact]
@@ -286,13 +286,13 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         validateMetricsGeneratedForStatusDataError(null, ExpectedStatusMetric.FAULT);
 
         // Valid HTTP with Error Status
-        validateMetricsGeneratedForStatusDataError(200L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(399L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(400L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataError(499L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataError(500L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(599L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(600L, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataError(200, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataError(399, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataError(400, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForStatusDataError(499, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForStatusDataError(500, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataError(599, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataError(600, ExpectedStatusMetric.FAULT);
     }
     
     [Fact]
@@ -301,12 +301,12 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         validateMetricsGeneratedForAttributeStatusCode(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP status codes
-        validateMetricsGeneratedForAttributeStatusCode(399L, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForAttributeStatusCode(400L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForAttributeStatusCode(499L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForAttributeStatusCode(500L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForAttributeStatusCode(599L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForAttributeStatusCode(600L, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForAttributeStatusCode(399, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForAttributeStatusCode(400, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForAttributeStatusCode(499, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForAttributeStatusCode(500, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForAttributeStatusCode(599, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForAttributeStatusCode(600, ExpectedStatusMetric.NEITHER);
     }
     
     [Fact]
@@ -315,17 +315,17 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         validateMetricsGeneratedForStatusDataOk(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP with Ok Status
-        validateMetricsGeneratedForStatusDataOk(200L, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForStatusDataOk(399L, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForStatusDataOk(400L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataOk(499L, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataOk(500L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataOk(599L, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataOk(600L, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForStatusDataOk(200, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForStatusDataOk(399, ExpectedStatusMetric.NEITHER);
+        validateMetricsGeneratedForStatusDataOk(400, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForStatusDataOk(499, ExpectedStatusMetric.ERROR);
+        validateMetricsGeneratedForStatusDataOk(500, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataOk(599, ExpectedStatusMetric.FAULT);
+        validateMetricsGeneratedForStatusDataOk(600, ExpectedStatusMetric.NEITHER);
     }
 
     private void validateMetricsGeneratedForAttributeStatusCode(
-        long? awsStatusCode, ExpectedStatusMetric expectedStatusMetric)
+        int? awsStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
         spanDataMock.SetTag("new key", "new value");
@@ -353,7 +353,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     }
     
     private void validateMetricsGeneratedForStatusDataOk(
-        long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
+        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
         spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
         spanDataMock.SetStatus(ActivityStatusCode.Ok);
@@ -368,7 +368,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     
     
     private void validateMetricsGeneratedForStatusDataError(
-        long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
+        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
         spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
         spanDataMock.SetStatus(ActivityStatusCode.Error);
@@ -382,7 +382,7 @@ public class AwsSpanMetricsProcessorTest: IDisposable
     }
 
     private void validateMetricsGeneratedForHttpStatusCode(
-        long? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
+        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
         spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
         spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
