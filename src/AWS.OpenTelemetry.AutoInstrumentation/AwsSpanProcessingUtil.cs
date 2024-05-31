@@ -146,6 +146,8 @@ internal sealed class AwsSpanProcessingUtil
 
     internal static bool ShouldGenerateServiceMetricAttributes(Activity span)
     {
+        var abc1 = IsLocalRoot(span);
+        var abc2 = IsSqsReceiveMessageConsumerSpan(span);
         return (IsLocalRoot(span) && !IsSqsReceiveMessageConsumerSpan(span))
             || ActivityKind.Server.Equals(span.Kind);
     }
@@ -174,6 +176,7 @@ internal sealed class AwsSpanProcessingUtil
     // parent context and returns true if it is a local root.
     internal static bool IsLocalRoot(Activity span)
     {
+        var parent = (span.Parent == null);
         return span.Parent == null || !span.Parent.Context.IsValid() || span.HasRemoteParent;
     }
 
