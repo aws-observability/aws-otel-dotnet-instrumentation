@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-        <Protobuf Include="..\..\opentelemetry-proto\opentelemetry\proto\**\*.proto" ProtoRoot="..\..\opentelemetry-proto" />
+        <Protobuf Include="opentelemetry-proto\opentelemetry\proto\**\*.proto" ProtoRoot="opentelemetry-proto" />
   </ItemGroup>
 
   <ItemGroup>
