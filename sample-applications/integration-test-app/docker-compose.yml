@@ -1,15 +1,17 @@
 version: "3.7"
 services:
-  otel:
-    image: public.ecr.aws/aws-observability/aws-otel-collector:latest
-    command: ["--config=/etc/otel-config.yaml"]
+
+  cwagent:
+    image: amazon/cloudwatch-agent:latest
     volumes:
-      - ../config.yaml:/etc/otel-config.yaml // use default config
-      - ~/.aws:/root/.aws:ro
+      - ./amazon-cloudwatch-agent.json:/opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json # agent config
+      - ./aws:/root/.aws # required for authentication
     environment:
-      - AWS_REGION=us-west-2 
+      - AWS_REGION=us-west-2
     ports:
+      - '4316:4316'
       - '4317:4317'
+      - '2000:2000'
 
   app:
     image: aspnetapp:latest
@@ -18,8 +20,12 @@ services:
       - INSTANCE_ID
       - LISTEN_ADDRESS=0.0.0.0:8080
       - OTEL_RESOURCE_ATTRIBUTES=service.name=aws-otel-integ-test
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://cwagent:4316/v1/traces
+      - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://cwagent:4316/v1/metrics
       - ASPNETCORE_URLS=http://+:8080
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_AWS_APPLICATION_SIGNALS_ENABLED=true
+      - OTEL_TRACES_SAMPLER=always_on
     ports:
       - '8080:8080'     
     volumes:
