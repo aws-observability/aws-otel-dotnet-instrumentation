@@ -1,15 +1,5 @@
 version: "3.7"
 services:
-  # otel:
-  #   image: public.ecr.aws/aws-observability/aws-otel-collector:latest
-  #   command: ["--config=/etc/otel-config.yaml"]
-  #   volumes:
-  #     - ./collector-config-local.yml:/etc/otel-config.yaml
-  #     - ~/.aws:/root/.aws:ro
-  #   environment:
-  #     - AWS_REGION=us-west-2 
-  #   ports:
-  #     - '4317:4317'
 
   cwagent:
     image: amazon/cloudwatch-agent:latest
@@ -17,7 +7,7 @@ services:
       - ./amazon-cloudwatch-agent.json:/opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json # agent config
       - ./aws:/root/.aws # required for authentication
     environment:
-      - AWS_REGION=us-west-2 
+      - AWS_REGION=us-west-2
     ports:
       - '4316:4316'
       - '4317:4317'
