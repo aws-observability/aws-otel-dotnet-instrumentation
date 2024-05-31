@@ -48,7 +48,7 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation)
         };
@@ -63,7 +63,7 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
             new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
             new (AttributeAWSRemoteService, AwsSpanProcessingUtil.UnknownRemoteService),
@@ -81,7 +81,7 @@ public class AwsMetricAttributesGeneratorTest
         _resource = Resource.Empty;
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
         };
@@ -96,7 +96,7 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
             new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
             new (AttributeAWSRemoteService, AwsSpanProcessingUtil.UnknownRemoteService),
@@ -113,7 +113,7 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
             new (AttributeAWSLocalService, AwsSpanProcessingUtil.UnknownService),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
             new (AttributeAWSRemoteService, AwsSpanProcessingUtil.UnknownRemoteService),
@@ -185,7 +185,7 @@ public class AwsMetricAttributesGeneratorTest
         
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.InternalOperation),
             new (AttributeAWSRemoteService, awsRemoteServiceValue),
@@ -217,7 +217,7 @@ public class AwsMetricAttributesGeneratorTest
         
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.InternalOperation),
             new (AttributeAWSRemoteService, awsRemoteServiceValue),
@@ -249,7 +249,7 @@ public class AwsMetricAttributesGeneratorTest
         
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.InternalOperation),
             new (AttributeAWSRemoteService, awsRemoteServiceValue),
@@ -269,7 +269,7 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
             new (AttributeAWSRemoteService, AwsSpanProcessingUtil.UnknownRemoteService),
@@ -287,7 +287,7 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, spanNameValue)
         };
@@ -304,7 +304,7 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation)
         };
@@ -320,14 +320,15 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, AwsSpanProcessingUtil.UnknownOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         spanDataMock = testSource.StartActivity("GET", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpMethod, "GET");
+        spanDataMock.SetTag(AwsSpanProcessingUtil.AttributeHttpRequestMethod, "GET");
         spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
+        var service = AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(spanDataMock);
         validateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
     }
     
@@ -337,14 +338,14 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, "POST /payment"),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         spanDataMock = testSource.StartActivity("POST", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpMethod, "POST");
-        spanDataMock.SetTag(AttributeHttpTarget, "/payment/123");
+        spanDataMock.SetTag(AwsSpanProcessingUtil.AttributeHttpRequestMethod, "POST");
+        spanDataMock.SetTag(AwsSpanProcessingUtil.AttributeUrlPath, "/payment/123");
         spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
         validateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
     }
@@ -355,7 +356,7 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, awsLocalOperationValue),
             new (AttributeAWSRemoteService, awsRemoteServiceValue),
@@ -377,7 +378,7 @@ public class AwsMetricAttributesGeneratorTest
         updateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString()),
+            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
             new (AttributeAWSLocalService, serviceNameValue),
             new (AttributeAWSLocalOperation, awsLocalOperationValue),
             new (AttributeAWSRemoteService, awsRemoteServiceValue),
@@ -473,35 +474,35 @@ public class AwsMetricAttributesGeneratorTest
         
         // Validate behavior of Remote Operation from HttpTarget - with 1st api part. Also validates
         // that RemoteService is extracted from HttpUrl.
-        attributesCombination[AttributeHttpUrl] = "http://www.example.com/payment/123";
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = "http://www.example.com/payment/123";
         validateExpectedRemoteAttributes(attributesCombination,"www.example.com:80", "/payment");
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         // Validate behavior of Remote Operation from HttpTarget - with 1st api part. Also validates
         // that RemoteService is extracted from HttpUrl.
-        attributesCombination[AttributeHttpUrl] = "http://www.example.com";
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = "http://www.example.com";
         validateExpectedRemoteAttributes(attributesCombination,"www.example.com:80", "/");
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         // Validate behavior of Remote Service from HttpUrl
-        attributesCombination[AttributeHttpUrl] = "http://192.168.1.1";
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = "http://192.168.1.1";
         validateExpectedRemoteAttributes(attributesCombination,"192.168.1.1:80", "/");
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         // Validate behavior of Remote Service from HttpUrl
-        attributesCombination[AttributeHttpUrl] = "";
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = "";
         validateExpectedRemoteAttributes(attributesCombination,AwsSpanProcessingUtil.UnknownRemoteService, AwsSpanProcessingUtil.UnknownRemoteOperation);
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         // Validate behavior of Remote Service from HttpUrl
-        attributesCombination[AttributeHttpUrl] = null;
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = null;
         validateExpectedRemoteAttributes(attributesCombination,AwsSpanProcessingUtil.UnknownRemoteService, AwsSpanProcessingUtil.UnknownRemoteOperation);
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         // Validate behavior of Remote Service from HttpUrl
-        attributesCombination[AttributeHttpUrl] = "abc";
+        attributesCombination[AwsSpanProcessingUtil.AttributeUrlFull] = "abc";
         validateExpectedRemoteAttributes(attributesCombination,AwsSpanProcessingUtil.UnknownRemoteService, AwsSpanProcessingUtil.UnknownRemoteOperation);
-        attributesCombination.Remove(AttributeHttpUrl);
+        attributesCombination.Remove(AwsSpanProcessingUtil.AttributeUrlFull);
         
         attributesCombination[AttributePeerService] = "Peer service";
         validateExpectedRemoteAttributes(attributesCombination,"Peer service", AwsSpanProcessingUtil.UnknownRemoteOperation);
@@ -904,7 +905,7 @@ public class AwsMetricAttributesGeneratorTest
         parentSpan.Dispose();
         spanDataMock = testSource.StartActivity("test", ActivityKind.Consumer);
         spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
-        spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString());
+        spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString().ToUpper());
         spanDataMock.Start();
         var attributeMap = Generator.GenerateMetricAttributeMapFromSpan(spanDataMock, _resource);
         Assert.Equal(2, attributeMap.Count);

@@ -297,14 +297,14 @@ public class AwsSpanProcessingUtilTest
         {
             spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
             spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
-            spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.GetType().Name);
+            spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString());
             Assert.False(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
         }
 
         using (var spanDataMock = testSource.StartActivity("test", ActivityKind.Consumer))
         {
             spanDataMock.SetTag(AttributeMessagingOperation, MessagingOperationValues.Process);
-            spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.GetType().Name);
+            spanDataMock.SetTag(AttributeAWSConsumerParentSpanKind, ActivityKind.Consumer.ToString());
             Assert.False(AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(spanDataMock));
         }
     }
