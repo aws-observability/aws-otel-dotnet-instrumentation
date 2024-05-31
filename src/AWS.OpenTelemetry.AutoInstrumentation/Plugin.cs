@@ -14,7 +14,7 @@ using OpenTelemetry.Trace;
 namespace AWS.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
-/// TODO: Add documentation here
+/// AWS SDK Plugin
 /// </summary>
 public class Plugin
 {
@@ -102,6 +102,8 @@ public class Plugin
             builder.AddProcessor(processor);
         }
 
+        // My custom logic here
+        builder.AddAWSInstrumentation();
         return builder;
     }
 
