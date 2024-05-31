@@ -30,3 +30,11 @@ jobs:
       - name: Build on Windows
         if: runner.os == 'Windows'
         run: .\build.cmd
+        
+      - name: Test on Linux
+        if: runner.os == 'Linux'
+        run: dotnet test
+
+      - name: Test on Windows
+        if: runner.os == 'Windows'
+        run: dotnet test
