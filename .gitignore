@@ -461,3 +461,6 @@ NuGetPackage/
 OpenTelemetryDistribution/*
 
 lychee/out.md
+
+# protobuf generated file
+*/generated/

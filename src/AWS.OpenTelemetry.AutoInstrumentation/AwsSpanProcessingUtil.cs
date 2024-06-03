@@ -12,6 +12,21 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /** Utility class designed to support shared logic across AWS Span Processors. */
 internal sealed class AwsSpanProcessingUtil
 {
+    // v1.21.0
+    // https://github.com/open-telemetry/semantic-conventions/blob/v1.21.0/docs/http/http-metrics.md#http-server
+    // TODO: Use TraceSemanticConventions once the below is officially released.
+    public const string AttributeHttpRequestMethod = "http.request.method"; // replaces: "http.method" (AttributeHttpMethod)
+    public const string AttributeHttpRequestMethodOriginal = "http.request.method_original";
+    public const string AttributeHttpResponseStatusCode = "http.response.status_code"; // replaces: "http.status_code" (AttributeHttpStatusCode)
+    public const string AttributeUrlScheme = "url.scheme"; // replaces: "http.scheme" (AttributeHttpScheme)
+    public const string AttributeUrlFull = "url.full"; // replaces: "http.url" (AttributeHttpUrl)
+    public const string AttributeUrlPath = "url.path"; // replaces: "http.target" (AttributeHttpTarget)
+
+    // TODO: Check whether the query part of the url is included in the path or not.
+    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/f1fd71fdb60146be6399ecfd0dd90243e4c8cf1b/src/OpenTelemetry.Instrumentation.AspNet/Implementation/HttpInListener.cs#L94
+    public const string AttributeUrlQuery = "url.query"; // replaces: "http.target" (AttributeHttpTarget)
+    public const string AttributeServerSocketAddress = "server.socket.address"; // replaces: "net.peer.ip" (AttributeNetPeerIp)
+
     // Default attribute values if no valid span attribute value is identified
     internal static readonly string UnknownService = "UnknownService";
     internal static readonly string UnknownOperation = "UnknownOperation";
@@ -49,8 +64,15 @@ internal sealed class AwsSpanProcessingUtil
             {
                 string json = r.ReadToEnd();
                 JObject jObject = JObject.Parse(json);
-                JArray keywordArray = (JArray)jObject["keywords"];
+                JArray? keywordArray = (JArray?)jObject["keywords"];
+                if (keywordArray == null)
+                {
+                    return new List<string>();
+                }
+
+#pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
                 List<string> keywordList = keywordArray.Values<string>().ToList();
+#pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
                 return keywordList;
             }
         }
@@ -205,9 +227,9 @@ internal sealed class AwsSpanProcessingUtil
             return false;
         }
 
-        if (IsKeyPresent(span, AttributeHttpMethod))
+        if (IsKeyPresent(span, AttributeHttpRequestMethod))
         {
-            object? httpMethod = span.GetTagItem(AttributeHttpMethod);
+            object? httpMethod = span.GetTagItem(AttributeHttpRequestMethod);
             return !operation.Equals((string?)httpMethod);
         }
 
@@ -219,9 +241,9 @@ internal sealed class AwsSpanProcessingUtil
     private static string GenerateIngressOperation(Activity span)
     {
         string operation = UnknownOperation;
-        if (IsKeyPresent(span, AttributeHttpTarget))
+        if (IsKeyPresent(span, AttributeUrlPath))
         {
-            object? httpTarget = span.GetTagItem(AttributeHttpTarget);
+            object? httpTarget = span.GetTagItem(AttributeUrlPath);
 
             // get the first part from API path string as operation value
             // the more levels/parts we get from API path the higher chance for getting high cardinality
@@ -229,9 +251,9 @@ internal sealed class AwsSpanProcessingUtil
             if (httpTarget != null)
             {
                 operation = ExtractAPIPathValue((string)httpTarget);
-                if (IsKeyPresent(span, AttributeHttpMethod))
+                if (IsKeyPresent(span, AttributeHttpRequestMethod))
                 {
-                    string? httpMethod = (string?)span.GetTagItem(AttributeHttpMethod);
+                    string? httpMethod = (string?)span.GetTagItem(AttributeHttpRequestMethod);
                     if (httpMethod != null)
                     {
                         operation = httpMethod + " " + operation;

@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
-using static OpenTelemetry.Trace.TraceSemanticConventions;
+using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 namespace AWS.OpenTelemetry.AutoInstrumentation;
 
@@ -97,17 +97,19 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private void RecordErrorOrFault(Activity span, ActivityTagsCollection attributes)
     {
         KeyValuePair<string, object?>[] attributesArray = attributes.ToArray();
-        object? httpStatusCode = span.GetTagItem(AttributeHttpStatusCode);
+        object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode);
         ActivityStatusCode statusCode = span.Status;
+
+        Console.WriteLine("Inside the metric processor: " + httpStatusCode);
 
         if (httpStatusCode == null)
         {
-            attributes.TryGetValue(AttributeHttpStatusCode, out httpStatusCode);
+            attributes.TryGetValue(AttributeHttpResponseStatusCode, out httpStatusCode);
         }
 
         if (httpStatusCode == null
-            || (long)httpStatusCode < ErrorCodeLowerBound
-            || (long)httpStatusCode > FaultCodeUpperBound)
+            || (int)httpStatusCode < ErrorCodeLowerBound
+            || (int)httpStatusCode > FaultCodeUpperBound)
         {
             if (ActivityStatusCode.Error.Equals(statusCode))
             {
@@ -120,14 +122,14 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
                 this.faultHistogram.Record(0, attributesArray);
             }
         }
-        else if ((long)httpStatusCode >= ErrorCodeLowerBound
-            && (long)httpStatusCode <= ErrorCodeUpperBound)
+        else if ((int)httpStatusCode >= ErrorCodeLowerBound
+            && (int)httpStatusCode <= ErrorCodeUpperBound)
         {
             this.errorHistogram.Record(1, attributesArray);
             this.faultHistogram.Record(0, attributesArray);
         }
-        else if ((long)httpStatusCode >= FaultCodeLowerBound
-            && (long)httpStatusCode <= FaultCodeUpperBound)
+        else if ((int)httpStatusCode >= FaultCodeLowerBound
+            && (int)httpStatusCode <= FaultCodeUpperBound)
         {
             this.errorHistogram.Record(0, attributesArray);
             this.faultHistogram.Record(1, attributesArray);

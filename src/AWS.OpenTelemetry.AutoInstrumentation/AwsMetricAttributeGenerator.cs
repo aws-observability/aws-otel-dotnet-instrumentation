@@ -21,7 +21,7 @@ namespace AWS.OpenTelemetry.AutoInstrumentation;
 /// represent "incoming" traffic, {<see cref="SpanKind.Client"/> and <see cref="SpanKind.Producer"/> spans
 /// represent "outgoing" traffic, and <see cref="SpanKind.Internal"/> spans are ignored.
 /// </summary>
-internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
+internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
@@ -46,7 +46,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string AttributeServiceName = "service.name";
 
     /// <inheritdoc/>
-    public Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
+    public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
     {
         Dictionary<string, ActivityTagsCollection> attributesMap = new Dictionary<string, ActivityTagsCollection>();
         if (ShouldGenerateServiceMetricAttributes(span))
@@ -89,7 +89,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
     {
-        string? service = (string?)resource.Attributes.First(attribute => attribute.Key == AttributeServiceName).Value;
+        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeServiceName).Value;
 
         // In practice the service name is never null, but we can be defensive here.
         if (service == null || service.StartsWith(OtelUnknownServicePrefix))
@@ -241,9 +241,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static string GenerateRemoteOperation(Activity span)
     {
         string remoteOperation = UnknownRemoteOperation;
-        if (IsKeyPresent(span, AttributeHttpUrl))
+        if (IsKeyPresent(span, AttributeUrlFull))
         {
-            string? httpUrl = (string?)span.GetTagItem(AttributeHttpUrl);
+            string? httpUrl = (string?)span.GetTagItem(AttributeUrlFull);
             try
             {
                 Uri url;
@@ -259,9 +259,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             }
         }
 
-        if (IsKeyPresent(span, AttributeHttpMethod))
+        if (IsKeyPresent(span, AttributeHttpRequestMethod))
         {
-            string? httpMethod = (string?)span.GetTagItem(AttributeHttpMethod);
+            string? httpMethod = (string?)span.GetTagItem(AttributeHttpRequestMethod);
             remoteOperation = httpMethod + " " + remoteOperation;
         }
 
@@ -294,9 +294,9 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteService += ":" + port;
             }
         }
-        else if (IsKeyPresent(span, AttributeHttpUrl))
+        else if (IsKeyPresent(span, AttributeUrlFull))
         {
-            string? httpUrl = (string?)span.GetTagItem(AttributeHttpUrl);
+            string? httpUrl = (string?)span.GetTagItem(AttributeUrlFull);
             try
             {
                 if (httpUrl != null)
@@ -402,7 +402,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Span kind is needed for differentiating metrics in the EMF exporter
     private static void SetSpanKindForService(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString().ToUpper();
         if (IsLocalRoot(span))
         {
             spanKind = LocalRoot;
@@ -413,7 +413,7 @@ internal sealed class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     private static void SetSpanKindForDependency(Activity span, ActivityTagsCollection attributes)
     {
-        string spanKind = span.Kind.GetType().Name;
+        string spanKind = span.Kind.ToString().ToUpper();
         attributes.Add(AttributeAWSSpanKind, spanKind);
     }
 
