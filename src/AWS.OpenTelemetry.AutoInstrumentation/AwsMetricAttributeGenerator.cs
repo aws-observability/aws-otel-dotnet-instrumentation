@@ -11,6 +11,7 @@ using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using static AWS.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
+
 namespace AWS.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
@@ -31,6 +32,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string DB_CONNECTION_RESOURCE_TYPE = "DB::Connection";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
@@ -43,7 +45,15 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // although it's available here:
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.SemanticConventions/Attributes/ServiceAttributes.cs#L48C25-L48C45
     // TODO: Open an issue to ask about this discrepancy and when will the latest version be released.
-    private static readonly string AttributeServiceName = "service.name";
+    public static readonly string AttributeServiceName = "service.name";
+    public static readonly string AttributeServerAddress = "server.address";
+    public static readonly string AttributeServerPort = "server.port";
+    
+    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/62b88fef65f770db7fe40fcd3f053fe743a64c83/src/Shared/SemanticConventions.cs#L108
+    public static readonly string AttributeServerSocketAddress = "server.socket.address";
+    
+    // This is not mentioned in upstream but java have that part
+    public static readonly string AttributeServerSocketPort = "server.socket.port";
 
     /// <inheritdoc/>
     public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
@@ -365,32 +375,39 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
-
-        if (IsKeyPresent(span, AttributeAWSDynamoTableName))
+        if (isAwsSDKSpan(span))
         {
-            remoteResourceType = NormalizedDynamoDBServiceName + "::Table";
-            remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSDynamoTableName);
-        }
-        else if (IsKeyPresent(span, AttributeAWSKinesisStreamName))
+            if (IsKeyPresent(span, AttributeAWSDynamoTableName))
+            {
+                remoteResourceType = NormalizedDynamoDBServiceName + "::Table";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSDynamoTableName);
+            }
+            else if (IsKeyPresent(span, AttributeAWSKinesisStreamName))
+            {
+                remoteResourceType = NormalizedKinesisServiceName + "::Stream";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSKinesisStreamName);
+            }
+            else if (IsKeyPresent(span, AttributeAWSS3Bucket))
+            {
+                remoteResourceType = NormalizedS3ServiceName + "::Bucket";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSS3Bucket);
+            }
+            else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
+            {
+                remoteResourceType = NormalizedSQSServiceName + "::Queue";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSSQSQueueName);
+            }
+            else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
+            {
+                remoteResourceType = NormalizedSQSServiceName + "::Queue";
+                remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+            }
+        } else if (isDBSpan(span))
         {
-            remoteResourceType = NormalizedKinesisServiceName + "::Stream";
-            remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSKinesisStreamName);
+            remoteResourceType = DB_CONNECTION_RESOURCE_TYPE;
+            remoteResourceIdentifier = getDbConnection(span);
         }
-        else if (IsKeyPresent(span, AttributeAWSS3Bucket))
-        {
-            remoteResourceType = NormalizedS3ServiceName + "::Bucket";
-            remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSS3Bucket);
-        }
-        else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
-        {
-            remoteResourceType = NormalizedSQSServiceName + "::Queue";
-            remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSSQSQueueName);
-        }
-        else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
-        {
-            remoteResourceType = NormalizedSQSServiceName + "::Queue";
-            remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
-        }
+        
 
         if (remoteResourceType != null && remoteResourceIdentifier != null)
         {
@@ -433,7 +450,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         string? remoteOperation = (string?)span.GetTagItem(remoteOperationKey);
         if (remoteOperation == null)
         {
-            remoteOperation = UnknownOperation;
+            remoteOperation = UnknownRemoteOperation;
         }
 
         return remoteOperation;
@@ -448,7 +465,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         object? remoteOperationObject = span.GetTagItem(remoteOperationKey);
         if (remoteOperationObject == null)
         {
-            remoteOperation = "Unknown";
+            remoteOperation = UnknownRemoteOperation;
         }
         else
         {
@@ -481,5 +498,68 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     {
         string[] logParams = { attributeKey, span.Kind.GetType().Name, span.Context.SpanId.ToString() };
         Logger.Log(LogLevel.Trace, "No valid {0} value found for {1} span {2}", logParams);
+    }
+    
+    private static string getDbConnection(Activity span)
+    {
+        var dbName = span.GetTagItem(AttributeDbName);
+        string? dbConnection = null;
+
+        if (IsKeyPresent(span, AttributeServerAddress))
+        {
+            var serverAddress = span.GetTagItem(AttributeServerAddress);
+            var serverPort = span.GetTagItem(AttributeServerPort);
+            dbConnection = buildDbConnection(serverAddress.ToString(), serverPort == null? null : (long)serverPort);
+        } else if (IsKeyPresent(span, AttributeNetPeerName))
+        {
+            var networkPeerAddress = span.GetTagItem(AttributeNetPeerName);
+            var networkPeerPort = span.GetTagItem(AttributeNetPeerPort);
+            dbConnection = buildDbConnection(networkPeerAddress.ToString(), networkPeerPort == null? null : (long)networkPeerPort);
+        } else if (IsKeyPresent(span, AttributeServerSocketAddress)) {
+            var serverSocketAddress = span.GetTagItem(AttributeServerSocketAddress);
+            var serverSocketPort = span.GetTagItem(AttributeServerSocketPort);
+            dbConnection = buildDbConnection(serverSocketAddress.ToString(), serverSocketPort == null? null: (long)serverSocketPort);
+        } else if (IsKeyPresent(span, AttributeDbConnectionString)) {
+            var connectionstring= span.GetTagItem(AttributeDbConnectionString);
+            dbConnection = buildDbConnection(connectionstring.ToString());
+        }
+
+        // return empty resource identifier if db server is not found
+        if (dbConnection != null && dbName != null) {
+            return EscapeDelimiters(dbName.ToString()) + "|" + dbConnection;
+        }
+        return dbConnection;
+    }
+    
+    private static string buildDbConnection(string? address, long? port) {
+        return EscapeDelimiters(address) + (port != null ? "|" + port : "");
+    }
+    
+    private static string buildDbConnection(string connectionString) {
+        Uri uri;
+        String address;
+        int port;
+        try {
+            uri = new Uri(connectionString);
+            address = uri.Host;
+            port = uri.Port;
+        } catch (UriFormatException e) {
+            Console.WriteLine("Invalid DB Connection String");
+            return null;
+        }
+        
+        if (string.IsNullOrEmpty(address))
+        {
+            return null;
+        }
+
+        return EscapeDelimiters(address) + (port != -1 ? "|" + port.ToString() : "");
+    }
+    
+    private static string EscapeDelimiters(string input) {
+        if (input == null) {
+            return null;
+        }
+        return input.Replace("^", "^^").Replace("|", "^|");
     }
 }
