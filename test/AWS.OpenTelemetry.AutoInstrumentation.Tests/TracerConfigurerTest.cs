@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using OpenTelemetry.Trace;
 using Xunit.Repeat;
@@ -32,9 +33,10 @@ public class TracerConfigurerTest
         this.tracerProvider = tracerProviderBuilder.Build();
     }
 
-    [Fact]
+    [Theory]
     [Repeat(20)]
-    public void ProviderGeneratesXrayIds()
+    [SuppressMessage("xUnit", "xUnit1026", Justification = "Parameter use as require by Theory to perform Repeat")]
+    public void ProviderGeneratesXrayIds(int iter)
     {
         var startTimeSecs = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         TelemetrySpan telemetrySpan = this.tracerProvider.GetTracer("test").StartActiveSpan("test");
@@ -48,9 +50,10 @@ public class TracerConfigurerTest
         telemetrySpan.Dispose();
     }
 
-    [Fact]
+    [Theory]
     [Repeat(20)]
-    public void TraceIdRatioSampler()
+    [SuppressMessage("xUnit", "xUnit1026", Justification = "Parameter use as require by Theory to perform Repeat")]
+    public void TraceIdRatioSampler(int iter)
     {
         int numSpans = 100000;
         int numSampled = 0;
@@ -58,15 +61,17 @@ public class TracerConfigurerTest
         for (int i = 0; i < numSpans; i++)
         {
             TelemetrySpan telemetrySpan = tracer.StartActiveSpan("test");
-            FieldInfo fieldInfo = typeof(TelemetrySpan).GetField(
+            FieldInfo? fieldInfo = typeof(TelemetrySpan).GetField(
                 "Activity",
                 BindingFlags.NonPublic | BindingFlags.Instance);
-            Activity telemetryActivity = (Activity)fieldInfo.GetValue(telemetrySpan);
-            if (telemetryActivity.ActivityTraceFlags == ActivityTraceFlags.Recorded)
+            if (fieldInfo != null)
             {
-                numSampled++;
+                Activity? telemetryActivity = (Activity?)fieldInfo.GetValue(telemetrySpan);
+                if (telemetryActivity != null && telemetryActivity.ActivityTraceFlags == ActivityTraceFlags.Recorded)
+                {
+                    numSampled++;
+                }
             }
-
             telemetrySpan.Dispose();
         }
 
