@@ -20,7 +20,7 @@ public class Plugin
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
-    private static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
+    public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
