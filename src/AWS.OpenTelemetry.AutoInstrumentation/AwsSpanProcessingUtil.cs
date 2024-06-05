@@ -52,7 +52,7 @@ internal sealed class AwsSpanProcessingUtil
     // If we add a longer keyword to the sql dialect keyword list, need to update the constant below.
     internal static readonly int MaxKeywordLength = 27;
 
-    internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords() + ")\\b");
+    internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
     private const string SqlDialectKeywordsJson = "configuration/sql_dialect_keywords.json";
 
@@ -76,7 +76,7 @@ internal sealed class AwsSpanProcessingUtil
                 return keywordList;
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
             return new List<string>();
         }
@@ -212,7 +212,7 @@ internal sealed class AwsSpanProcessingUtil
             }
 
             object? parentSpanKind = span.GetTagItem(AttributeAWSConsumerParentSpanKind);
-            return !ActivityKind.Consumer.GetType().Name.Equals((string?)parentSpanKind);
+            return !ActivityKind.Consumer.ToString().Equals((string?)parentSpanKind);
         }
 
         return true;
@@ -263,5 +263,16 @@ internal sealed class AwsSpanProcessingUtil
         }
 
         return operation;
+    }
+
+    public static bool isDBSpan(Activity span)
+    {
+        return IsKeyPresent(span, AttributeDbSystem) || IsKeyPresent(span, AttributeDbOperation) ||
+               IsKeyPresent(span, AttributeDbStatement);
+    }
+    
+    public static bool isAwsSDKSpan(Activity span) {
+        // https://opentelemetry.io/docs/specs/otel/trace/semantic_conventions/instrumentation/aws-sdk/#common-attributes
+        return span.GetTagItem(AttributeRpcSystem) == "aws-api";
     }
 }

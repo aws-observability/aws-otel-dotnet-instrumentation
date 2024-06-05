@@ -11,10 +11,14 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="fluentassertions" Version="6.12.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
     <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="moq" Version="4.20.70" />
+    <PackageReference Include="Testcontainers" Version="3.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="Xunit.Repeat" Version="1.1.26" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
     <PackageReference Include="OpenTelemetry" Version="1.8.1" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.8.1" />
@@ -35,6 +39,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AWS.OpenTelemetry.AutoInstrumentation\AWS.OpenTelemetry.AutoInstrumentation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="configuration\sql_dialect_keywords.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
