@@ -72,6 +72,7 @@ public class TracerConfigurerTest
                     numSampled++;
                 }
             }
+
             telemetrySpan.Dispose();
         }
 
