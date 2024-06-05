@@ -11,8 +11,6 @@ using OpenTelemetry.Trace;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
-
-
 namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 
 // There is two test that is not implemented in this Class, comparing with Java:
@@ -26,15 +24,11 @@ namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 // Found no way to setup a Activity.Parent to a default/invalid value,
 // It either valid (set by passing a parent ID and automatically matching Activity.Parent field)
 // or just Null
-
-
-
-
-public class AwsSpanMetricsProcessorTest: IDisposable
+public class AwsSpanMetricsProcessorTest : IDisposable
 {
-    public static int count;
+    public static int Count;
     private AwsSpanMetricsProcessor awsSpanMetricsProcessor;
-    private Mock<AwsMetricAttributeGenerator> Generator = new Mock<AwsMetricAttributeGenerator>();
+    private Mock<AwsMetricAttributeGenerator> generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
     private Meter meter = new Meter("test");
     private Histogram<long> errorHistogram;
@@ -54,283 +48,286 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         var listener = new ActivityListener
         {
             ShouldListenTo = (activitySource) => true,
-            Sample = ((ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData)
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllData,
         };
         ActivitySource.AddActivityListener(listener);
-        
-        errorHistogram = meter.CreateHistogram<long>("error");
-        faultHistogram = meter.CreateHistogram<long>("fault");
-        latencyHistogram = meter.CreateHistogram<double>("latency");
+
+        this.errorHistogram = this.meter.CreateHistogram<long>("error");
+        this.faultHistogram = this.meter.CreateHistogram<long>("fault");
+        this.latencyHistogram = this.meter.CreateHistogram<double>("latency");
         var meterListener = new MeterListener();
-        meterListener.EnableMeasurementEvents(errorHistogram);
-        meterListener.EnableMeasurementEvents(faultHistogram);
-        meterListener.EnableMeasurementEvents(latencyHistogram);
-        meter.Tags.AddItem(new KeyValuePair<string, object?>("test", "test"));
-        meterListener.SetMeasurementEventCallback<long>(((instrument, measurement, tags, state) =>
+        meterListener.EnableMeasurementEvents(this.errorHistogram);
+        meterListener.EnableMeasurementEvents(this.faultHistogram);
+        meterListener.EnableMeasurementEvents(this.latencyHistogram);
+        this.meter.Tags.AddItem(new KeyValuePair<string, object?>("test", "test"));
+        meterListener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
                 {
-                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
+                    var list = GlobalCallbackData.CallList is null ?[] : GlobalCallbackData.CallList;
                     list.Add(new KeyValuePair<string, object>(instrument.Name, new KeyValuePair<long, object>(measurement, tags[0])));
                     GlobalCallbackData.CallList = list;
-                }
-                ));
-        meterListener.SetMeasurementEventCallback<double>(((instrument, measurement, tags, state) =>
+                });
+        meterListener.SetMeasurementEventCallback<double>((instrument, measurement, tags, state) =>
                 {
-                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
+                    var list = GlobalCallbackData.CallList is null ?[] : GlobalCallbackData.CallList;
                     list.Add(new KeyValuePair<string, object>(instrument.Name, new KeyValuePair<double, object>(measurement, tags[0])));
                     GlobalCallbackData.CallList = list;
-                }
-            ));
-        awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(errorHistogram, faultHistogram, latencyHistogram, Generator.Object, resource);
+                });
+        this.awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(this.errorHistogram, this.faultHistogram, this.latencyHistogram, this.generator.Object, this.resource);
     }
 
     [Fact]
-    public void testStartDoesNothingToSpan()
+    public void TestStartDoesNothingToSpan()
     {
-        spanDataMock = activitySource.StartActivity("test");
-        var parentInfo = spanDataMock.ParentSpanId;
-        awsSpanMetricsProcessor.OnStart(spanDataMock);
-        Assert.Equal(parentInfo, spanDataMock.ParentSpanId);
+        this.spanDataMock = this.activitySource.StartActivity("test");
+        var parentInfo = this.spanDataMock.ParentSpanId;
+        this.awsSpanMetricsProcessor.OnStart(this.spanDataMock);
+        Assert.Equal(parentInfo, this.spanDataMock.ParentSpanId);
     }
 
     [Fact]
-    public void testTearDown()
+    public void TestTearDown()
     {
-        Assert.True(awsSpanMetricsProcessor.Shutdown());
-        Assert.True(awsSpanMetricsProcessor.ForceFlush());
+        Assert.True(this.awsSpanMetricsProcessor.Shutdown());
+        Assert.True(this.awsSpanMetricsProcessor.ForceFlush());
     }
-    
+
     /**
      * Tests starting with testOnEndMetricsGeneration are testing the logic in
      * AwsSpanMetricsProcessor's onEnd method pertaining to metrics generation.
      */
     [Fact]
-    public void testOnEndMetricsGenerationWithoutSpanAttributes()
+    public void TestOnEndMetricsGenerationWithoutSpanAttributes()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Server);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        spanDataMock.SetEndTime(DateTime.Now);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 1,0);
+        this.spanDataMock.SetEndTime(DateTime.Now);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 1, 0);
     }
 
     [Fact]
-    public void testOnEndMetricsGenerationWithoutMetricAttributes()
+    public void TestOnEndMetricsGenerationWithoutMetricAttributes()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        setLatency();
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)500);
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(false, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Server);
+        this.SetLatency();
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, (long)500);
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(false, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 0,0);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 0, 0);
     }
 
     [Fact]
-    public void testsOnEndMetricsGenerationLocalRootConsumerSpan()
+    public void TestsOnEndMetricsGenerationLocalRootConsumerSpan()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Consumer);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Consumer);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 1,1);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 1, 1);
     }
 
     [Fact]
-    public void testsOnEndMetricsGenerationLocalRootClientSpan()
+    public void TestsOnEndMetricsGenerationLocalRootClientSpan()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Client);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Client);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 1,1);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 1, 1);
     }
-    
+
     [Fact]
-    public void testsOnEndMetricsGenerationLocalRootProducerSpan()
+    public void TestsOnEndMetricsGenerationLocalRootProducerSpan()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 1,1);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 1, 1);
     }
-    
+
     [Fact]
-    public void testsOnEndMetricsGenerationLocalRootInternalSpan()
+    public void TestsOnEndMetricsGenerationLocalRootInternalSpan()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Internal);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Internal);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 1,0);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 1, 0);
     }
-    
+
     [Fact]
-    public void testsOnEndMetricsGenerationLocalRootProducerSpanWithoutMetricAttributes()
+    public void TestsOnEndMetricsGenerationLocalRootProducerSpanWithoutMetricAttributes()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(false, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(false, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        verifyHistogramRecords(expectAttributes, 0,0);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 0, 0);
     }
-    
+
     [Fact]
-    public void testsOnEndMetricsGenerationClientSpan()
+    public void TestsOnEndMetricsGenerationClientSpan()
     {
-        Activity parentSpan = activitySource.StartActivity("test parent");
-        using (spanDataMock = activitySource.StartActivity("test Child", ActivityKind.Client))
+        Activity parentSpan = this.activitySource.StartActivity("test parent");
+        using (this.spanDataMock = this.activitySource.StartActivity("test Child", ActivityKind.Client))
         {
-            spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
-            spanDataMock.Start();
-            setLatency();
-            Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-            Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+            this.spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
+            this.spanDataMock.Start();
+            this.SetLatency();
+            Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+            this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
                 .Returns(expectAttributes);
-            awsSpanMetricsProcessor.OnEnd(spanDataMock);
-            verifyHistogramRecords(expectAttributes, 0,1);
+            this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+            this.VerifyHistogramRecords(expectAttributes, 0, 1);
         }
     }
-    
+
     [Fact]
-    public void testsOnEndMetricsGenerationProducerSpan()
+    public void TestsOnEndMetricsGenerationProducerSpan()
     {
-        Activity parentSpan = activitySource.StartActivity("test parent");
-        using (spanDataMock = activitySource.StartActivity("test Child", ActivityKind.Producer))
+        Activity parentSpan = this.activitySource.StartActivity("test parent");
+        using (this.spanDataMock = this.activitySource.StartActivity("test Child", ActivityKind.Producer))
         {
-            spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
-            spanDataMock.Start();
-            setLatency();
-            Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-            Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+            this.spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
+            this.spanDataMock.Start();
+            this.SetLatency();
+            Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+            this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
                 .Returns(expectAttributes);
-            awsSpanMetricsProcessor.OnEnd(spanDataMock);
-            verifyHistogramRecords(expectAttributes, 0,1);
+            this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+            this.VerifyHistogramRecords(expectAttributes, 0, 1);
         }
     }
-    
+
     [Fact]
-    public void testOnEndMetricsGenerationWithoutEndRequired()
+    public void TestOnEndMetricsGenerationWithoutEndRequired()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, 500);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Server);
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, 500);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
         var serviceMetrics = expectAttributes[IMetricAttributeGenerator.ServiceMetric];
-        var serviceKVP = new KeyValuePair<string, object>(serviceMetrics.Keys.FirstOrDefault(),
+        var serviceKVP = new KeyValuePair<string, object>(
+            serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService = [];
-        expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,serviceKVP)));
-        expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(1,serviceKVP)));
-        expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double,object>(testLatencyMillis,serviceKVP)));
-        
+        List<KeyValuePair<string, object?>> expectedService =[];
+        expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
+        expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(1, serviceKVP)));
+        expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, serviceKVP)));
+
         Assert.True(GlobalCallbackData.CallList.OrderBy(kvp => kvp.Key).SequenceEqual(expectedService.OrderBy(kvp => kvp.Key)));
     }
 
     [Fact]
-    public void testOnEndMetricsGenerationWithLatency()
+    public void TestOnEndMetricsGenerationWithLatency()
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Server);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, 200);
-        setLatency(5.5);
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Server);
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, 200);
+        this.SetLatency(5.5);
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
         var serviceMetrics = expectAttributes[IMetricAttributeGenerator.ServiceMetric];
-        var serviceKVP = new KeyValuePair<string, object>(serviceMetrics.Keys.FirstOrDefault(),
+        var serviceKVP = new KeyValuePair<string, object>(
+            serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService = [];
-        expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,serviceKVP)));
-        expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,serviceKVP)));
-        expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double,object>(5.5,serviceKVP)));
-        
+        List<KeyValuePair<string, object?>> expectedService =[];
+        expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
+        expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
+        expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(5.5, serviceKVP)));
+
         Assert.True(GlobalCallbackData.CallList.OrderBy(kvp => kvp.Key).SequenceEqual(expectedService.OrderBy(kvp => kvp.Key)));
     }
 
     [Fact]
-    public void testOnEndMetricsGenerationWithStatusCodes()
+    public void TestOnEndMetricsGenerationWithStatusCodes()
     {
-        validateMetricsGeneratedForHttpStatusCode(null, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForHttpStatusCode(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP status codes
-        validateMetricsGeneratedForHttpStatusCode(200, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForHttpStatusCode(399, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForHttpStatusCode(400, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForHttpStatusCode(499, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForHttpStatusCode(500, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForHttpStatusCode(599, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForHttpStatusCode(600, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForHttpStatusCode(200, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForHttpStatusCode(399, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForHttpStatusCode(400, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForHttpStatusCode(499, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForHttpStatusCode(500, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForHttpStatusCode(599, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForHttpStatusCode(600, ExpectedStatusMetric.NEITHER);
     }
-    
+
     [Fact]
-    public void testOnEndMetricsGenerationWithStatusDataError() {
+    public void TestOnEndMetricsGenerationWithStatusDataError()
+    {
         // Empty Status and HTTP with Error Status
-        validateMetricsGeneratedForStatusDataError(null, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(null, ExpectedStatusMetric.FAULT);
 
         // Valid HTTP with Error Status
-        validateMetricsGeneratedForStatusDataError(200, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(399, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(400, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataError(499, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataError(500, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(599, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataError(600, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(200, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(399, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(400, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForStatusDataError(499, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForStatusDataError(500, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(599, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataError(600, ExpectedStatusMetric.FAULT);
     }
-    
+
     [Fact]
-    public void testOnEndMetricsGenerationWithAwsStatusCodes() {
+    public void TestOnEndMetricsGenerationWithAwsStatusCodes()
+    {
         // Invalid HTTP status codes
-        validateMetricsGeneratedForAttributeStatusCode(null, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP status codes
-        validateMetricsGeneratedForAttributeStatusCode(399, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForAttributeStatusCode(400, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForAttributeStatusCode(499, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForAttributeStatusCode(500, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForAttributeStatusCode(599, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForAttributeStatusCode(600, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(399, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(400, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(499, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(500, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(599, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForAttributeStatusCode(600, ExpectedStatusMetric.NEITHER);
     }
-    
+
     [Fact]
-    public void testOnEndMetricsGenerationWithStatusDataOk() {
+    public void TestOnEndMetricsGenerationWithStatusDataOk()
+    {
         // Empty Status and HTTP with Ok Status
-        validateMetricsGeneratedForStatusDataOk(null, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForStatusDataOk(null, ExpectedStatusMetric.NEITHER);
 
         // Valid HTTP with Ok Status
-        validateMetricsGeneratedForStatusDataOk(200, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForStatusDataOk(399, ExpectedStatusMetric.NEITHER);
-        validateMetricsGeneratedForStatusDataOk(400, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataOk(499, ExpectedStatusMetric.ERROR);
-        validateMetricsGeneratedForStatusDataOk(500, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataOk(599, ExpectedStatusMetric.FAULT);
-        validateMetricsGeneratedForStatusDataOk(600, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForStatusDataOk(200, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForStatusDataOk(399, ExpectedStatusMetric.NEITHER);
+        this.ValidateMetricsGeneratedForStatusDataOk(400, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForStatusDataOk(499, ExpectedStatusMetric.ERROR);
+        this.ValidateMetricsGeneratedForStatusDataOk(500, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataOk(599, ExpectedStatusMetric.FAULT);
+        this.ValidateMetricsGeneratedForStatusDataOk(600, ExpectedStatusMetric.NEITHER);
     }
 
-    private void validateMetricsGeneratedForAttributeStatusCode(
+    private void ValidateMetricsGeneratedForAttributeStatusCode(
         int? awsStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag("new key", "new value");
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.spanDataMock.SetTag("new key", "new value");
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
         if (awsStatusCode != null)
         {
             expectAttributes[IMetricAttributeGenerator.ServiceMetric]["new service key"] = "new service value";
@@ -339,100 +336,104 @@ public class AwsSpanMetricsProcessorTest: IDisposable
                 .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
 
             expectAttributes[IMetricAttributeGenerator.DependencyMetric]["new dependency key"] = "new dependency value";
-            
+
             expectAttributes[IMetricAttributeGenerator.DependencyMetric]
                 .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
         }
-        
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        validMetrics(expectAttributes, expectedStatusMetric);
-        spanDataMock.Dispose();
-    }
-    
-    private void validateMetricsGeneratedForStatusDataOk(
-        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
-        spanDataMock.SetStatus(ActivityStatusCode.Ok);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
-            .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        validMetrics(expectAttributes, expectedStatusMetric);
-        spanDataMock.Dispose();
-    }
-    
-    
-    private void validateMetricsGeneratedForStatusDataError(
-        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric) {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
-        spanDataMock.SetStatus(ActivityStatusCode.Error);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
-            .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        validMetrics(expectAttributes, expectedStatusMetric);
-        spanDataMock.Dispose();
+
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.ValidMetrics(expectAttributes, expectedStatusMetric);
+        this.spanDataMock.Dispose();
     }
 
-    private void validateMetricsGeneratedForHttpStatusCode(
+    private void ValidateMetricsGeneratedForStatusDataOk(
         int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
-        spanDataMock = activitySource.StartActivity("test", ActivityKind.Producer);
-        spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
-        setLatency();
-        Dictionary<string, ActivityTagsCollection> expectAttributes = buildMetricAttributes(true, spanDataMock);
-        Generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, resource))
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
+        this.spanDataMock.SetStatus(ActivityStatusCode.Ok);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
-        awsSpanMetricsProcessor.OnEnd(spanDataMock);
-        validMetrics(expectAttributes, expectedStatusMetric);
-        spanDataMock.Dispose();
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.ValidMetrics(expectAttributes, expectedStatusMetric);
+        this.spanDataMock.Dispose();
     }
 
-    private void validMetrics(Dictionary<string, ActivityTagsCollection> metricAttributesMap,
+    private void ValidateMetricsGeneratedForStatusDataError(
+        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
+    {
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
+        this.spanDataMock.SetStatus(ActivityStatusCode.Error);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
+            .Returns(expectAttributes);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.ValidMetrics(expectAttributes, expectedStatusMetric);
+        this.spanDataMock.Dispose();
+    }
+
+    private void ValidateMetricsGeneratedForHttpStatusCode(
+        int? httpStatusCode, ExpectedStatusMetric expectedStatusMetric)
+    {
+        this.spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Producer);
+        this.spanDataMock.SetTag(AttributeHttpResponseStatusCode, httpStatusCode);
+        this.SetLatency();
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
+            .Returns(expectAttributes);
+        this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
+        this.ValidMetrics(expectAttributes, expectedStatusMetric);
+        this.spanDataMock.Dispose();
+    }
+
+    private void ValidMetrics(
+        Dictionary<string, ActivityTagsCollection> metricAttributesMap,
         ExpectedStatusMetric expectedStatusMetric)
     {
         var expectedList = new List<KeyValuePair<string, object?>>();
         var serviceMetrics = metricAttributesMap[IMetricAttributeGenerator.ServiceMetric];
-        var serviceKVP = new KeyValuePair<string, object>(serviceMetrics.Keys.FirstOrDefault(),
+        var serviceKVP = new KeyValuePair<string, object>(
+            serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService = [];
+        List<KeyValuePair<string, object?>> expectedService =[];
         var dependencyMetrics = metricAttributesMap[IMetricAttributeGenerator.DependencyMetric];
-        var dependencyKVP = new KeyValuePair<string, object>(dependencyMetrics.Keys.FirstOrDefault(),
+        var dependencyKVP = new KeyValuePair<string, object>(
+            dependencyMetrics.Keys.FirstOrDefault(),
             dependencyMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedDependency = [];
+        List<KeyValuePair<string, object?>> expectedDependency =[];
 
         switch (expectedStatusMetric)
         {
             case ExpectedStatusMetric.ERROR:
-                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(1,serviceKVP)));
-                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,serviceKVP)));    
-                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(1,dependencyKVP)));
-                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,dependencyKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(1, serviceKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(1, dependencyKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, dependencyKVP)));
                 break;
             case ExpectedStatusMetric.FAULT:
-                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,serviceKVP)));
-                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(1,serviceKVP)));    
-                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,dependencyKVP)));
-                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(1,dependencyKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(1, serviceKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, dependencyKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(1, dependencyKVP)));
                 break;
             case ExpectedStatusMetric.NEITHER:
-                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,serviceKVP)));
-                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,serviceKVP)));    
-                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,dependencyKVP)));
-                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,dependencyKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
+                expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, dependencyKVP)));
+                expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, dependencyKVP)));
                 break;
         }
 
         expectedList.AddRange(expectedService);
         expectedList.AddRange(expectedDependency);
-        
+
         var expectDict = new Dictionary<KeyValuePair<string, object>, int>();
         var actualDict = new Dictionary<KeyValuePair<string, object>, int>();
         GlobalCallbackData.CallList.RemoveAll(kvp => kvp.Key == "latency");
@@ -440,17 +441,19 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         {
             expectDict = expectedList.GroupBy(kvp => kvp).ToDictionary(g => g.Key, g => g.Count());
         }
+
         if (GlobalCallbackData.CallList is not null)
         {
             actualDict = GlobalCallbackData.CallList.GroupBy(kvp => kvp).ToDictionary(g => g.Key, g => g.Count());
         }
-        Assert.Equal(expectDict, actualDict);
-        
-        GlobalCallbackData.Clear();
 
+        Assert.Equal(expectDict, actualDict);
+
+        GlobalCallbackData.Clear();
     }
 
-    private void verifyHistogramRecords(Dictionary<string, ActivityTagsCollection> metricAttributesMap,
+    private void VerifyHistogramRecords(
+        Dictionary<string, ActivityTagsCollection> metricAttributesMap,
         int wantedServiceMetricInvocation,
         int wantedDependencyMetricInvocation)
     {
@@ -458,25 +461,27 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         if (wantedServiceMetricInvocation > 0)
         {
             var serviceMetrics = metricAttributesMap[IMetricAttributeGenerator.ServiceMetric];
-            var serviceKVP = new KeyValuePair<string, object>(serviceMetrics.Keys.FirstOrDefault(),
+            var serviceKVP = new KeyValuePair<string, object>(
+                serviceMetrics.Keys.FirstOrDefault(),
                 serviceMetrics.Values.FirstOrDefault());
-            List<KeyValuePair<string, object?>> expectedService = [];
-            expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,serviceKVP)));
-            expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,serviceKVP)));
-            expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double,object>(testLatencyMillis,serviceKVP)));
+            List<KeyValuePair<string, object?>> expectedService =[];
+            expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
+            expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
+            expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, serviceKVP)));
             expectedService = expectedService.SelectMany(item => Enumerable.Repeat(item, wantedServiceMetricInvocation)).ToList();
             expectedList.AddRange(expectedService);
         }
-        
+
         if (wantedDependencyMetricInvocation > 0)
         {
             var dependencyMetrics = metricAttributesMap[IMetricAttributeGenerator.DependencyMetric];
-            var dependencyKVP = new KeyValuePair<string, object>(dependencyMetrics.Keys.FirstOrDefault(),
+            var dependencyKVP = new KeyValuePair<string, object>(
+                dependencyMetrics.Keys.FirstOrDefault(),
                 dependencyMetrics.Values.FirstOrDefault());
-            List<KeyValuePair<string, object?>> expectedDependency = [];
-            expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long,object>(0,dependencyKVP)));
-            expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long,object>(0,dependencyKVP)));
-            expectedDependency.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double,object>(testLatencyMillis,dependencyKVP)));
+            List<KeyValuePair<string, object?>> expectedDependency =[];
+            expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, dependencyKVP)));
+            expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, dependencyKVP)));
+            expectedDependency.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, dependencyKVP)));
             expectedDependency = expectedDependency.SelectMany(item => Enumerable.Repeat(item, wantedDependencyMetricInvocation)).ToList();
             expectedList.AddRange(expectedDependency);
         }
@@ -487,16 +492,16 @@ public class AwsSpanMetricsProcessorTest: IDisposable
         {
             expectDict = expectedList.GroupBy(kvp => kvp).ToDictionary(g => g.Key, g => g.Count());
         }
+
         if (GlobalCallbackData.CallList is not null)
         {
             actualDict = GlobalCallbackData.CallList.GroupBy(kvp => kvp).ToDictionary(g => g.Key, g => g.Count());
         }
-        
-        Assert.Equal(expectDict, actualDict);
 
+        Assert.Equal(expectDict, actualDict);
     }
 
-    private Dictionary<string, ActivityTagsCollection> buildMetricAttributes(bool containAttributes, Activity span)
+    private Dictionary<string, ActivityTagsCollection> BuildMetricAttributes(bool containAttributes, Activity span)
     {
         Dictionary<string, ActivityTagsCollection> attributes = new Dictionary<string, ActivityTagsCollection>();
         if (containAttributes)
@@ -505,28 +510,29 @@ public class AwsSpanMetricsProcessorTest: IDisposable
             {
                 attributes.Add(IMetricAttributeGenerator.DependencyMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new dependency key", "new dependency value")]));
             }
-            
+
             if (AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(span))
             {
                 attributes.Add(IMetricAttributeGenerator.ServiceMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new service key", "new service value")]));
             }
         }
+
         return attributes;
     }
 
     // Configure latency
-    private void setLatency(double latency = -1)
+    private void SetLatency(double latency = -1)
     {
         if (latency == -1)
         {
-            latency = testLatencyMillis;
+            latency = this.testLatencyMillis;
         }
+
         PropertyInfo spanDuration = typeof(Activity).GetProperty("Duration");
         TimeSpan timeSpan = TimeSpan.FromMilliseconds(latency);
         MethodInfo durationSetMethod = spanDuration?.GetSetMethod(nonPublic: true);
-        durationSetMethod.Invoke(spanDataMock, new object?[] { timeSpan });
+        durationSetMethod.Invoke(this.spanDataMock, new object?[] { timeSpan });
     }
-
 }
 
 public static class GlobalCallbackData
@@ -538,9 +544,10 @@ public static class GlobalCallbackData
         CallList = null;
     }
 }
-public enum ExpectedStatusMetric {
+
+public enum ExpectedStatusMetric
+{
     ERROR = 0,
     FAULT = 1,
-    NEITHER = 2
+    NEITHER = 2,
 }
-
