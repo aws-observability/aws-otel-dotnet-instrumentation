@@ -11,7 +11,6 @@ namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 public class AttributePropagatingSpanProcessorTest
 {
     private Func<Activity, string> spanNameExtractor = AwsSpanProcessingUtil.GetIngressOperation;
-    private AwsSpanMetricsProcessor awsSpanMetricsProcessor;
     private Mock<AwsMetricAttributeGenerator> Generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
     private string spanNameKey = "spanName";
@@ -36,6 +35,7 @@ public class AttributePropagatingSpanProcessorTest
         tracerProviderBuilder.AddProcessor(attributePropagatingSpanProcessor);
         tracerProviderBuilder.AddSource(["test"]);
         var sdkTracerProvider = tracerProviderBuilder.Build();
+        sdkTracerProvider.AddProcessor(attributePropagatingSpanProcessor);
         tracer = sdkTracerProvider.GetTracer("awsxray");
     }
 
@@ -47,7 +47,7 @@ public class AttributePropagatingSpanProcessorTest
         //     TelemetrySpan activityWithAppOnly = tracer.StartSpan()
         // }
         SpanAttributes spanAttributes = new SpanAttributes([new KeyValuePair<string, object?>(testKey1, "testValue1")]);
-        TelemetrySpan spanWithAppOnly = tracer.StartSpan("parent", SpanKind.Server, initialAttributes: spanAttributes);
+        TelemetrySpan spanWithAppOnly = tracer.StartActiveSpan("parent", SpanKind.Server, initialAttributes: spanAttributes);
         validateSpanAttributesInheritance(spanWithAppOnly, "parent", null, null);
     }
 
@@ -58,14 +58,13 @@ public class AttributePropagatingSpanProcessorTest
             return parentSpan;
         }
 
-        TelemetrySpan childSpan = tracer.StartSpan("child:" + depth, SpanKind.Server, parentContext: parentSpan.Context);
+        TelemetrySpan childSpan = tracer.StartActiveSpan("child:" + depth, SpanKind.Server, parentContext: parentSpan.Context);
         
         FieldInfo fieldInfo = typeof(TelemetrySpan).GetField(
             "Activity",
             BindingFlags.NonPublic | BindingFlags.Instance);
         Activity childActivity = (Activity)fieldInfo.GetValue(childSpan);
         attributePropagatingSpanProcessor.OnStart(childActivity);
-        
 
         try
         {

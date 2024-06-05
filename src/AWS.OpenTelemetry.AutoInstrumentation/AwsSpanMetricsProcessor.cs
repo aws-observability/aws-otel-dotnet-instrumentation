@@ -59,6 +59,7 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     /// <param name="activity"><see cref="Activity"/> to configure</param>
     public override void OnStart(Activity activity)
     {
+        Console.WriteLine("triggered OnStart");        
     }
 
     /// <summary>
