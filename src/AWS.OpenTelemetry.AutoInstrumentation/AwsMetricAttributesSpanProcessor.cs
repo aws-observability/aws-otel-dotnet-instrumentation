@@ -121,8 +121,7 @@ public class AwsMetricAttributesSpanProcessor : BaseProcessor<Activity>
 
     private ActivityTagsCollection CopyAttributesWithLocalRoot(ActivityTagsCollection attributes)
     {
-        ActivityTagsCollection attributeCollection = new ActivityTagsCollection();
-        attributeCollection.Concat(attributes);
+        ActivityTagsCollection attributeCollection = new ActivityTagsCollection(attributes);
         attributeCollection.Remove(AttributeAWSSpanKind);
         attributeCollection.Add(AttributeAWSSpanKind, AwsSpanProcessingUtil.LocalRoot);
         return attributeCollection;

@@ -14,8 +14,8 @@ public class SamplerUtil
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<SamplerUtil>();
-    private static readonly string OtelTracesSampler = "OTEL_TRACES_SAMPLER";
-    private static readonly string OtelTracesSamplerArg = "OTEL_TRACES_SAMPLER_ARG";
+    public static readonly string OtelTracesSampler = "OTEL_TRACES_SAMPLER";
+    public static readonly string OtelTracesSamplerArg = "OTEL_TRACES_SAMPLER_ARG";
 
     /// <summary>
     /// This function is based on an internal function in Otel:
