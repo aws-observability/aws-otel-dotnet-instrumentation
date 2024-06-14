@@ -15,12 +15,10 @@ namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
 public class AttributePropagatingSpanProcessorTest
 {
     private Func<Activity, string> spanNameExtractor = AwsSpanProcessingUtil.GetIngressOperation;
-    private Mock<AwsMetricAttributeGenerator> generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
     private string spanNameKey = "spanName";
     private string testKey1 = "key1";
     private string testKey2 = "key2";
-    private TracerProviderBuilder tracerProviderBuilder = Sdk.CreateTracerProviderBuilder();
     private Tracer tracer;
     private ActivitySource activitySource = new ActivitySource("test");
     private AttributePropagatingSpanProcessor attributePropagatingSpanProcessor;
@@ -36,11 +34,6 @@ public class AttributePropagatingSpanProcessorTest
         ActivitySource.AddActivityListener(listener);
         this.attributePropagatingSpanProcessor =
             AttributePropagatingSpanProcessor.Create(this.spanNameExtractor, this.spanNameKey, attributesKeysToPropagate);
-        // this.tracerProviderBuilder.AddSource(["test"]);
-        // this.tracerProviderBuilder.AddProcessor(this.attributePropagatingSpanProcessor);
-        // var sdkTracerProvider = this.tracerProviderBuilder.Build();
-        // sdkTracerProvider.AddProcessor(this.attributePropagatingSpanProcessor);
-
     }
 
     [Fact]
@@ -63,10 +56,11 @@ public class AttributePropagatingSpanProcessorTest
             {
                 this.ValidateSpanAttributesInheritance(spanWithAppOnly, "InternalOperation", null, null);
             }
+
             spanWithAppOnly.Dispose();
         }
     }
-    
+
     [Fact]
     public void TestAttributesPropagationBySpanKindWithOpOnly()
     {
@@ -87,10 +81,11 @@ public class AttributePropagatingSpanProcessorTest
             {
                 this.ValidateSpanAttributesInheritance(spanWithOpOnly, "InternalOperation", null, null);
             }
+
             spanWithOpOnly.Dispose();
         }
     }
-    
+
     [Fact]
     public void TestAttributesPropagationBySpanKindWithAppAndOp()
     {
@@ -112,36 +107,37 @@ public class AttributePropagatingSpanProcessorTest
             {
                 this.ValidateSpanAttributesInheritance(spanWithAppAndOp, "InternalOperation", null, null);
             }
+
             spanWithAppAndOp.Dispose();
         }
     }
-    
+
     [Fact]
     public void TestAttributesPropagationWithInternalKinds()
     {
         Activity grandParentActivity = this.activitySource.StartActivity("grandparent", ActivityKind.Internal);
         grandParentActivity.SetTag(this.testKey1, "testValue1");
         this.attributePropagatingSpanProcessor.OnStart(grandParentActivity);
-    
+
         Activity parentActivity = this.activitySource.StartActivity("parent", ActivityKind.Internal);
         parentActivity.SetTag(this.testKey2, "testValue2");
         this.attributePropagatingSpanProcessor.OnStart(parentActivity);
-    
+
         Activity childActivity = this.activitySource.StartActivity("grandparent", ActivityKind.Client);
         this.attributePropagatingSpanProcessor.OnStart(childActivity);
-    
+
         Activity grandChildActivity = this.activitySource.StartActivity("grandparent", ActivityKind.Internal);
         this.attributePropagatingSpanProcessor.OnStart(grandChildActivity);
-    
+
         Assert.Equal("testValue1", grandParentActivity.GetTagItem(this.testKey1));
         Assert.Null(grandParentActivity.GetTagItem(this.testKey2));
-    
+
         Assert.Equal("testValue1", parentActivity.GetTagItem(this.testKey1));
         Assert.Equal("testValue2", parentActivity.GetTagItem(this.testKey2));
-    
+
         Assert.Equal("testValue1", childActivity.GetTagItem(this.testKey1));
         Assert.Equal("testValue2", childActivity.GetTagItem(this.testKey2));
-    
+
         Assert.Null(grandChildActivity.GetTagItem(this.testKey1));
         Assert.Null(grandChildActivity.GetTagItem(this.testKey2));
     }
@@ -152,18 +148,18 @@ public class AttributePropagatingSpanProcessorTest
         Activity parentActivity = this.activitySource.StartActivity("parent", ActivityKind.Server);
         parentActivity.SetTag(this.testKey1, "testValue1");
         parentActivity.SetTag(this.testKey2, "testValue2");
-    
+
         Activity transmitActivity1 = this.CreateNestedSpan(parentActivity, 2);
-    
+
         Activity childActivity = this.activitySource.StartActivity("child:1");
-    
+
         childActivity.SetTag(this.testKey2, "testValue3");
-    
+
         Activity transmitActivity2 = this.CreateNestedSpan(childActivity, 2);
-    
+
         Assert.Equal("testValue3", transmitActivity2.GetTagItem(this.testKey2));
     }
-    
+
     [Fact]
     public void TestSpanNamePropagationWithRemoteParentSpan()
     {
@@ -174,19 +170,19 @@ public class AttributePropagatingSpanProcessorTest
         setterMethodInfo.Invoke(activity, new object[] { true });
         this.ValidateSpanAttributesInheritance(activity, "parent", null, null);
     }
-    
+
     [Fact]
     public void TestAwsSdkDescendantSpan()
     {
         Activity awsSdkActivity = this.activitySource.StartActivity("parent", ActivityKind.Client);
         awsSdkActivity.SetTag(TraceSemanticConventions.AttributeRpcSystem, "aws-api");
         Assert.Null(awsSdkActivity.GetTagItem(AwsAttributeKeys.AttributeAWSSdkDescendant));
-    
+
         Activity childActivity = this.CreateNestedSpan(awsSdkActivity, 1);
         Assert.NotNull(childActivity.GetTagItem(AwsAttributeKeys.AttributeAWSSdkDescendant));
         Assert.Equal("true", childActivity.GetTagItem(AwsAttributeKeys.AttributeAWSSdkDescendant));
     }
-    
+
     [Fact]
     public void TestConsumerParentSpanKindAttributePropagation()
     {
@@ -196,11 +192,11 @@ public class AttributePropagatingSpanProcessorTest
         childActivity.SetTag(
             TraceSemanticConventions.AttributeMessagingOperation,
             TraceSemanticConventions.MessagingOperationValues.Process);
-    
+
         Assert.Null(parentActivity.GetTagItem(AwsAttributeKeys.AttributeAWSConsumerParentSpanKind));
         Assert.Null(childActivity.GetTagItem(AwsAttributeKeys.AttributeAWSConsumerParentSpanKind));
     }
-    
+
     [Fact]
     public void TestNoConsumerParentSpanKindAttributeWithConsumerProcess()
     {
@@ -211,7 +207,7 @@ public class AttributePropagatingSpanProcessorTest
             TraceSemanticConventions.MessagingOperationValues.Process);
         Assert.Null(childActivity.GetTagItem(AwsAttributeKeys.AttributeAWSConsumerParentSpanKind));
     }
-    
+
     [Fact]
     public void TestConsumerParentSpanKindAttributeWithConsumerParent()
     {
