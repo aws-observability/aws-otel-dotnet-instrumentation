@@ -86,7 +86,7 @@ public class AttributePropagatingSpanProcessor : BaseProcessor<Activity>
             // child are both CONSUMER then check later if a metric should be generated.
             if (IsConsumerKind(span) && IsConsumerKind(parentSpan))
             {
-                span.SetTag(AttributeAWSConsumerParentSpanKind, parentSpan.Kind.GetType().Name);
+                span.SetTag(AttributeAWSConsumerParentSpanKind, parentSpan.Kind.ToString());
             }
         }
 
