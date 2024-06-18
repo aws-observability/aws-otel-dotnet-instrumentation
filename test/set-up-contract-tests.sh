@@ -33,6 +33,10 @@ if [ $? = 1 ]; then
   exit 1
 fi
 
+# Currently we do not have sample applications for contract tests.
+# Following script will need to be updated once we have sample applications ready
+# Tracking: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/37
+
 # Find and store aws_opentelemetry_distro whl file
 # cd ../../../dist
 # DISTRO=(aws_opentelemetry_distro-*-py3-none-any.whl)
