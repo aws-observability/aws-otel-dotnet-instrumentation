@@ -74,7 +74,6 @@ jobs:
   
   build-arm:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    
     steps:
       - uses: actions/checkout@v3
 
@@ -94,10 +93,52 @@ jobs:
         with:
           name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64
           path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+  
+  build-x64-musl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.2
+        with:
+          fetch-depth: 0
+
+      - name: Build in Docker container
+        run: |
+          set -e
+          docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
+            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
+
+      - name: Upload Artifact on MUSL X64 Linux
+        uses: actions/upload-artifact@v3
+        with:
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+  
+  build-arm-musl:
+    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.2
+        with:
+          fetch-depth: 0
+
+      - name: Build in Docker container
+        run: |
+          set -e
+          docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
+            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
+
+      - name: Upload Artifact on MUSL ARM Linux
+        uses: actions/upload-artifact@v3
+        with:
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
   release:
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [build, build-arm]
+    needs: [build, build-arm, build-x64-musl, build-arm-musl]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -126,6 +167,18 @@ jobs:
         with:
           name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64
           path: ./artifacts/linux/arm64
+
+      - name: Download Linux ARM MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          path: ./artifacts/linux/arm64-musl
+
+      - name: Download Linux X64 MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: ./artifacts/linux/x64-musl
 
       - name: Get Commit ID
         id: get_commit
@@ -173,4 +226,20 @@ jobs:
         run: |
           gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
             ./artifacts/linux/arm64/*.zip \
+            --clobber
+
+      - name: Upload Linux ARM MUSL Artifact to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
+            ./artifacts/linux/arm64-musl/*.zip \
+            --clobber
+
+      - name: Upload Linux X64 MUSL Artifact to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
+            ./artifacts/linux/x64-musl/*.zip \
             --clobber
