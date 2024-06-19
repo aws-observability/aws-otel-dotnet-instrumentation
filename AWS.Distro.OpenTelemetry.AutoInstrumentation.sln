@@ -1,0 +1,85 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.AutoInstrumentation", "src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj", "{04FD4DB8-550B-480C-B974-4AECA5988FFB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{693DF34B-A5CC-457E-9692-0F6E8012EEF0}"
+	ProjectSection(SolutionItems) = preProject
+		.dockerignore = .dockerignore
+		.editorconfig = .editorconfig
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+		build.cmd = build.cmd
+		build.ps1 = build.ps1
+		build.sh = build.sh
+		CHANGELOG.md = CHANGELOG.md
+		Common.props = Common.props
+		Common.targets = Common.targets
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
+		GlobalSuppressions.cs = GlobalSuppressions.cs
+		LICENSE = LICENSE
+		docs\README.md = docs\README.md
+		stylecop.json = stylecop.json
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sample-applications", "sample-applications", "{7E420F1D-B6D6-47AF-A430-5368FE14D2AA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "integration-test-app", "integration-test-app", "{A42EEB69-8F92-4852-BA43-C38615AAD342}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "integration-test-app", "sample-applications\integration-test-app\integration-test-app\integration-test-app.csproj", "{EF72D346-BBFA-4037-B844-88D8927A9E6E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{DD015346-5FF7-4298-AD31-326B18040908}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests", "test\AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests\AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.csproj", "{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "images", "images", "{E3401B0D-DCE1-45C2-8178-2D21FA52F659}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MockCollector", "test\images\MockCollector\MockCollector.csproj", "{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContractTests", "test\ContractTests\ContractTests.csproj", "{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04FD4DB8-550B-480C-B974-4AECA5988FFB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{04FD4DB8-550B-480C-B974-4AECA5988FFB} = {BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}
+		{A42EEB69-8F92-4852-BA43-C38615AAD342} = {7E420F1D-B6D6-47AF-A430-5368FE14D2AA}
+		{EF72D346-BBFA-4037-B844-88D8927A9E6E} = {A42EEB69-8F92-4852-BA43-C38615AAD342}
+		{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849} = {DD015346-5FF7-4298-AD31-326B18040908}
+		{E3401B0D-DCE1-45C2-8178-2D21FA52F659} = {DD015346-5FF7-4298-AD31-326B18040908}
+		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41} = {E3401B0D-DCE1-45C2-8178-2D21FA52F659}
+		{8ED1C430-92A9-4CCD-BE87-A9DFBC96486A} = {DD015346-5FF7-4298-AD31-326B18040908}
+	EndGlobalSection
+EndGlobal
