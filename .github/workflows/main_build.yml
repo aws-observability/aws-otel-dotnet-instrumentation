@@ -72,6 +72,21 @@ jobs:
           name: AWS-opentelemetry-dotnet-instrumentation-macOS
           path: bin/AWS-opentelemetry-dotnet-instrumentation-macos.zip
   
+  build-nuget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build NuGet packages
+        run: bash build.sh BuildNuGetPackage
+
+      - name: Upload Nuget Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: AWS-Distro-OpenTelemetry-Nuget
+          path: nupkgs/output/*.nupkg
+  
+  
   build-arm:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -138,7 +153,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [build, build-arm, build-x64-musl, build-arm-musl]
+    needs: [build, build-arm, build-x64-musl, build-arm-musl, build-nuget]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -161,7 +176,6 @@ jobs:
           name: AWS-opentelemetry-dotnet-instrumentation-macOS
           path: ./artifacts/macOS
 
-
       - name: Download Linux ARM Artifact
         uses: actions/download-artifact@v3
         with:
@@ -179,6 +193,12 @@ jobs:
         with:
           name: AWS-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: ./artifacts/linux/x64-musl
+
+      - name: Download Nuget Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: AWS-Distro-OpenTelemetry-Nuget
+          path: ./artifacts/nuget
 
       - name: Get Commit ID
         id: get_commit
@@ -242,4 +262,12 @@ jobs:
         run: |
           gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
             ./artifacts/linux/x64-musl/*.zip \
+            --clobber
+
+      - name: Upload Nuget Artifact to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
+            ./artifacts/nuget/*.nupkg \
             --clobber
