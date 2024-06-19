@@ -6,13 +6,13 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
-using static AWS.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AwsMetricAttributeGenerator generates very specific metric attributes based on low-cardinality

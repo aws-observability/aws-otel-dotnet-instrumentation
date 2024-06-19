@@ -7,7 +7,7 @@ using System.Reflection;
 using OpenTelemetry.Trace;
 using Xunit.Repeat;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 public class TracerConfigurerTest
 {

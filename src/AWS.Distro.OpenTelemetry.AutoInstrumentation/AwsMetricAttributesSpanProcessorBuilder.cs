@@ -4,7 +4,7 @@
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Resources;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// A builder for <see cref="AwsMetricAttributesSpanProcessor"/>

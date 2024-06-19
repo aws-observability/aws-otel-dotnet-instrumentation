@@ -5,7 +5,7 @@ using System.Diagnostics;
 using Moq;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 /// <summary>
 /// AlwaysRecordSamplerTest test class

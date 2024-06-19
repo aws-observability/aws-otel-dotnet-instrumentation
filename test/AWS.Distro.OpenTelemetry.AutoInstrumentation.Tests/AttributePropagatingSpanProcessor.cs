@@ -9,7 +9,7 @@ using OpenTelemetry;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 // testSpanNamePropagationBySpanKind in java is included in TestAttributesPropagationBySpanKind Tests
 public class AttributePropagatingSpanProcessorTest

@@ -4,9 +4,9 @@
 using System.Diagnostics;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AwsMetricAttributesSpanProcessor is SpanProcessor that generates metrics from spans

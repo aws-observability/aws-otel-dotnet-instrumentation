@@ -3,11 +3,11 @@
 
 using System.Diagnostics;
 using System.Reflection;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 using Xunit;
 

@@ -4,10 +4,10 @@
 using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using OpenTelemetry;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /** Utility class designed to support shared logic across AWS Span Processors. */
 internal sealed class AwsSpanProcessingUtil

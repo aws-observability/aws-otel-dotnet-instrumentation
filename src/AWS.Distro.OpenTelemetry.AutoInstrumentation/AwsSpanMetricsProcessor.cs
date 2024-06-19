@@ -5,9 +5,9 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AwsSpanMetricsProcessor is SpanProcessor that generates metrics from spans

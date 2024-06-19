@@ -3,7 +3,7 @@
 
 using System.Text;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// Parser class for SQS URLs

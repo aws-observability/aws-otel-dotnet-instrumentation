@@ -3,7 +3,7 @@
 
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// This sampler will return the sampling result of the provided {@link #rootSampler}, unless the

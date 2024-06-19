@@ -5,7 +5,7 @@ using System.Diagnostics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// Metric attribute generator defines an interface for classes that can generate specific attributes

@@ -59,7 +59,7 @@ jobs:
           
       - name: Run Dependency Check
         run: |
-          ./dependency-check/bin/dependency-check.sh --project "AWS.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --out . --scan "**/*.csproj"
+          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.Opentelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --out . --scan "**/*.csproj"
 
       - name: Upload Dependency Check Report
         uses: actions/upload-artifact@v2

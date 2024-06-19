@@ -4,10 +4,10 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using OpenTelemetry;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AttributePropagatingSpanProcessor handles the propagation of attributes from parent spans to

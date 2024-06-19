@@ -15,7 +15,7 @@ internal partial class Build : NukeBuild
     private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.6.0";
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
-    [Solution("AWS.OpenTelemetry.AutoInstrumentation.sln")]
+    [Solution("AWS.Distro.Opentelemetry.AutoInstrumentation.sln")]
     private readonly Solution solution;
 
     public static int Main() => Execute<Build>(x => x.Workflow);
@@ -121,39 +121,39 @@ internal partial class Build : NukeBuild
         {
             // TODO: fix build script to copy dependencies without manually setting them here.
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "Newtonsoft.Json.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.Extensions.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.ResourceDetectors.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.SemanticConventions.dll",
                 this.openTelemetryDistributionFolder / "net");
             
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "AWS.OpenTelemetry.AutoInstrumentation.dll",
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "AWS.Distro.Opentelemetry.AutoInstrumentation.dll",
                 this.openTelemetryDistributionFolder / "net");
             
             FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.Instrumentation.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             if (EnvironmentInfo.IsWin)
             {
                 FileSystemTasks.CopyDirectoryRecursively(
-                    RootDirectory / "src" / "AWS.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                    RootDirectory / "src" / "AWS.Distro.Opentelemetry.AutoInstrumentation" / "bin" / this.configuration /
                     "net8.0",
                     this.openTelemetryDistributionFolder / "netfx",
                     DirectoryExistsPolicy.Merge,
@@ -226,7 +226,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .After(this.Compile)
         .Executes(() =>
         {
-            var project = this.solution.AllProjects.First(project => project.Name == "AWS.OpenTelemetry.AutoInstrumentation.Tests");
+            var project = this.solution.AllProjects.First(project => project.Name == "AWS.Distro.Opentelemetry.AutoInstrumentation.Tests");
 
             DotNetTest(s => s
                 .SetNoBuild(true)
@@ -241,7 +241,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .After(this.AddAWSPlugins)
         .Executes(() =>
         {
-            var project = this.solution.AllProjects.First(project => project.Name == "AWS.OpenTelemetry.AutoInstrumentation.IntegrationTests");
+            var project = this.solution.AllProjects.First(project => project.Name == "AWS.Distro.Opentelemetry.AutoInstrumentation.IntegrationTests");
 
             DotNetTest(s => s
                 .SetNoBuild(true)

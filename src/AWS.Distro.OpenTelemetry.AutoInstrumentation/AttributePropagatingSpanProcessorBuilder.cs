@@ -3,10 +3,10 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
-using static AWS.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AttributePropagatingSpanProcessorBuilder is used to construct a {@link

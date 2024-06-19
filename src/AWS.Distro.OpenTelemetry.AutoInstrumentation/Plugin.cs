@@ -11,7 +11,7 @@ using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// AWS SDK Plugin

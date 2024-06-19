@@ -5,7 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// Class for getting sampler for instrumentation

@@ -5,7 +5,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.OpenTelemetry.AutoInstrumentation", "src\AWS.OpenTelemetry.AutoInstrumentation\AWS.OpenTelemetry.AutoInstrumentation.csproj", "{04FD4DB8-550B-480C-B974-4AECA5988FFB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.AutoInstrumentation", "src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj", "{04FD4DB8-550B-480C-B974-4AECA5988FFB}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{693DF34B-A5CC-457E-9692-0F6E8012EEF0}"
 	ProjectSection(SolutionItems) = preProject
@@ -35,7 +35,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "integration-test-app", "sam
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{DD015346-5FF7-4298-AD31-326B18040908}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.OpenTelemetry.AutoInstrumentation.Tests", "test\AWS.OpenTelemetry.AutoInstrumentation.Tests\AWS.OpenTelemetry.AutoInstrumentation.Tests.csproj", "{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests", "test\AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests\AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.csproj", "{DBEB7F70-0C7C-4460-BAEA-B1C2A6A19849}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "images", "images", "{E3401B0D-DCE1-45C2-8178-2D21FA52F659}"
 EndProject

@@ -4,7 +4,7 @@ using Testcontainers.LocalStack;
 using LocalStack.Client.Enums;
 using FluentAssertions;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.ContractTests;
+namespace AWS.Distro.Opentelemetry.AutoInstrumentation.ContractTests;
 
 public class AWSTest(ITestOutputHelper output) : TestBase("AWS", output)
 {
@@ -61,7 +61,7 @@ public class AWSTest(ITestOutputHelper output) : TestBase("AWS", output)
             {"AWS_SDK_S3_ENDPOINT", "http://s3.localstack:4566"},
             {"AWS_SDK_ENDPOINT", "http://localstack:4566"},
             {"AWS_REGION", "us-west-2"},
-            {"OTEL_DOTNET_AUTO_PLUGINS", "AWS.OpenTelemetry.AutoInstrumentation.Plugin, AWS.OpenTelemetry.AutoInstrumentation"},
+            {"OTEL_DOTNET_AUTO_PLUGINS", "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"},
             {"CORECLR_ENABLE_PROFILING", "1"},
             {"OTEL_EXPORTER_OTLP_PROTOCOL", "grpc"},
             {"OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED", "true"}

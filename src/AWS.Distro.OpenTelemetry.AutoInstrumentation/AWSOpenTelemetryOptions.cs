@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Configuration;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// Setting Options for the OpenTelemetry .NET distribution for AWS

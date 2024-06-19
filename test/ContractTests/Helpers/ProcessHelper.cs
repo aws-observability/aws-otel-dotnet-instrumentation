@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests.IntegrationTests;
+namespace AWS.Distro.Opentelemetry.AutoInstrumentation.Tests.IntegrationTests;
 
 /// <summary>
 /// Process std output / error helper

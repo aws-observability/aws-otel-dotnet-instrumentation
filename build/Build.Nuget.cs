@@ -14,7 +14,7 @@ partial class Build
     Target BuildNuGetPackage => _ => _
         .Executes(() =>
         {
-            var project = solution.AllProjects.First(project => project.Name == "AWS.OpenTelemetry.AutoInstrumentation");
+            var project = solution.AllProjects.First(project => project.Name == "AWS.Distro.Opentelemetry.AutoInstrumentation");
 
             DotNetPack(s => s
                 .SetProject(project)

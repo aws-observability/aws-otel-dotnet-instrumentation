@@ -6,7 +6,7 @@ using System.Diagnostics;
 using Moq;
 using OpenTelemetry.Resources;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 public class AwsMetricAttributesSpanProcessorTest
 {
