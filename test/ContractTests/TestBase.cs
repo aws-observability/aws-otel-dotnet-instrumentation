@@ -7,7 +7,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Networks;
 
-namespace AWS.Distro.Opentelemetry.AutoInstrumentation.ContractTests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.ContractTests;
 
 public abstract class TestBase: IDisposable
 {

@@ -4,7 +4,7 @@ using Testcontainers.LocalStack;
 using LocalStack.Client.Enums;
 using FluentAssertions;
 
-namespace AWS.Distro.Opentelemetry.AutoInstrumentation.ContractTests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.ContractTests;
 
 public class AWSTest(ITestOutputHelper output) : TestBase("AWS", output)
 {
