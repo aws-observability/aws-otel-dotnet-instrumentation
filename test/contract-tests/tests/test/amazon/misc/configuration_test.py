@@ -55,7 +55,7 @@ class ConfigurationTest(ContractTestBase):
         https://opentelemetry.io/docs/specs/otel/trace/api/#retrieving-the-traceid-and-spanid
         Specifically for an X-Ray traceid to be a valid Otel traceId, the version digit had to be
         dropped. Reference:
-        https://github.com/open-telemetry/opentelemetry-python-contrib/blob/main/sdk-extension/opentelemetry-sdk-extension-aws/src/opentelemetry/sdk/extension/aws/trace/aws_xray_id_generator.py
+        https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Extensions.AWS/AWSXRayIdGenerator.cs
         """
 
         seen: List[str] = []

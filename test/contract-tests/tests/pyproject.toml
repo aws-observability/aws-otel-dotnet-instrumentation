@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "contract-tests"
-description = "Contract tests for AWS OTEL Python Instrumentation"
+description = "Contract tests for AWS OTEL .NET Instrumentation"
 version = "1.0.0"
 license = "Apache-2.0"
 requires-python = ">=3.8"

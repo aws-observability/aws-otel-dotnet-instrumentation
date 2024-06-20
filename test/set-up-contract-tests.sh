@@ -27,7 +27,7 @@ pip3 install sqlalchemy psycopg2-binary
 
 # Create mock-collector image
 cd contract-tests/images/mock-collector
-docker build . -t aws-application-signals-mock-collector-python
+docker build . -t aws-application-signals-mock-collector
 if [ $? = 1 ]; then
   echo "Docker build for mock collector failed"
   exit 1

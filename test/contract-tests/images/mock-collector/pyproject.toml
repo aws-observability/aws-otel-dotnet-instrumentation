@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mock-collector"
-description = "Mock Collector used by contract tests for AWS OTEL Python Instrumentation"
+description = "Mock Collector used by contract tests for AWS OTEL .NET Instrumentation"
 version = "1.0.0"
 license = "Apache-2.0"
 requires-python = ">=3.8"

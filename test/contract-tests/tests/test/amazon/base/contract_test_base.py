@@ -22,7 +22,7 @@ NETWORK_NAME: str = "aws-application-signals-network"
 _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
 _MOCK_COLLECTOR_ALIAS: str = "collector"
-_MOCK_COLLECTOR_NAME: str = "aws-application-signals-mock-collector-python"
+_MOCK_COLLECTOR_NAME: str = "aws-application-signals-mock-collector"
 _MOCK_COLLECTOR_PORT: int = 4315
 
 
