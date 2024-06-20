@@ -139,15 +139,20 @@ internal partial class Build : NukeBuild
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.SemanticConventions.dll",
                 this.openTelemetryDistributionFolder / "net");
-            
+
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "AWS.Distro.OpenTelemetry.AutoInstrumentation.dll",
                 this.openTelemetryDistributionFolder / "net");
-            
+
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.Instrumentation.AWS.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "OpenTelemetry.Sampler.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             if (EnvironmentInfo.IsWin)

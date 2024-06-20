@@ -18,9 +18,12 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public class Plugin
 {
+    /// <summary>
+    /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+    /// </summary>
+    public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
-    public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
@@ -117,7 +120,8 @@ public class Plugin
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler());
+            var resource = this.GetResourceBuilder().Build();
+            Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler(resource));
             builder.SetSampler(alwaysRecordSampler);
             builder.AddXRayTraceId();
         }
