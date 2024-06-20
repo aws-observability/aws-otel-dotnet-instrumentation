@@ -162,8 +162,7 @@ internal partial class Build : NukeBuild
                     "net8.0",
                     this.openTelemetryDistributionFolder / "netfx",
                     DirectoryExistsPolicy.Merge,
-                    FileExistsPolicy.Skip
-                );
+                    FileExistsPolicy.Skip);
             }
         });
 

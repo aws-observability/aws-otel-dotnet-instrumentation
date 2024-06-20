@@ -100,8 +100,6 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
         object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode);
         ActivityStatusCode statusCode = span.Status;
 
-        Console.WriteLine("Inside the metric processor: " + httpStatusCode);
-
         if (httpStatusCode == null)
         {
             attributes.TryGetValue(AttributeHttpResponseStatusCode, out httpStatusCode);

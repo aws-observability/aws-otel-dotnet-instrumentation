@@ -63,52 +63,7 @@ public class SamplerUtil
         switch (tracesSampler)
         {
             case "xray":
-                // Example env var value
-                // OTEL_TRACES_SAMPLER_ARG=endpoint=http://localhost:2000,polling_interval=360
-                string endpoint = DefaultSamplingProxyEndpoint;
-                double pollingInterval = DefaultRulesPollingIntervalSeconds;
-                if (tracesSamplerArg != null)
-                {
-                    var args = tracesSamplerArg.Split(",");
-                    Console.WriteLine("args = " + args);
-                    foreach (string arg in args)
-                    {
-                        var keyValue = arg.Split("=", 2);
-                        Console.WriteLine("keyValue = " + keyValue);
-                        Console.WriteLine("arg = " + arg);
-                        if (keyValue.Length != 2)
-                        {
-                            Console.WriteLine("keyValue0 = " + keyValue[0]);
-                            Console.WriteLine("keyValue size = " + keyValue.Length);
-                            Console.WriteLine("going to continue");
-                            continue;
-                        }
-
-                        if (keyValue[0] == "endpoint")
-                        {
-                            endpoint = keyValue[1];
-                        }
-                        else if (keyValue[0] == "polling_interval")
-                        {
-                            try
-                            {
-                                pollingInterval = Convert.ToDouble(keyValue[1]);
-                            }
-                            catch (Exception e)
-                            {
-                                Logger.Log(LogLevel.Error, "polling_interval in OTEL_TRACES_SAMPLER_ARG must be a number: {0}", e);
-                            }
-                        }
-                    }
-                }
-
-                Logger.Log(LogLevel.Information, "XRay Sampler Endpoint: {0}", endpoint);
-                Logger.Log(LogLevel.Information, "XRay Sampler Polling Interval:: {0}", pollingInterval);
-
-                return AWSXRayRemoteSampler.Builder(resource) // you must provide a resource
-                    .SetPollingInterval(TimeSpan.FromSeconds(pollingInterval))
-                    .SetEndpoint(endpoint)
-                    .Build();
+                return ConfigureXraySampler(tracesSamplerArg, resource);
             case "always_on":
                 return new AlwaysOnSampler();
             case "always_off":
@@ -126,5 +81,62 @@ public class SamplerUtil
                 Sampler alwaysOnSampler = new AlwaysOnSampler();
                 return new ParentBasedSampler(alwaysOnSampler);
         }
+    }
+
+    private static AWSXRayRemoteSampler ConfigureXraySampler(string? tracesSamplerArg, Resource resource)
+    {
+        // Example env var value
+        // OTEL_TRACES_SAMPLER_ARG=endpoint=http://localhost:2000,polling_interval=360
+        string endpoint = DefaultSamplingProxyEndpoint;
+        double pollingInterval = DefaultRulesPollingIntervalSeconds;
+        if (tracesSamplerArg != null)
+        {
+            var args = tracesSamplerArg.Split(",");
+            foreach (string arg in args)
+            {
+                var keyValue = arg.Split("=", 2);
+                if (keyValue.Length != 2)
+                {
+                    continue;
+                }
+
+                if (keyValue[0] == "endpoint")
+                {
+                    try
+                    {
+                        Uri url = new Uri(keyValue[1]);
+                        endpoint = url.ToString();
+
+                        // Remove the trailing slash since it will be added by the sampler when calling APIs such as
+                        // "/SamplingTargets".
+                        int lastSlash = endpoint.LastIndexOf('/');
+                        endpoint = (lastSlash > -1 && lastSlash == endpoint.Length - 1) ? endpoint.Substring(0, endpoint.Length - 1) : endpoint;
+                    }
+                    catch (UriFormatException e)
+                    {
+                        Logger.Log(LogLevel.Error, "Invalid endpoint in OTEL_TRACES_SAMPLER_ARG: {0}. Going to use the default endpoint: http://127.0.0.1:2000", e);
+                    }
+                }
+                else if (keyValue[0] == "polling_interval")
+                {
+                    try
+                    {
+                        pollingInterval = Convert.ToDouble(keyValue[1]);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Log(LogLevel.Error, "polling_interval in OTEL_TRACES_SAMPLER_ARG must be a number: {0}", e);
+                    }
+                }
+            }
+        }
+
+        Logger.Log(LogLevel.Information, "XRay Sampler Endpoint: {0}", endpoint);
+        Logger.Log(LogLevel.Information, "XRay Sampler Polling Interval:: {0}", pollingInterval);
+
+        return AWSXRayRemoteSampler.Builder(resource) // you must provide a resource
+            .SetPollingInterval(TimeSpan.FromSeconds(pollingInterval))
+            .SetEndpoint(endpoint)
+            .Build();
     }
 }
