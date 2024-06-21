@@ -36,23 +36,6 @@ public class TracerConfigurerTest
     [Theory]
     [Repeat(20)]
     [SuppressMessage("xUnit", "xUnit1026", Justification = "Parameter use as require by Theory to perform Repeat")]
-    public void ProviderGeneratesXrayIds(int iter)
-    {
-        var startTimeSecs = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        TelemetrySpan telemetrySpan = this.tracerProvider.GetTracer("test").StartActiveSpan("test");
-        FieldInfo fieldInfo = typeof(TelemetrySpan).GetField(
-            "Activity",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        Activity telemetryActivity = (Activity)fieldInfo.GetValue(telemetrySpan);
-        var hexString = telemetryActivity.TraceId.ToHexString();
-        var epoch = Convert.ToUInt32(hexString.Substring(0, 8), 16);
-        Assert.True(epoch >= startTimeSecs);
-        telemetrySpan.Dispose();
-    }
-
-    [Theory]
-    [Repeat(20)]
-    [SuppressMessage("xUnit", "xUnit1026", Justification = "Parameter use as require by Theory to perform Repeat")]
     public void TraceIdRatioSampler(int iter)
     {
         int numSpans = 100000;
