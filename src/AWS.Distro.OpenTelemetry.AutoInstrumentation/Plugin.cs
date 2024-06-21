@@ -123,7 +123,6 @@ public class Plugin
             var resource = this.GetResourceBuilder().Build();
             Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler(resource));
             builder.SetSampler(alwaysRecordSampler);
-            builder.AddXRayTraceId();
         }
 
         return builder;
