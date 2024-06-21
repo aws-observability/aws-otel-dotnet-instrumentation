@@ -5,11 +5,14 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Extensions.AWS.Trace;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -44,6 +47,20 @@ public class Plugin
     {
         if (this.IsApplicationSignalsEnabled())
         {
+            // setting the default propagators to be W3C tracecontext, b3, b3multi and xray
+            // Calling in the TracerProviderInitialized function to override whatever is set by
+            // the otel instrumentation. For Application Signals, these propagators are required.
+            // This is the function that sets the propagators in OTEL:
+            // https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/5d438056871e9eeaa483840693139491407c136f/src/OpenTelemetry.AutoInstrumentation/Configurations/EnvironmentConfigurationSdkHelper.cs#L44
+            // and this is where where it's being called: https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/5d438056871e9eeaa483840693139491407c136f/src/OpenTelemetry.AutoInstrumentation/Instrumentation.cs#L133
+            Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
+            [
+                new TraceContextPropagator(), // W3C tracecontext
+                new B3Propagator(singleHeader: true), // b3
+                new B3Propagator(singleHeader: false), // b3multi
+                new AWSXRayPropagator(), // xray
+            ]));
+
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
             string? intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);

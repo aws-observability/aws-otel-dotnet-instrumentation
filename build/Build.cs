@@ -127,6 +127,11 @@ internal partial class Build : NukeBuild
 
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "OpenTelemetry.Extensions.AWS.dll",
+                this.openTelemetryDistributionFolder / "net");
+
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.ResourceDetectors.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
