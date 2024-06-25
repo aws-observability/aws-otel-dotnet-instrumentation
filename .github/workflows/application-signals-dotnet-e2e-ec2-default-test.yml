@@ -146,7 +146,7 @@ jobs:
               done
           
               echo "Attempting to connect to the remote sample app endpoint"
-              remote_sample_app_endpoint=http://$(terraform output sample_app_remote_service_public_ip):8081/healthcheck
+              remote_sample_app_endpoint=http://$(terraform output sample_app_remote_service_public_ip):8080/healthcheck
               attempt_counter=0
               max_attempts=30
               until $(curl --output /dev/null --silent --head --fail $(echo "$remote_sample_app_endpoint" | tr -d '"')); do
