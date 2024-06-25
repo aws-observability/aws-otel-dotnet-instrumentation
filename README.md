@@ -16,13 +16,13 @@ apply some small configuration changes, and our OpenTelemetry friends takes care
 
 ### Building Locally
 
-To build the dll files for the `AWS.OpenTelemetry.AutoInstrumentation` project, just run
+To build the dll files for the `AWS.Distro.OpenTelemetry.AutoInstrumentation` project, just run
 
 ```sh
 dotnet build
 ```
 
-This will build the dll under `src/AWS.OpenTelemetry.AutoInstrumentation/bin/Debug/net8.0`.
+This will build the dll under `src/AWS.Distro.OpenTelemetry.AutoInstrumentation/bin/Debug/net8.0`.
 
 ### Building For Release
 
@@ -32,7 +32,7 @@ To build the project for release, packaged with OpenTelemetry DotNet Instrumenta
 bash build.sh
 ```
 
-This runs build/Build.cs which basically pulls OpenTelemetry DotNet Instrumentation packaged zip file and adds the `AWS.OpenTelemetry.AutoInstrumentation` dll there.
+This runs build/Build.cs which basically pulls OpenTelemetry DotNet Instrumentation packaged zip file and adds the `AWS.Distro.OpenTelemetry.AutoInstrumentation` dll there.
 
 ## Styling
 
@@ -42,7 +42,7 @@ This package uses [StyleCop](https://github.com/DotNetAnalyzers/StyleCopAnalyzer
 
 For Integration Testing, follow README under `sample-applications/integration-test-app`
 
-For Unit Testing, followed this [doc](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-with-dotnet-test) to create test/AWS.OpenTelemetry.AutoInstrumentation.Tests directory. You can use that doc to add more unit tests. To run the unit tests, run `dotnet test`
+For Unit Testing, followed this [doc](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-with-dotnet-test) to create test/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests directory. You can use that doc to add more unit tests. To run the unit tests, run `dotnet test`
 
 ## Security
 
