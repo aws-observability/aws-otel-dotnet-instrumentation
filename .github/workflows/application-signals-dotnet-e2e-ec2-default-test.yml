@@ -218,7 +218,7 @@ jobs:
         run: ./gradlew validator:run --args='-c dotnet/ec2/default/log-validation.yml
           --testing-id ${{ env.TESTING_ID }}
           --endpoint http://${{ env.MAIN_SERVICE_ENDPOINT }}
-          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8001
+          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8081
           --region ${{ inputs.aws-region }}
           --metric-namespace ${{ env.METRIC_NAMESPACE }}
           --log-group ${{ env.LOG_GROUP_NAME }}
@@ -235,7 +235,7 @@ jobs:
         run: ./gradlew validator:run --args='-c dotnet/ec2/default/metric-validation.yml
           --testing-id ${{ env.TESTING_ID }}
           --endpoint http://${{ env.MAIN_SERVICE_ENDPOINT }}
-          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8001
+          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8081
           --region ${{ inputs.aws-region }}
           --metric-namespace ${{ env.METRIC_NAMESPACE }}
           --log-group ${{ env.LOG_GROUP_NAME }}
@@ -252,7 +252,7 @@ jobs:
         run: ./gradlew validator:run --args='-c dotnet/ec2/default/trace-validation.yml
           --testing-id ${{ env.TESTING_ID }}
           --endpoint http://${{ env.MAIN_SERVICE_ENDPOINT }}
-          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8001
+          --remote-service-deployment-name ${{ env.REMOTE_SERVICE_IP }}:8081
           --region ${{ inputs.aws-region }}
           --account-id ${{ env.ACCOUNT_ID }}
           --metric-namespace ${{ env.METRIC_NAMESPACE }}
