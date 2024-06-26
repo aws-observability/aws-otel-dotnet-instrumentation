@@ -133,7 +133,7 @@ jobs:
               sample_app_endpoint=http://$(terraform output sample_app_main_service_public_dns):8080
               attempt_counter=0
               max_attempts=60
-              until $(curl --output /dev/null --silent --head --fail $(echo "$sample_app_endpoint" | tr -d '"')); do
+              until $(curl --output /dev/null --silent --fail $(echo "$sample_app_endpoint" | tr -d '"')); do
                 if [ ${attempt_counter} -eq ${max_attempts} ];then
                   echo "Failed to connect to endpoint. Will attempt to redeploy sample app."
                   deployment_failed=1
@@ -149,7 +149,7 @@ jobs:
               remote_sample_app_endpoint=http://$(terraform output sample_app_remote_service_public_ip):8081/healthcheck
               attempt_counter=0
               max_attempts=30
-              until $(curl --output /dev/null --silent --head --fail $(echo "$remote_sample_app_endpoint" | tr -d '"')); do
+              until $(curl --output /dev/null --silent --fail $(echo "$remote_sample_app_endpoint" | tr -d '"')); do
                 if [ ${attempt_counter} -eq ${max_attempts} ];then
                   echo "Failed to connect to endpoint. Will attempt to redeploy sample app."
                   deployment_failed=1
