@@ -46,19 +46,21 @@ fi
 # fi
 
 # Create application images
-# cd ..
-# for dir in contract-tests/images/applications/*
-# do
-#   application="${dir##*/}"
-#   docker build . -t aws-application-signals-tests-${application}-app -f ${dir}/Dockerfile --build-arg="DISTRO=${DISTRO}"
-#   if [ $? = 1 ]; then
-#     echo "Docker build for ${application} application failed"
-#     exit 1
-#   fi
-# done
+cd ../../..
+for dir in contract-tests/images/applications/*
+do
+  application="${dir##*/}"
+  application=$(echo "$application" | tr '[:upper:]' '[:lower:]')
+  echo "application: ${application}"
+  docker build . -t aws-application-signals-tests-${application}-app -f ${dir}/Dockerfile
+  if [ $? = 1 ]; then
+    echo "Docker build for ${application} application failed"
+    exit 1
+  fi
+done
 
 # Build and install mock-collector
-# cd contract-tests/images/mock-collector
+cd contract-tests/images/mock-collector
 python3 -m build --outdir ../../../dist
 cd ../../../dist
 pip3 install mock_collector-1.0.0-py3-none-any.whl --force-reinstall

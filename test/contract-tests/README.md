@@ -33,6 +33,7 @@ Pre-requirements:
 Steps:
 * From `test` dir, execute:
 ```sh
+./build-and-install-distro.sh
 ./set-up-contract-tests.sh
-pytest contract-tests/tests
+pytest contract-tests/tests/test/amazon/{test-folder}
 ```

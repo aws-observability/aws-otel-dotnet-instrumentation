@@ -85,6 +85,7 @@ internal partial class Build : NukeBuild
                 fileName = "opentelemetry-dotnet-instrumentation-windows.zip";
                 break;
             case PlatformFamily.Linux:
+            case PlatformFamily.OSX:
                 var architecture = RuntimeInformation.ProcessArchitecture;
                 string architectureSuffix;
                 switch (architecture)
@@ -103,9 +104,6 @@ internal partial class Build : NukeBuild
                     ? $"opentelemetry-dotnet-instrumentation-linux-musl-{architectureSuffix}.zip"
                     : $"opentelemetry-dotnet-instrumentation-linux-glibc-{architectureSuffix}.zip";
                 break;
-            case PlatformFamily.OSX:
-                fileName = "opentelemetry-dotnet-instrumentation-macos.zip";
-                break;
             case PlatformFamily.Unknown:
                 throw new NotSupportedException();
             default:
@@ -114,7 +112,6 @@ internal partial class Build : NukeBuild
 
         return fileName;
     }
-
     private Target AddAWSPlugins => _ => _
         .After(this.Compile)
         .Executes(() =>
@@ -153,6 +150,11 @@ internal partial class Build : NukeBuild
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.Sampler.AWS.dll",
+                this.openTelemetryDistributionFolder / "net");
+            
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "AWSSDK.Core.dll",
                 this.openTelemetryDistributionFolder / "net");
 
             if (EnvironmentInfo.IsWin)
