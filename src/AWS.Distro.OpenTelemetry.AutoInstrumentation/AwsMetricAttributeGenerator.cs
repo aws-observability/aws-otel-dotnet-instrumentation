@@ -195,6 +195,12 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteService = NormalizeRemoteServiceName(span, GetRemoteService(span, AttributeRpcService));
             remoteOperation = GetRemoteOperation(span, AttributeRpcMethod);
         }
+        // TODO workaround for AWS SDK span
+        else if (IsKeyPresent(span, AttributeAWSServiceName) || IsKeyPresent(span, AttributeAWSOperationName))
+        {
+            remoteService = NormalizeRemoteServiceName(span, GetRemoteService(span, AttributeAWSServiceName));
+            remoteOperation = GetRemoteOperation(span, AttributeAWSOperationName);
+        }
         else if (IsKeyPresent(span, AttributeDbSystem)
             || IsKeyPresent(span, AttributeDbOperation)
             || IsKeyPresent(span, AttributeDbStatement))
