@@ -227,7 +227,7 @@ jobs:
           --query-string ip=${{ env.REMOTE_SERVICE_IP }}&testingId=${{ env.TESTING_ID }}
           --instance-ami ${{ env.EC2_INSTANCE_AMI }}
           --instance-id ${{ env.MAIN_SERVICE_INSTANCE_ID }}
-          --rollup'
+          --rollup' > emf-validation.log 2>&1
 
       - name: Validate generated metrics
         id: metric-validation
@@ -244,7 +244,7 @@ jobs:
           --query-string ip=${{ env.REMOTE_SERVICE_IP }}
           --instance-ami ${{ env.EC2_INSTANCE_AMI }}
           --instance-id ${{ env.MAIN_SERVICE_INSTANCE_ID }}
-          --rollup'
+          --rollup' > metrics-validation.log 2>&1
 
       - name: Validate generated traces
         id: trace-validation
@@ -262,7 +262,7 @@ jobs:
           --query-string ip=${{ env.REMOTE_SERVICE_IP }}&testingId=${{ env.TESTING_ID }}
           --instance-ami ${{ env.EC2_INSTANCE_AMI }}
           --instance-id ${{ env.MAIN_SERVICE_INSTANCE_ID }}
-          --rollup'
+          --rollup' > trace-validation.log 2>&1
 
       - name: Publish metric on test result
         if: always()
@@ -289,3 +289,24 @@ jobs:
         run: |
           terraform destroy -auto-approve \
             -var="test_id=${{ env.TESTING_ID }}"
+          
+      - name: Upload trace validation logs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: emf-validation-logs
+          path: emf-validation.log
+          
+      - name: Upload metric validation logs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: metrics-validation-logs
+          path: metrics-validation.log
+          
+      - name: Upload trace validation logs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: trace-validation-logs
+          path: trace-validation.log
