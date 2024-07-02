@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - "release/v*"
+      - e2e-wf-test-xzh
 
 permissions:
   id-token: write
@@ -135,10 +136,24 @@ jobs:
         with:
           name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64-musl
           path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+          
+  dotnet-e2e-ec2-default-test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      aws-region: [ 'us-east-1' ]
+    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-default-test.yml
+    secrets: inherit
+    with:
+      aws-region: ${{ matrix.aws-region }}
+      caller-workflow-name: 'main-build'
+      staging_wheel_name: 'AWS-opentelemetry-dotnet-instrumentation-linux-x64'
+    
 
   release:
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [build, build-arm, build-x64-musl, build-arm-musl]
+    needs: [build, build-arm, build-x64-musl, build-arm-musl, executeE2Etest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
