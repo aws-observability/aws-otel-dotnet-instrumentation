@@ -142,7 +142,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      aws-region: [ 'us-east-1' ]
+      matrix:
+        aws-region: [ 'us-east-1' ]
     uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-default-test.yml
     secrets: inherit
     with:
