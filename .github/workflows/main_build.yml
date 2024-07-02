@@ -139,7 +139,6 @@ jobs:
           
   dotnet-e2e-ec2-default-test:
     needs: [build]
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
