@@ -268,7 +268,7 @@ jobs:
           --platform-info dotnet-ec2-single-asg-${{ env.TESTING_ID }}
           --instance-id ${{ env.INSTANCE_ID }}
           --private-dns-name ${{ env.PRIVATE_DNS_NAME }}
-          --rollup'
+          --rollup' > trace.log 2>&1
 
       - name: Publish metric on test result
         if: always()
@@ -295,3 +295,10 @@ jobs:
         run: |
           terraform destroy -auto-approve \
             -var="test_id=${{ env.TESTING_ID }}"
+          
+      - name: Upload trace validation logs
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: trace-logs
+          path: trace.log
