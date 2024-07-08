@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - "release/v*"
+      - "e2e-wf-test-xzh"
 
 permissions:
   id-token: write
@@ -55,7 +56,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v3
         with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
 
       - name: Upload Artifact on Windows
@@ -160,7 +161,7 @@ jobs:
       - name: Download Linux x64 Artifact
         uses: actions/download-artifact@v3
         with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64
+          name: AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
 
       - name: Download Windows Artifact
