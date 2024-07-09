@@ -4,7 +4,6 @@ on:
     branches:
       - main
       - "release/v*"
-      - "e2e-wf-test-xzh"
 
 permissions:
   id-token: write
@@ -144,6 +143,19 @@ jobs:
       matrix:
         aws-region: [ 'us-east-1' ]
     uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-default-test.yml
+    secrets: inherit
+    with:
+      aws-region: ${{ matrix.aws-region }}
+      caller-workflow-name: 'main-build'
+      staging_wheel_name: 'AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'  
+      
+  dotnet-e2e-ec2-asg-test:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        aws-region: [ 'us-east-1' ]
+    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-asg-test.yml
     secrets: inherit
     with:
       aws-region: ${{ matrix.aws-region }}
