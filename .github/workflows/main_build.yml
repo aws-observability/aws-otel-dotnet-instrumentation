@@ -148,7 +148,7 @@ jobs:
     with:
       aws-region: ${{ matrix.aws-region }}
       caller-workflow-name: 'main-build'
-      staging_wheel_name: 'AWS-opentelemetry-dotnet-instrumentation-linux-x64'
+      staging_wheel_name: 'AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
     
 
   release:
