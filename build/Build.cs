@@ -212,7 +212,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .Executes(() =>
         {
             var fileName = GetOTelAutoInstrumentationFileName();
-            this.openTelemetryDistributionFolder.ZipTo(RootDirectory / "bin" / ("AWS-" + fileName), compressionLevel: CompressionLevel.SmallestSize, fileMode: FileMode.Create);
+            this.openTelemetryDistributionFolder.ZipTo(RootDirectory / "bin" / ("aws-distro-" + fileName), compressionLevel: CompressionLevel.SmallestSize, fileMode: FileMode.Create);
         });
 
     private Target Compile => _ => _
