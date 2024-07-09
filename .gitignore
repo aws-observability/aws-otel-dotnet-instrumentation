@@ -464,3 +464,7 @@ lychee/out.md
 
 # protobuf generated file
 */generated/
+*/dist
+
+# Python cache
+*.pytest_cache

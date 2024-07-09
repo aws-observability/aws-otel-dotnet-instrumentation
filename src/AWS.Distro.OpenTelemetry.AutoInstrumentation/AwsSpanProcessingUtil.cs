@@ -92,7 +92,8 @@ internal sealed class AwsSpanProcessingUtil
         {
             operation = InternalOperation;
         }
-        else if (!IsValidOperation(span, operation))
+        // TODO workaround for span.DisplayName
+        else if (!IsValidOperation(span, operation) || IsKeyPresent(span, AttributeUrlPath))
         {
             operation = GenerateIngressOperation(span);
         }
@@ -141,7 +142,8 @@ internal sealed class AwsSpanProcessingUtil
     internal static bool IsAwsSDKSpan(Activity span)
     {
         // https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/
-        return "aws-api".Equals((string?)span.GetTagItem(AttributeRpcSystem));
+        // TODO workaround for AWS SDK span
+        return "aws-api".Equals((string?)span.GetTagItem(AttributeRpcSystem)) || ((string?)span.GetTagItem(AttributeAWSServiceName)) != null;
     }
 
     internal static bool ShouldGenerateServiceMetricAttributes(Activity span)
@@ -273,6 +275,7 @@ internal sealed class AwsSpanProcessingUtil
     
     public static bool isAwsSDKSpan(Activity span) {
         // https://opentelemetry.io/docs/specs/otel/trace/semantic_conventions/instrumentation/aws-sdk/#common-attributes
-        return span.GetTagItem(AttributeRpcSystem) == "aws-api";
+        // TODO workaround for AWS SDK span
+        return span.GetTagItem(AttributeRpcSystem) == "aws-api" || ((string?)span.GetTagItem(AttributeAWSServiceName)) != null;
     }
 }

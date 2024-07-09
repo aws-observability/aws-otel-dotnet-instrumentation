@@ -32,9 +32,13 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.MapPost("/blogs", ([FromBody] Blog blog, [FromServices] BloggingContext db) =>
+app.MapPost("/blogs", ([FromServices] BloggingContext db) =>
 {
-    db.Add(blog);
+    // Add a blog
+    db.Add(new Blog
+    {
+        Url = "https://aws.amazon.com/blogs/opensource/aws-distro-for-opentelemetry-is-now-generally-available-for-metrics/test"
+    });
     db.SaveChanges();
     return Results.Ok();
 })

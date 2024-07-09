@@ -20,6 +20,7 @@ services:
       - INSTANCE_ID
       - LISTEN_ADDRESS=0.0.0.0:8080
       - OTEL_RESOURCE_ATTRIBUTES=service.name=aws-otel-integ-test
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cwagent:4316 # TODO: workaround for trace exporter endpoint
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://cwagent:4316/v1/traces
       - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://cwagent:4316/v1/metrics
       - ASPNETCORE_URLS=http://+:8080
