@@ -9,11 +9,8 @@ name: Application Signals Enablement - DotNet E2E EC2 Canary Testing
 on:
   workflow_dispatch: # be able to run the workflow on demand
   push:
-    branches:
-      - "e2e-wf-test-xzh"
-  pull_request:
-    branches:
-      - main
+  schedule:
+    - cron: '*/15 * * * *' # run the workflow every 15 minutes
 
 permissions:
   id-token: write
