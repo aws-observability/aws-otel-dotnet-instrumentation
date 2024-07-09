@@ -114,6 +114,7 @@ internal partial class Build : NukeBuild
 
         return fileName;
     }
+
     private Target AddAWSPlugins => _ => _
         .After(this.Compile)
         .Executes(() =>
@@ -153,7 +154,7 @@ internal partial class Build : NukeBuild
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "OpenTelemetry.Sampler.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
-            
+
             FileSystemTasks.CopyFileToDirectory(
                 RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
                 "net8.0" / "AWSSDK.Core.dll",
