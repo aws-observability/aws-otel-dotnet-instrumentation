@@ -186,9 +186,9 @@ jobs:
               fi
           
               execute_and_retry 2 "kubectl delete pods --all -n ${{ env.DOTNET_SAMPLE_APP_NAMESPACE }}" "" 60
-              sleep 120
+              sleep 10
               execute_and_retry 2 "kubectl wait --for=condition=Ready --request-timeout '5m' pod --all -n ${{ env.DOTNET_SAMPLE_APP_NAMESPACE }}" "" 10
-              kubectl get events -n ns-9878296760-2
+              execute_and_retry 2 "kubectl get events -n ${{ env.DOTNET_SAMPLE_APP_NAMESPACE }}"
 
               echo "Attempting to connect to the main sample app endpoint"
               dotnet_app_endpoint=http://$(terraform output dotnet_app_endpoint)
