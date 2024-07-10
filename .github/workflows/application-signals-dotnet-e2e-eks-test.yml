@@ -191,10 +191,10 @@ jobs:
               execute_and_retry 2 "kubectl wait --for=condition=Ready --request-timeout '5m' pod --all -n ${{ env.DOTNET_SAMPLE_APP_NAMESPACE }}" "" 10
 
               echo "Attempting to connect to the main sample app endpoint"
-              dotnet_app_endpoint=http://$(terraform output dotnet_app_endpoint)
+              dotnet_app_endpoint=http://$(terraform output -raw dotnet_app_endpoint)
               attempt_counter=0
               max_attempts=60
-              until $(curl --output /dev/null --silent --head --fail $(echo "$dotnet_app_endpoint" | tr -d '"')); do
+              until $(curl --output /dev/null --silent --fail $(echo "$dotnet_app_endpoint" | tr -d '"')); do
                 if [ ${attempt_counter} -eq ${max_attempts} ];then
                   echo "Failed to connect to endpoint ($dotnet_app_endpoint). Will attempt to redeploy sample app."
                   deployment_failed=1
@@ -207,11 +207,11 @@ jobs:
               done
           
               echo "Attempting to connect to the remote sample app endpoint"
-              remote_sample_app_endpoint=http://$(terraform output dotnet_r_app_endpoint)/healthcheck
+              remote_sample_app_endpoint=http://$(terraform output -raw dotnet_r_app_endpoint)/healthcheck
               echo $remote_sample_app_endpoint
               attempt_counter=0
               max_attempts=30
-              until $(curl --output /dev/null --silent --head --fail $(echo "$remote_sample_app_endpoint" | tr -d '"')); do
+              until $(curl --output /dev/null --silent --fail $(echo "$remote_sample_app_endpoint" | tr -d '"')); do
                 if [ ${attempt_counter} -eq ${max_attempts} ];then
                   echo "Failed to connect to endpoint. Will attempt to redeploy sample app."
                   deployment_failed=1
