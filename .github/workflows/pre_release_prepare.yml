@@ -1,10 +1,6 @@
 name: Pre Release Prepare - Update Version and Create PR
 
 on:
-  push:
-    branches:
-      - 'release-workflow'
-
   workflow_dispatch:
     inputs:
       version:
@@ -96,4 +92,7 @@ jobs:
       - name: Update version in environment variables
         env:
           GITHUB_TOKEN: ${{ env.BOT_TOKEN_GITHUB_RW_PATOKEN }}
-        run: gh variable set RELEASE_VERSION_TAG --body "${VERSION}" --repo owner/repo
+        run: |
+          if [ "$IS_PATCH" = "false" ]; then
+            gh variable set RELEASE_VERSION_TAG --body "${VERSION}" --repo aws-observability/aws-otel-dotnet-instrumentation
+          fi
