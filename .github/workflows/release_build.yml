@@ -13,6 +13,7 @@ env:
   # RELEASE_PUBLIC_REPOSITORY: public.ecr.aws/aws-observability/adot-autoinstrumentation-python
   RELEASE_PRIVATE_REPOSITORY: 637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging
   RELEASE_PRIVATE_REGISTRY: 637423224110.dkr.ecr.us-east-1.amazonaws.com
+  RELEASE_PRIVATE_S3: s3://adot-autoinstrumentation-dotnet-staging
   # PACKAGE_NAME: aws-opentelemetry-distro
 
 permissions:
@@ -50,6 +51,51 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.RELEASE_PRIVATE_REGISTRY }}
+          
+      - name: Download Linux x64 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          path: ./artifacts/windows
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-macOS
+          path: ./artifacts/macOS
+
+      - name: Download Linux ARM Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64
+          path: ./artifacts/linux/arm64
+
+      - name: Download Linux ARM MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          path: ./artifacts/linux/arm64-musl
+
+      - name: Download Linux X64 MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: ./artifacts/linux/x64-musl
+      
+      - name: Upload to Private S3 Bucket
+      - run: |
+          PREFIX="Release_v${{github.event.inputs.version}}_"
+
+          find ./artifacts/ -name "*.zip" | while read file; do
+          base=$(basename "$file")
+          aws s3 cp "$file" "${{ env.RELEASE_PRIVATE_S3 }}$PREFIX$base"
+          done
 
 #      - name: Configure AWS credentials for public ECR
 #        uses: aws-actions/configure-aws-credentials@v4
@@ -73,16 +119,19 @@ jobs:
 #          tags: |
 #            ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
 
+# Note: Download ECR build from main_build workflow and upload it to S3 location
+      
+      
       # Publish to private ECR
-      - name: Build and push private ECR image
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+#      - name: Build and push private ECR image
+#        uses: docker/build-push-action@v5
+#        with:
+#          push: true
+#          context: .
+#          file: ./Dockerfile
+#          platforms: linux/amd64,linux/arm64
+#          tags: |
+#            ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
 
       # Publish to GitHub releases
       - name: Create GH release
