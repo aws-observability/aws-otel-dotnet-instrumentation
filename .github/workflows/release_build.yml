@@ -89,7 +89,7 @@ jobs:
           path: ./artifacts/linux/x64-musl
       
       - name: Upload to Private S3 Bucket
-      - run: |
+        run: |
           PREFIX="Release_v${{github.event.inputs.version}}_"
 
           find ./artifacts/ -name "*.zip" | while read file; do
@@ -141,6 +141,20 @@ jobs:
         run: |
           gh release create --target "$GITHUB_REF_NAME" \
              --title "Release v${{ github.event.inputs.version }}" \
-             --draft \
              "v${{ github.event.inputs.version }}" \
-             dist/aws_opentelemetry_distro-${{ github.event.inputs.version }}-py3-none-any.whl
+              --notes "Release Verions v${{ github.event.inputs.version }}"
+          
+      - name: Upload artifacts to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREFIX="Release_v${{github.event.inputs.version}}_"
+          
+          find ./artifacts/ -name "*.zip" | while read file; do
+          base=$(basename "$file")
+          prefixed_file="${PREFIX}${base}"
+          cp "$file" "$prefixed_file"
+          gh release upload "v${{ github.event.inputs.version }}" \
+            $prefixed_file \
+            --clobber
+          done
