@@ -1,5 +1,10 @@
 name: DotNet Instrumentation Main Build
 on:
+  workflow_call:
+    inputs:
+      caller-workflow-name:
+        required: true
+        type: string
   push:
     branches:
       - main
