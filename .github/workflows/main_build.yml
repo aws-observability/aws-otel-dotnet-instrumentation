@@ -367,6 +367,6 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon ECR
         run: |
-          docker manifest create ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:latest ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:linux ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2019 ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2022
-          docker manifest inspect ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:latest
-          docker manifest push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:latest
+          docker manifest create ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }} ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:linux ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2019 ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2022
+          docker manifest inspect ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }}
+          docker manifest push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }}
