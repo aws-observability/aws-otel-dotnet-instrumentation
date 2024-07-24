@@ -92,8 +92,6 @@ internal sealed class AwsSpanProcessingUtil
         {
             operation = InternalOperation;
         }
-
-        // TODO workaround for span.DisplayName
         else if (!IsValidOperation(span, operation))
         {
             operation = GenerateIngressOperation(span);
