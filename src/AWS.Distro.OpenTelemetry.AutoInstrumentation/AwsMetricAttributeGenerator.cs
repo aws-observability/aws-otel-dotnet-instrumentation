@@ -32,6 +32,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
+    private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DB_CONNECTION_RESOURCE_TYPE = "DB::Connection";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
@@ -366,6 +368,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
+                case "Bedrock Runtime":
+                    return NormalizedBedrockRuntimeServiceName;
                 default:
                     return "AWS::" + serviceName;
             }
@@ -407,6 +411,11 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+            }
+            else if (IsKeyPresent(span, AttributeGenAiModelId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Model";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeGenAiModelId);
             }
         } else if (isDBSpan(span))
         {
