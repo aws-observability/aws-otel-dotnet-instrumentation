@@ -366,6 +366,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
+                case "Bedrock Runtime":
+                    return NormalizedBedrockRuntimeServiceName;
                 default:
                     return "AWS::" + serviceName;
             }
@@ -408,8 +410,12 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
             }
-        }
-        else if (IsDBSpan(span))
+            else if (IsKeyPresent(span, AttributeGenAiModelId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Model";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeGenAiModelId);
+            }
+        } else if (IsDBSpan(span))
         {
             remoteResourceType = DbConnectionResourceType;
             remoteResourceIdentifier = GetDbConnection(span);
