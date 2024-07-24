@@ -47,6 +47,7 @@ internal sealed class AwsAttributeKeys
 
     internal static readonly string AttributeAWSS3Bucket = "aws.s3.bucket";
 
+    internal static readonly string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";
     internal static readonly string AttributeGenAiModelId = "gen_ai.request.model";
 
     internal static readonly string AttributeHttpResponseContentLength = "http.response_content_length";
