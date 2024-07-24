@@ -143,12 +143,12 @@ class ContractTestBase(TestCase):
         self._assert_aws_span_attributes(resource_scope_spans, path, **kwargs)
         self._assert_semantic_conventions_span_attributes(resource_scope_spans, method, path, status_code, **kwargs)
 
-        # metrics: List[ResourceScopeMetric] = self.mock_collector_client.get_metrics(
-        #     {LATENCY_METRIC, ERROR_METRIC, FAULT_METRIC}
-        # )
-        # self._assert_metric_attributes(metrics, LATENCY_METRIC, 5000, **kwargs)
-        # self._assert_metric_attributes(metrics, ERROR_METRIC, expected_error, **kwargs)
-        # self._assert_metric_attributes(metrics, FAULT_METRIC, expected_fault, **kwargs)
+        metrics: List[ResourceScopeMetric] = self.mock_collector_client.get_metrics(
+            {LATENCY_METRIC, ERROR_METRIC, FAULT_METRIC}
+        )
+        self._assert_metric_attributes(metrics, LATENCY_METRIC, 5000, **kwargs)
+        self._assert_metric_attributes(metrics, ERROR_METRIC, expected_error, **kwargs)
+        self._assert_metric_attributes(metrics, FAULT_METRIC, expected_fault, **kwargs)
 
     def _get_attributes_dict(self, attributes_list: List[KeyValue]) -> Dict[str, AnyValue]:
         attributes_dict: Dict[str, AnyValue] = {}

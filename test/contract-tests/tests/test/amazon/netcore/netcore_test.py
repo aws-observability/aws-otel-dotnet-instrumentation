@@ -36,11 +36,11 @@ class NetCoreTest(ContractTestBase):
         self.do_test_requests("/fault", "GET", 500, 0, 1, request_method="GET", local_operation="GET /fault")
 
     def test_success_post(self) -> None:
-        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success/postmethod")
+        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success")
     def test_error_post(self) -> None:
-        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0, request_method="POST", local_operation="POST /error/postmethod")
+        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0, request_method="POST", local_operation="POST /error")
     def test_fault_post(self) -> None:
-        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1, request_method="POST", local_operation="POST /fault/postmethod")
+        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1, request_method="POST", local_operation="POST /fault")
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
@@ -59,8 +59,6 @@ class NetCoreTest(ContractTestBase):
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_OPERATION, local_operation)
-        # self._assert_str_attribute(attributes_dict, AWS_REMOTE_SERVICE, "backend:8080")
-        # self._assert_str_attribute(attributes_dict, AWS_REMOTE_OPERATION, f"{method} /backend")
         self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, "LOCAL_ROOT")
 
     @override
@@ -74,15 +72,18 @@ class NetCoreTest(ContractTestBase):
                 target_spans.append(resource_scope_span.span)
 
         self.assertEqual(len(target_spans), 1)
-        self.assertEqual(target_spans[0].name, kwargs.get("local_operation"))
         self._assert_semantic_conventions_attributes(target_spans[0].attributes, method, path, status_code)
 
     def _assert_semantic_conventions_attributes(
-        self, attributes_list: List[KeyValue], method: str, endpoint: str, status_code: int
+        self, attributes_list: List[KeyValue], method: str, path: str, status_code: int
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
+        port: str = self.application.get_exposed_port(self.get_application_port())
+        self._assert_str_attribute(attributes_dict, SpanAttributes.SERVER_ADDRESS, "localhost")
+        self._assert_int_attribute(attributes_dict, SpanAttributes.SERVER_PORT, int(port))
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_RESPONSE_STATUS_CODE, status_code)
-        # self._assert_str_attribute(attributes_dict, SpanAttributes.URL_FULL, f"http://backend:8080/backend/{endpoint}")
+        self._assert_str_attribute(attributes_dict, SpanAttributes.HTTP_ROUTE, path)
+        self._assert_str_attribute(attributes_dict, SpanAttributes.URL_PATH, path)
         self._assert_str_attribute(attributes_dict, SpanAttributes.HTTP_REQUEST_METHOD, method)
 
     @override
@@ -102,24 +103,10 @@ class NetCoreTest(ContractTestBase):
         target_metric: Metric = target_metrics[0]
         dp_list: List[ExponentialHistogramDataPoint] = target_metric.exponential_histogram.data_points
 
-        self.assertEqual(len(dp_list), 2)
-        dependency_dp: ExponentialHistogramDataPoint = dp_list[0]
-        service_dp: ExponentialHistogramDataPoint = dp_list[1]
-        if len(dp_list[1].attributes) > len(dp_list[0].attributes):
-            dependency_dp = dp_list[1]
-            service_dp = dp_list[0]
-        attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(dependency_dp.attributes)
-        method: str = kwargs.get("request_method")
-        self._assert_str_attribute(attribute_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
-        # See comment on AWS_LOCAL_OPERATION in _assert_aws_attributes
-        self._assert_str_attribute(attribute_dict, AWS_LOCAL_OPERATION, "InternalOperation")
-        self._assert_str_attribute(attribute_dict, AWS_REMOTE_SERVICE, "backend:8080")
-        self._assert_str_attribute(attribute_dict, AWS_REMOTE_OPERATION, f"{method} /backend")
-        self._assert_str_attribute(attribute_dict, AWS_SPAN_KIND, "CLIENT")
-        self.check_sum(metric_name, dependency_dp.sum, expected_sum)
-
+        self.assertEqual(len(dp_list), 1)
+        service_dp: ExponentialHistogramDataPoint = dp_list[0]
         attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(service_dp.attributes)
-        # See comment on AWS_LOCAL_OPERATION in _assert_aws_attributes
-        self._assert_str_attribute(attribute_dict, AWS_LOCAL_OPERATION, "InternalOperation")
+        self._assert_str_attribute(attribute_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
+        self._assert_str_attribute(attribute_dict, AWS_LOCAL_OPERATION, kwargs.get("local_operation"))
         self._assert_str_attribute(attribute_dict, AWS_SPAN_KIND, "LOCAL_ROOT")
         self.check_sum(metric_name, service_dp.sum, expected_sum)
