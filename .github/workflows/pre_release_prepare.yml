@@ -42,7 +42,7 @@ jobs:
       - name: Checkout main branch
         uses: actions/checkout@v3
         with:
-          ref: 'workflow-release'
+          ref: 'release-workflow'
           token: ${{ env.BOT_TOKEN_GITHUB_RW_PATOKEN }}
 
       - name: Setup Git
