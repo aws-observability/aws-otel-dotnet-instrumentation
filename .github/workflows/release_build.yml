@@ -188,7 +188,8 @@ jobs:
         if: runner.os == 'Linux'
         id: login-ecr-public
         uses: aws-actions/amazon-ecr-login@v2
-        with: registry-type: public
+        with: 
+          registry-type: public
           
 
       #https://github.com/docker/docker-credential-helpers/issues/190
