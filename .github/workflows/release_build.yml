@@ -182,9 +182,6 @@ jobs:
       - name: Log in to AWS public ECR
         if: runner.os == 'Windows'
         run: |
-          cat ~/.docker/config.json >> $ENV:GITHUB_OUTPUT
-          echo $ENV:OUTPUT1
-          rm ~/.docker/config.json
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
         shell: powershell
 
