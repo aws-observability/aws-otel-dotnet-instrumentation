@@ -21,7 +21,6 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          - os: macos-latest
           - os: ubuntu-latest
 
     steps:
@@ -40,20 +39,12 @@ jobs:
         if: runner.os == 'Windows'
         run: .\build.cmd
 
-      - name: Build on macOS
-        if: runner.os == 'macOS'
-        run: bash build.sh
-
       - name: Test on Linux
         if: runner.os == 'Linux'
         run: dotnet test
 
       - name: Test on Windows
         if: runner.os == 'Windows'
-        run: dotnet test
-
-      - name: Test on macOS
-        if: runner.os == 'macOS'
         run: dotnet test
 
       - name: Upload Artifact on X64 Linux
@@ -69,35 +60,6 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
-
-      - name: Upload Artifact on macOS
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-macOS
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-macos.zip
-  
-  build-arm:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build on Linux
-        run: bash build.sh
-
-      - name: Test on Linux
-        run: dotnet test
-
-      - name: Upload Artifact on ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
   
   build-x64-musl:
     runs-on: ubuntu-latest
@@ -119,27 +81,6 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
-  
-  build-arm-musl:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.2
-        with:
-          fetch-depth: 0
-
-      - name: Build in Docker container
-        run: |
-          set -e
-          docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Upload Artifact on MUSL ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           
   # dotnet-e2e-ec2-default-test:
   #   needs: [build]
@@ -166,212 +107,3 @@ jobs:
   #     aws-region: ${{ matrix.aws-region }}
   #     caller-workflow-name: 'main-build'
   #     staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
-    
-
-  release:
-    if: startsWith(github.ref, 'refs/heads/main')
-    needs: [build, build-arm, build-x64-musl, build-arm-musl, dotnet-e2e-ec2-default-test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download Linux x64 Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          path: ./artifacts/linux/x64
-
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
-          path: ./artifacts/windows
-
-      - name: Download macOS Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-macOS
-          path: ./artifacts/macOS
-
-
-      - name: Download Linux ARM Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64
-          path: ./artifacts/linux/arm64
-
-      - name: Download Linux ARM MUSL Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
-          path: ./artifacts/linux/arm64-musl
-
-      - name: Download Linux X64 MUSL Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
-          path: ./artifacts/linux/x64-musl
-
-      - name: Get Commit ID
-        id: get_commit
-        run: |
-          short_commit_id=$(echo ${GITHUB_SHA} | cut -c1-7)
-          echo "::set-output name=commit_id::${short_commit_id}"
-
-      - name: Create GH release
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create main-build-${{steps.get_commit.outputs.commit_id}}-pre-release \
-            --target "$GITHUB_REF_NAME" \
-            --title "Main Build Pre-Release Commit ${{ steps.get_commit.outputs.commit_id }}" \
-            --notes "Release and Pre-Release from Main build"
-
-      - name: Upload Linux x64 Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/x64/*.zip \
-            --clobber
-
-      - name: Upload Windows Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/windows/*.zip \
-            --clobber
-
-      - name: Upload macOS Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/macOS/*.zip \
-            --clobber
-
-      - name: Upload Linux ARM Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/arm64/*.zip \
-            --clobber
-
-      - name: Upload Linux ARM MUSL Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/arm64-musl/*.zip \
-            --clobber
-
-      - name: Upload Linux X64 MUSL Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/x64-musl/*.zip \
-            --clobber
-
-  build-image:
-    needs: [build, build-x64-musl]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: windows-2022
-          - os: windows-2019
-          - os: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download Linux x64 Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          path: ./artifacts/linux/x64
-
-      - name: Download Linux X64 MUSL Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
-          path: ./artifacts/linux/x64-musl
-
-      - name: Unzip Linux Artifact
-        if: runner.os == 'Linux'
-        run: |
-          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
-          unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
-
-      - name: Download Windows Artifact
-        if: runner.os == 'Windows'
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
-          path: ./artifacts/windows
-
-      - name: Unzip Windows Artifact
-        if: runner.os == 'Windows'
-        run: |
-          Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
-        shell: powershell
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build Linux container
-        if: runner.os == 'Linux'
-        run: |
-          set -e
-          docker build -t ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:linux -f ./Dockerfile.linux .
-          docker push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:linux
-
-      - name: Build Windows container
-        if: runner.os == 'Windows'
-        run: |
-          $osInfo = systeminfo | Select-String "OS Version"
-          if ($osInfo -match "10.0.17763") {
-            Echo "Build image for Windows Server 2019"
-            docker build -t ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2019 -f ./Dockerfile.windows2019 .
-            docker push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2019
-          } elseif ($osInfo -match "10.0.20348") {
-            Echo "Build image for Windows Server 2022"
-            docker build -t ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2022 -f ./Dockerfile.windows2022 .
-            docker push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2022
-          } else {
-              Echo "Unknown Windows Server version: $osInfo"
-              exit 1
-          }
-        shell: powershell
-
-  build-multi-platform-image:
-    needs: [build-image]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Create multi-platform image and push to Amazon ECR
-        run: |
-          docker manifest create ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }} ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:linux ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2019 ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:windows2022
-          docker manifest inspect ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }}
-          docker manifest push ${{ vars.STAGING_ECR_REGISTRY }}/${{ vars.STAGING_ECR_REPOSITORY }}:${{ vars.DEV_VERSION_TAG }}
