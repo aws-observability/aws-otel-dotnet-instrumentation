@@ -35,7 +35,7 @@ jobs:
 
   release:
     needs: [build-and-upload]
-    environment: Release
+    # environment: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
@@ -113,7 +113,7 @@ jobs:
           done
 
   build-image:
-    needs: [build-and-upload]
+    needs: [release]
     runs-on: ${{ matrix.os }}
     continue-on-error: true
     strategy:
