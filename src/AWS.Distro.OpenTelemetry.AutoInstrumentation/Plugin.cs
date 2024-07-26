@@ -153,7 +153,6 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public ResourceBuilder ConfigureResource(ResourceBuilder builder)
     {
-        string test = Version.version;
         Dictionary<string, object> attributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
