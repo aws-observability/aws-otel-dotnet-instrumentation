@@ -112,7 +112,7 @@ jobs:
           base=$(basename "$file")
           cp "$file" "$base"
           gh release upload "v${{ github.event.inputs.version }}" \
-            $prefixed_file \
+            $base \
             --clobber
           done
 
