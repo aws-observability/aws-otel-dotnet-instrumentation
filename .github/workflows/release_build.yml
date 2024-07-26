@@ -115,6 +115,7 @@ jobs:
   build-image:
     needs: [build-and-upload]
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     strategy:
       matrix:
         include:
