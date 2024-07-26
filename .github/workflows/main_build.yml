@@ -21,7 +21,6 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          - os: macos-latest
           - os: ubuntu-latest
 
     steps:
@@ -40,20 +39,12 @@ jobs:
         if: runner.os == 'Windows'
         run: .\build.cmd
 
-      - name: Build on macOS
-        if: runner.os == 'macOS'
-        run: bash build.sh
-
       - name: Test on Linux
         if: runner.os == 'Linux'
         run: dotnet test
 
       - name: Test on Windows
         if: runner.os == 'Windows'
-        run: dotnet test
-
-      - name: Test on macOS
-        if: runner.os == 'macOS'
         run: dotnet test
 
       - name: Upload Artifact on X64 Linux
@@ -69,35 +60,6 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
-
-      - name: Upload Artifact on macOS
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-macOS
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-macos.zip
-  
-  build-arm:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build on Linux
-        run: bash build.sh
-
-      - name: Test on Linux
-        run: dotnet test
-
-      - name: Upload Artifact on ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
   
   build-x64-musl:
     runs-on: ubuntu-latest
@@ -119,27 +81,6 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
-  
-  build-arm-musl:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.2
-        with:
-          fetch-depth: 0
-
-      - name: Build in Docker container
-        run: |
-          set -e
-          docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Upload Artifact on MUSL ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
-          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           
   # dotnet-e2e-ec2-default-test:
   #   needs: [build]
