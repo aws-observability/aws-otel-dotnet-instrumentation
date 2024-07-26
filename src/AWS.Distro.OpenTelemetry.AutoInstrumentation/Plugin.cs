@@ -157,6 +157,7 @@ public class Plugin
         Dictionary<string, object> attributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
+            { "telemetry.auto.version", Version.version + "-aws" },
         };
         builder
                 .AddAttributes(attributes);
