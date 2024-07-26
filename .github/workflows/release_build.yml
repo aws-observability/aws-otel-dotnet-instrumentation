@@ -14,7 +14,6 @@ env:
   RELEASE_PRIVATE_REPOSITORY: 637423224110.dkr.ecr.us-east-1.amazonaws.com/adot-autoinstrumentation-dotnet
   RELEASE_PRIVATE_REGISTRY: 637423224110.dkr.ecr.us-east-1.amazonaws.com
   RELEASE_PRIVATE_S3: s3://adot-autoinstrumentation-dotnet-staging
-  # PACKAGE_NAME: aws-opentelemetry-distro
 
 permissions:
   id-token: write
@@ -35,7 +34,7 @@ jobs:
 
   release:
     needs: [build-and-upload]
-    environment: Release-test
+    # environment: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
