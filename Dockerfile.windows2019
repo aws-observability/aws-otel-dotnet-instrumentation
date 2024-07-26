@@ -1,0 +1,5 @@
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2019
+ 
+COPY OpenTelemetryDistribution /autoinstrumentation
+
+USER ContainerAdministrator
