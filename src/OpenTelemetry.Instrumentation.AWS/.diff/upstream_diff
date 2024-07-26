@@ -1,0 +1,256 @@
+Only in /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS: .DS_Store
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSMessagingUtils.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSMessagingUtils.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSMessagingUtils.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSMessagingUtils.cs	2024-07-25 12:10:01
+@@ -1,7 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System.Collections.Generic;
+ using OpenTelemetry.Context.Propagation;
+ 
+ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSPropagatorPipelineHandler.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSPropagatorPipelineHandler.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSPropagatorPipelineHandler.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSPropagatorPipelineHandler.cs	2024-07-25 12:10:01
+@@ -1,9 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+-using System.Collections.Generic;
+-using System.Threading.Tasks;
+ using Amazon.Runtime;
+ using Amazon.Runtime.Internal;
+ using OpenTelemetry.Context.Propagation;
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs	2024-07-25 12:10:01
+@@ -12,6 +12,9 @@
+ 
+     public const string AttributeAWSDynamoTableName = "aws.table_name";
+     public const string AttributeAWSSQSQueueUrl = "aws.queue_url";
++    public const string AttributeAWSSQSQueueName = "aws.sqs.queue_name";
++    public const string AttributeAWSS3BucketName = "aws.s3.bucket";
++    public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
+ 
+     public const string AttributeHttpStatusCode = "http.status_code";
+     public const string AttributeHttpResponseContentLength = "http.response_content_length";
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceHelper.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceHelper.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceHelper.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceHelper.cs	2024-07-25 12:10:01
+@@ -1,23 +1,27 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System.Collections.Generic;
+ using Amazon.Runtime;
+ 
+ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
+ 
+ internal class AWSServiceHelper
+ {
+-    internal static IReadOnlyDictionary<string, string> ServiceParameterMap = new Dictionary<string, string>()
++    internal static IReadOnlyDictionary<string, List<string>> ServiceParameterMap = new Dictionary<string, List<string>>()
+     {
+-        { AWSServiceType.DynamoDbService, "TableName" },
+-        { AWSServiceType.SQSService, "QueueUrl" },
++        { AWSServiceType.DynamoDbService, new List<string> { "TableName" } },
++        { AWSServiceType.SQSService, new List<string> { "QueueUrl", "QueueName" } },
++        { AWSServiceType.S3Service, new List<string> { "BucketName" } },
++        { AWSServiceType.KinesisService, new List<string> { "StreamName" } },
+     };
+ 
+     internal static IReadOnlyDictionary<string, string> ParameterAttributeMap = new Dictionary<string, string>()
+     {
+         { "TableName", AWSSemanticConventions.AttributeAWSDynamoTableName },
+         { "QueueUrl", AWSSemanticConventions.AttributeAWSSQSQueueUrl },
++        { "QueueName", AWSSemanticConventions.AttributeAWSSQSQueueName },
++        { "BucketName", AWSSemanticConventions.AttributeAWSS3BucketName },
++        { "StreamName", AWSSemanticConventions.AttributeAWSKinesisStreamName },
+     };
+ 
+     internal static string GetAWSServiceName(IRequestContext requestContext)
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceType.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceType.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceType.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSServiceType.cs	2024-07-25 12:10:01
+@@ -1,8 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+-
+ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
+ 
+ internal class AWSServiceType
+@@ -10,6 +8,8 @@
+     internal const string DynamoDbService = "DynamoDB";
+     internal const string SQSService = "SQS";
+     internal const string SNSService = "SNS";
++    internal const string S3Service = "S3";
++    internal const string KinesisService = "Kinesis";
+ 
+     internal static bool IsDynamoDbService(string service)
+         => DynamoDbService.Equals(service, StringComparison.OrdinalIgnoreCase);
+@@ -19,4 +19,10 @@
+ 
+     internal static bool IsSnsService(string service)
+         => SNSService.Equals(service, StringComparison.OrdinalIgnoreCase);
++
++    internal static bool IsS3Service(string service)
++        => S3Service.Equals(service, StringComparison.OrdinalIgnoreCase);
++
++    internal static bool IsKinesisService(string service)
++        => KinesisService.Equals(service, StringComparison.OrdinalIgnoreCase);
+ }
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineCustomizer.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineCustomizer.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineCustomizer.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineCustomizer.cs	2024-07-25 12:10:01
+@@ -1,7 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+ using Amazon.Runtime;
+ using Amazon.Runtime.Internal;
+ 
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineHandler.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineHandler.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineHandler.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSTracingPipelineHandler.cs	2024-07-25 12:10:01
+@@ -1,9 +1,7 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+ using System.Diagnostics;
+-using System.Threading.Tasks;
+ using Amazon.Runtime;
+ using Amazon.Runtime.Internal;
+ using Amazon.Util;
+@@ -130,7 +128,7 @@
+         }
+     }
+ 
+-#if NET6_0_OR_GREATER
++#if NET
+     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
+         "Trimming",
+         "IL2075",
+@@ -138,25 +136,28 @@
+ #endif
+     private static void AddRequestSpecificInformation(Activity activity, IRequestContext requestContext, string service)
+     {
+-        if (AWSServiceHelper.ServiceParameterMap.TryGetValue(service, out var parameter))
++        if (AWSServiceHelper.ServiceParameterMap.TryGetValue(service, out var parameters))
+         {
+             AmazonWebServiceRequest request = requestContext.OriginalRequest;
+ 
+-            try
++            foreach (var parameter in parameters)
+             {
+-                var property = request.GetType().GetProperty(parameter);
+-                if (property != null)
++                try
+                 {
+-                    if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
++                    var property = request.GetType().GetProperty(parameter);
++                    if (property != null)
+                     {
+-                        activity.SetTag(attribute, property.GetValue(request));
++                        if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
++                        {
++                            activity.SetTag(attribute, property.GetValue(request));
++                        }
+                     }
+                 }
+-            }
+-            catch (Exception)
+-            {
+-                // Guard against any reflection-related exceptions when running in AoT.
+-                // See https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/1543#issuecomment-1907667722.
++                catch (Exception)
++                {
++                    // Guard against any reflection-related exceptions when running in AoT.
++                    // See https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/1543#issuecomment-1907667722.
++                }
+             }
+         }
+ 
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/SnsRequestContextHelper.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/SnsRequestContextHelper.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/SnsRequestContextHelper.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/SnsRequestContextHelper.cs	2024-07-25 12:10:01
+@@ -1,8 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System.Collections.Generic;
+-using System.Linq;
+ using Amazon.Runtime;
+ using Amazon.SimpleNotificationService.Model;
+ 
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/SqsRequestContextHelper.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/SqsRequestContextHelper.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/SqsRequestContextHelper.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/SqsRequestContextHelper.cs	2024-07-25 12:10:01
+@@ -1,8 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System.Collections.Generic;
+-using System.Linq;
+ using Amazon.Runtime;
+ using Amazon.SQS.Model;
+ 
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/Utils.cs src/OpenTelemetry.Instrumentation.AWS/Implementation/Utils.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/Implementation/Utils.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/Implementation/Utils.cs	2024-07-25 12:10:01
+@@ -1,8 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+-using System.Collections.Generic;
+ using System.Diagnostics;
+ 
+ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj	2024-06-03 17:44:15
++++ src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj	2024-07-25 12:10:01
+@@ -2,10 +2,12 @@
+ 
+   <PropertyGroup>
+     <!-- OmniSharp/VS Code requires TargetFrameworks to be in descending order for IntelliSense and analysis. -->
+-    <TargetFrameworks>net6.0;netstandard2.0</TargetFrameworks>
++    <TargetFrameworks>net8.0</TargetFrameworks>
+     <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);$(NetFrameworkMinimumSupportedVersion)</TargetFrameworks>
+     <Description>AWS client instrumentation for OpenTelemetry .NET</Description>
+-	  <MinVerTagPrefix>Instrumentation.AWS-</MinVerTagPrefix>
++    <MinVerTagPrefix>Instrumentation.AWS-</MinVerTagPrefix>
++    <Nullable>enable</Nullable>
++    <ImplicitUsings>enable</ImplicitUsings>
+   </PropertyGroup>
+ 
+   <!--Do not run Package Baseline Validation as this package has never released a stable version.
+@@ -22,9 +24,9 @@
+   </ItemGroup>
+ 
+   <ItemGroup>
+-    <Compile Include="$(RepoRoot)\src\Shared\AssemblyVersionExtensions.cs" Link="Includes\AssemblyVersionExtensions.cs" />
+-    <Compile Include="$(RepoRoot)\src\Shared\Guard.cs" Link="Includes\Guard.cs" />
+-    <Compile Include="$(RepoRoot)\src\Shared\SemanticConventions.cs" Link="Includes\SemanticConventions.cs"/>
++    <Compile Include="..\Shared\AssemblyVersionExtensions.cs" Link="Includes\AssemblyVersionExtensions.cs" />
++    <Compile Include="..\Shared\Guard.cs" Link="Includes\Guard.cs" />
++    <Compile Include="..\Shared\SemanticConventions.cs" Link="Includes\SemanticConventions.cs"/>
+   </ItemGroup>
+ 
+ </Project>
+diff -ur /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/TracerProviderBuilderExtensions.cs src/OpenTelemetry.Instrumentation.AWS/TracerProviderBuilderExtensions.cs
+--- /Users/yiranwan/workplace/contrib/opentelemetry-dotnet-contrib/src/OpenTelemetry.Instrumentation.AWS/TracerProviderBuilderExtensions.cs	2024-07-23 12:18:56
++++ src/OpenTelemetry.Instrumentation.AWS/TracerProviderBuilderExtensions.cs	2024-07-25 12:10:01
+@@ -1,7 +1,6 @@
+ // Copyright The OpenTelemetry Authors
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-using System;
+ using OpenTelemetry.Instrumentation.AWS;
+ using OpenTelemetry.Instrumentation.AWS.Implementation;
+ using OpenTelemetry.Internal;

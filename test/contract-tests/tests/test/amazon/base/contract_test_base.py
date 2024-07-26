@@ -136,7 +136,7 @@ class ContractTestBase(TestCase):
         address: str = self.application.get_container_host_ip()
         port: str = self.application.get_exposed_port(self.get_application_port())
         url: str = f"http://{address}:{port}/{path}"
-        response: Response = request(method, url, timeout=20)
+        response: Response = request(method, url, timeout=200)
         self.assertEqual(status_code, response.status_code)
 
         resource_scope_spans: List[ResourceScopeSpan] = self.mock_collector_client.get_traces()

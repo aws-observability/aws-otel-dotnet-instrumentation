@@ -20,7 +20,6 @@
     <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.9.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
     <PackageReference Include="OpenTelemetry.ResourceDetectors.AWS" Version="1.4.0-beta.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AWS" Version="1.1.0-beta.4" />
     <PackageReference Include="OpenTelemetry.Sampler.AWS" Version="0.1.0-alpha.1" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
@@ -34,6 +33,11 @@
       <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
     </AssemblyAttribute>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <!-- TODO: Once upstream release is done, move the dependency to use upstream version -->
+  <ItemGroup>
+    <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" />
   </ItemGroup>
 
 </Project>
