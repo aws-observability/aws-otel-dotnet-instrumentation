@@ -224,7 +224,7 @@ jobs:
         shell: powershell
 
   release-multi-platform-image:
-    needs: [build-image]
+    needs: [release-image]
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials for private ECR
