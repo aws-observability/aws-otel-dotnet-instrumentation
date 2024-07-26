@@ -169,21 +169,20 @@ jobs:
       #   uses: docker/login-action@v3
       #   with:
       #     registry: public.ecr.aws
+          
+      # https://github.com/docker/login-action/issues/575
+      # https://github.com/docker/docker-credential-helpers/issues/190
+      - name: hack windows docker config
+        if: runner.os == 'Windows'
+        run: |
+          echo '{"auths": {"https://index.docker.io/v1/": {}}, "HttpHeaders": { "User-Agent": "Docker-Client/19.03.12 (windows)"}}' | out-file -encoding ASCII ~/.docker/config.json
+        shell: powershell
 
       - name: Login to Amazon public ECR
-        if: runner.os == 'Linux'
         id: login-ecr-public
         uses: aws-actions/amazon-ecr-login@v2
         with: 
           registry-type: public
-          
-      # https://github.com/docker/login-action/issues/575
-      # https://github.com/docker/docker-credential-helpers/issues/190
-      - name: Log in to AWS public ECR
-        if: runner.os == 'Windows'
-        run: |
-          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
-        shell: powershell
 
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@v4
