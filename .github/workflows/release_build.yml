@@ -35,7 +35,7 @@ jobs:
 
   release:
     needs: [build-and-upload]
-    # environment: Release
+    environment: Release-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
@@ -76,7 +76,13 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: ./artifacts/linux/x64-musl
-      
+
+      - name: Configure AWS credentials for Private S3 Bucket
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
       - name: Upload to Private S3 Bucket
         run: |
           PREFIX="Release_v${{github.event.inputs.version}}"
