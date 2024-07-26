@@ -163,10 +163,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
 
-      - name: Log in to AWS private ECR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.RELEASE_PRIVATE_REGISTRY }}
+      # - name: Log in to AWS private ECR
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ${{ env.RELEASE_PRIVATE_REGISTRY }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Configure AWS credentials for public ECR
         uses: aws-actions/configure-aws-credentials@v4
@@ -174,10 +178,24 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
 
-      - name: Log in to AWS public ECR
-        uses: docker/login-action@v3
+      # - name: Log in to AWS public ECR
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: public.ecr.aws
+
+      - name: Login to Amazon ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
         with:
-          registry: public.ecr.aws
+          registry-type: public
+
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+
 
       - name: Build Linux container
         if: runner.os == 'Linux'
