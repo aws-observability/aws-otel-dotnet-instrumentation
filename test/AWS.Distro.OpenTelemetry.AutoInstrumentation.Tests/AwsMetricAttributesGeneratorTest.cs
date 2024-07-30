@@ -852,6 +852,18 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeAWSDynamoTableName, "aws_table^name" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" }
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeGenAiModelId, "gen_ai_model_id" }
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id");
     }
 
     private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)
@@ -891,6 +903,10 @@ public class AwsMetricAttributesGeneratorTest
     [Fact]
     public void TestNormalizeRemoteServiceName_AwsSdk()
     {
+        // AWS SDK V3
+        this.TestAwsSdkServiceNormalization("Bedrock Runtime", "AWS::BedrockRuntime");
+        this.TestAwsSdkServiceNormalization("Bedrock", "AWS::Bedrock");
+
         // AWS SDK V2
         this.TestAwsSdkServiceNormalization("AmazonDynamoDBv2", "AWS::DynamoDB");
         this.TestAwsSdkServiceNormalization("AmazonKinesis", "AWS::Kinesis");
