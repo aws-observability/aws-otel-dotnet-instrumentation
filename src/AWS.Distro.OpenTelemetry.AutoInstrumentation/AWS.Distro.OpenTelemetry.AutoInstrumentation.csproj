@@ -10,7 +10,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
-    <PackageReference Include="AWSSDK.Core" Version="3.7.303.27" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OpenTelemetry" Version="1.9.0" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.9.0" />
@@ -37,7 +36,50 @@
 
   <!-- TODO: Once upstream release is done, move the dependency to use upstream version -->
   <ItemGroup>
-    <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" />
+    <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" PrivateAssets="All"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">
+    <ItemGroup>
+      <!-- Filter out unnecessary files -->
+      <_ReferenceCopyLocalPaths Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference')->WithMetadataValue('PrivateAssets', 'All'))"/>
+    </ItemGroup>
+
+    <!-- Print batches for debug purposes -->
+    <Message Text="Batch for .nupkg: ReferenceCopyLocalPaths = @(_ReferenceCopyLocalPaths), ReferenceCopyLocalPaths.DestinationSubDirectory = %(_ReferenceCopyLocalPaths.DestinationSubDirectory) Filename = %(_ReferenceCopyLocalPaths.Filename) Extension = %(_ReferenceCopyLocalPaths.Extension)" Importance="High" Condition="'@(_ReferenceCopyLocalPaths)' != ''" />
+
+    <ItemGroup>
+      <!-- Add file to package with consideration of sub folder. If empty, the root folder is chosen. -->
+      <BuildOutputInPackage Include="@(_ReferenceCopyLocalPaths)" TargetPath="%(_ReferenceCopyLocalPaths.DestinationSubDirectory)"/>
+    </ItemGroup>
+  </Target>
+
+  <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <!-- NuGet packages -->
+    <IsPackable>true</IsPackable>
+    <PackageProjectUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation/</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>docs/readme.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>See release notes at https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases</PackageReleaseNotes>
+    <PackageTags>OpenTelemetry;OTEL;tracing;instrumentation;AWS</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Items that are only added when building the NuGet package -->
+  <ItemGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <Content Include="adot-launch.*">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </Content>
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.6.0">
+      <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
+    </PackageReference>
+    <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
   </ItemGroup>
 
 </Project>
