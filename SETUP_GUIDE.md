@@ -42,7 +42,8 @@ This guide provides step-by-step instructions for enabling Application Signals i
 ### Download AWS Distro of OTel .NET auto-instrumentation agent
 ```sh
 wget https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/download/v1.1.0/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d OpenTelemetryDistribution
+export INSTALL_DIR=~/OpenTelemetryDistribution
+unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d $INSTALL_DIR
 ```
 
 ### Run the sample app with .NET auto-instrumentation agent
@@ -53,7 +54,7 @@ unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d OpenTeleme
 * Build the sample application
   ```sh
   cd aws-otel-dotnet-instrumentation/sample-applications/integration-test-app/
-  dotnet publish integration-test-app/*.csproj -c Release -o out
+  dotnet publish integration-test-app/integration-test-app.csproj -c Release -o out
   ```
 * Run the sample applcation with .NET auto-instrumentation agent
   ```sh
@@ -174,7 +175,8 @@ unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d OpenTeleme
 ### Download AWS Distro of OTel .NET auto-instrumentation agent
 ```ps
 Invoke-WebRequest -Uri "https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/download/v1.1.0/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -OutFile "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
-Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -DestinationPath "OpenTelemetryDistribution"
+$env:INSTALL_DIR = "C:\Users\Administrator\Downloads\OpenTelemetryDistribution"
+Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -DestinationPath $env:INSTALL_DIR
 ```
 
 ### Run the sample app with .NET auto-instrumentation agent
@@ -185,7 +187,7 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
 * Build the sample application
   ```ps
   cd aws-otel-dotnet-instrumentation/sample-applications/integration-test-app/
-  dotnet publish integration-test-app/*.csproj -c Release -o out
+  dotnet publish integration-test-app/integration-test-app.csproj -c Release -o out
   ```
 * Run the sample applcation with .NET auto-instrumentation agent
   ```ps
@@ -262,6 +264,54 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
         - --auto-instrumentation-dotnet-image=public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.1.0
     ```
 
+### Build ECR image of sample application
+* Pull the agent repo from GitHub to use the integration test application
+  ```sh
+  git clone https://github.com/aws-observability/aws-otel-dotnet-instrumentation
+  ```
+* Build the sample application
+  ```sh
+  cd aws-otel-dotnet-instrumentation/sample-applications/integration-test-app/
+  dotnet publish integration-test-app/integration-test-app.csproj -c Release -o out
+  ```
+* Replace ```Dockerfile``` contents
+  ```dockerfile
+  FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
+  WORKDIR /app
+  COPY . ./
+  RUN dotnet publish integration-test-app/integration-test-app.csproj -c Release -o out
+
+  FROM mcr.microsoft.com/dotnet/aspnet:8.0
+  WORKDIR /app
+  EXPOSE 8080
+  COPY --from=build-env /app/out .
+  ENTRYPOINT ["dotnet", "integration-test-app.dll"]
+  ```
+* Build docker image for sample applcation
+  ```sh
+  docker build -t dotnet-sample-app .
+  ```
+  * Verify ```sample-app``` docker image created
+    ```shell
+    docker images dotnet-sample-app
+    ```
+* Authenticate docker to your Amazon ECR Registry
+  ```sh
+  aws ecr get-login-password --region <region-code> | docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.<region-code>.amazonaws.com
+  ```
+* Create a repository in Amazon ECR
+  ```sh
+  aws ecr create-repository --repository-name dotnet-sample-app-repo --region <region-code>
+  ```
+* Tag your local docker image with the ECR repository URI
+  ```sh
+  docker tag dotnet-sample-app:latest <aws-account-id>.dkr.ecr.<region-code>.amazonaws.com/dotnet-sample-app-repo:latest
+  ```
+* Push the docker image to your ECR repository
+  ```sh
+  docker push <aws-account-id>.dkr.ecr.<region-code>.amazonaws.com/dotnet-sample-app-repo:latest
+  ```
+
 ### Run the sample app with .NET auto-instrumentation agent
 * Create sample application configuration file ```dotnet-demo.yaml```
   ```sh
@@ -295,7 +345,7 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
       spec:
         containers:
         - name: dotnet-demo
-          image: public.ecr.aws/f3s3h0u3/dotnet/demo-linux:latest
+          image: <aws-account-id>.dkr.ecr.<region-code>.amazonaws.com/dotnet-sample-app-repo:latest
           ports:
           - name: http
             containerPort: 8080
@@ -356,6 +406,16 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
 ### Install ```amazon-cloudwatch-observability``` addon
 * Same as [EKS Linux](#eks-linux)
 
+### Build ECR image of sample application
+* Same as [EKS Linux](#eks-linux), replace ```Dockerfile``` contents with
+```sh
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-nanoserver-ltsc2022
+WORKDIR /app
+EXPOSE 8080
+COPY out .
+ENTRYPOINT ["dotnet", "integration-test-app.dll"]
+```
+
 ### Run the sample app with .NET auto-instrumentation agent
 * Create sample application configuration file ```dotnet-demo-windows.yaml```
   ```sh
@@ -389,7 +449,7 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
       spec:
         containers:
         - name: dotnet-demo-win
-          image: 162283822697.dkr.ecr.us-west-1.amazonaws.com/dotnet/demo-windows:latest
+          image: <aws-account-id>.dkr.ecr.<region-code>.amazonaws.com/dotnet-sample-app-repo:latest
           ports:
           - name: http
             containerPort: 8080
