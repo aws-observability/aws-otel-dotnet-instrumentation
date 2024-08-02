@@ -1,5 +1,10 @@
 name: DotNet Instrumentation Main Build
 on:
+  workflow_call:
+    inputs:
+      caller-workflow-name:
+        required: true
+        type: string
   push:
     branches:
       - main
@@ -16,7 +21,6 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          - os: macos-latest
           - os: ubuntu-latest
 
     steps:
@@ -35,10 +39,6 @@ jobs:
         if: runner.os == 'Windows'
         run: .\build.cmd
 
-      - name: Build on macOS
-        if: runner.os == 'macOS'
-        run: bash build.sh
-
       - name: Test on Linux
         if: runner.os == 'Linux'
         run: dotnet test
@@ -47,52 +47,19 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet test
 
-      - name: Test on macOS
-        if: runner.os == 'macOS'
-        run: dotnet test
-
       - name: Upload Artifact on X64 Linux
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v3
         with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
 
       - name: Upload Artifact on Windows
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v3
         with:
-          name: AWS-opentelemetry-dotnet-instrumentation-windows
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-windows.zip
-
-      - name: Upload Artifact on macOS
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-macOS
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-macos.zip
-  
-  build-arm:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build on Linux
-        run: bash build.sh
-
-      - name: Test on Linux
-        run: dotnet test
-
-      - name: Upload Artifact on ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
   
   build-x64-musl:
     runs-on: ubuntu-latest
@@ -112,134 +79,31 @@ jobs:
       - name: Upload Artifact on MUSL X64 Linux
         uses: actions/upload-artifact@v3
         with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64-musl
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
-  
-  build-arm-musl:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.2
-        with:
-          fetch-depth: 0
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
 
-      - name: Build in Docker container
-        run: |
-          set -e
-          docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Upload Artifact on MUSL ARM Linux
-        uses: actions/upload-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64-musl
-          path: bin/AWS-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
-
-  release:
-    if: startsWith(github.ref, 'refs/heads/main')
-    needs: [build, build-arm, build-x64-musl, build-arm-musl]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download Linux x64 Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64
-          path: ./artifacts/linux/x64
-
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-windows
-          path: ./artifacts/windows
-
-      - name: Download macOS Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-macOS
-          path: ./artifacts/macOS
-
-
-      - name: Download Linux ARM Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64
-          path: ./artifacts/linux/arm64
-
-      - name: Download Linux ARM MUSL Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-arm64-musl
-          path: ./artifacts/linux/arm64-musl
-
-      - name: Download Linux X64 MUSL Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: AWS-opentelemetry-dotnet-instrumentation-linux-x64-musl
-          path: ./artifacts/linux/x64-musl
-
-      - name: Get Commit ID
-        id: get_commit
-        run: |
-          short_commit_id=$(echo ${GITHUB_SHA} | cut -c1-7)
-          echo "::set-output name=commit_id::${short_commit_id}"
-
-      - name: Create GH release
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create main-build-${{steps.get_commit.outputs.commit_id}}-pre-release \
-            --target "$GITHUB_REF_NAME" \
-            --title "Main Build Pre-Release Commit ${{ steps.get_commit.outputs.commit_id }}" \
-            --notes "Release and Pre-Release from Main build"
-
-      - name: Upload Linux x64 Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/x64/*.zip \
-            --clobber
-
-      - name: Upload Windows Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/windows/*.zip \
-            --clobber
-
-      - name: Upload macOS Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/macOS/*.zip \
-            --clobber
-
-      - name: Upload Linux ARM Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/arm64/*.zip \
-            --clobber
-
-      - name: Upload Linux ARM MUSL Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/arm64-musl/*.zip \
-            --clobber
-
-      - name: Upload Linux X64 MUSL Artifact to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "main-build-${{steps.get_commit.outputs.commit_id}}-pre-release" \
-            ./artifacts/linux/x64-musl/*.zip \
-            --clobber
+  dotnet-e2e-ec2-default-test:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        aws-region: [ 'us-east-1' ]
+    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-default-test.yml
+    secrets: inherit
+    with:
+      aws-region: ${{ matrix.aws-region }}
+      caller-workflow-name: 'main-build'
+      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      
+  dotnet-e2e-ec2-asg-test:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        aws-region: [ 'us-east-1' ]
+    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-asg-test.yml
+    secrets: inherit
+    with:
+      aws-region: ${{ matrix.aws-region }}
+      caller-workflow-name: 'main-build'
+      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'

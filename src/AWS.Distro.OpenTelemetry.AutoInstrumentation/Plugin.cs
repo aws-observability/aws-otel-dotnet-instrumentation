@@ -8,6 +8,7 @@ using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Extensions.AWS.Trace;
+using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
@@ -156,10 +157,28 @@ public class Plugin
         Dictionary<string, object> attributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
+            { "telemetry.auto.version", Version.version + "-aws" },
         };
         builder
                 .AddAttributes(attributes);
         return builder;
+    }
+
+    /// <summary>
+    /// To configure HttpOptions and skip instrumentation for certain APIs
+    /// </summary>
+    /// <param name="options"><see cref="HttpClientTraceInstrumentationOptions"/> options to configure</param>
+    public void ConfigureTracesOptions(HttpClientTraceInstrumentationOptions options)
+    {
+        options.FilterHttpRequestMessage = request =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/GetSamplingRules" || request.RequestUri?.AbsolutePath == "/SamplingTargets")
+            {
+                return false;
+            }
+
+            return true;
+        };
     }
 
     private bool IsApplicationSignalsEnabled()
@@ -179,12 +198,9 @@ public class Plugin
     {
         var options = new OtlpExporterOptions();
 
-        Logger.Log(
-          LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
-
         string? applicationSignalsEndpoint = System.Environment.GetEnvironmentVariable(ApplicationSignalsExporterEndpointConfig);
-        string? protocolString = System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
-        OtlpExportProtocol protocol = OtlpExportProtocol.HttpProtobuf;
+        string? protocolString = System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName) ?? "http/protobuf";
+        OtlpExportProtocol protocol;
         if (protocolString == "http/protobuf")
         {
             applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
@@ -197,11 +213,16 @@ public class Plugin
         }
         else
         {
-            throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + options.Protocol);
+            throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + protocolString);
         }
 
         options.Endpoint = new Uri(applicationSignalsEndpoint);
         options.Protocol = protocol;
+
+        Logger.Log(
+          LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
+        Logger.Log(
+          LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
 
         return new OtlpMetricExporter(options);
     }

@@ -11,7 +11,6 @@ using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
-
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
@@ -24,6 +23,20 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 {
+    // This is currently not in latest version of the Opentelemetry.SemanticConventions library.
+    // although it's available here:
+    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.SemanticConventions/Attributes/ServiceAttributes.cs#L48C25-L48C45
+    // TODO: Open an issue to ask about this discrepancy and when will the latest version be released.
+    public static readonly string AttributeServiceName = "service.name";
+    public static readonly string AttributeServerAddress = "server.address";
+    public static readonly string AttributeServerPort = "server.port";
+
+    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/62b88fef65f770db7fe40fcd3f053fe743a64c83/src/Shared/SemanticConventions.cs#L108
+    public static readonly string AttributeServerSocketAddress = "server.socket.address";
+
+    // This is not mentioned in upstream but java have that part
+    public static readonly string AttributeServerSocketPort = "server.socket.port";
+
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
 
@@ -32,7 +45,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
-    private static readonly string DB_CONNECTION_RESOURCE_TYPE = "DB::Connection";
+    private static readonly string DbConnectionResourceType = "DB::Connection";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
@@ -40,20 +53,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
     // If service name is not specified, SDK defaults the service name starting with unknown_service
     private static readonly string OtelUnknownServicePrefix = "unknown_service";
-
-    // This is currently not in latest version of the Opentelemetry.SemanticConventions library.
-    // although it's available here:
-    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.SemanticConventions/Attributes/ServiceAttributes.cs#L48C25-L48C45
-    // TODO: Open an issue to ask about this discrepancy and when will the latest version be released.
-    public static readonly string AttributeServiceName = "service.name";
-    public static readonly string AttributeServerAddress = "server.address";
-    public static readonly string AttributeServerPort = "server.port";
-    
-    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/62b88fef65f770db7fe40fcd3f053fe743a64c83/src/Shared/SemanticConventions.cs#L108
-    public static readonly string AttributeServerSocketAddress = "server.socket.address";
-    
-    // This is not mentioned in upstream but java have that part
-    public static readonly string AttributeServerSocketPort = "server.socket.port";
 
     /// <inheritdoc/>
     public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
@@ -194,6 +193,13 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         {
             remoteService = NormalizeRemoteServiceName(span, GetRemoteService(span, AttributeRpcService));
             remoteOperation = GetRemoteOperation(span, AttributeRpcMethod);
+        }
+
+        // TODO workaround for AWS SDK span
+        else if (IsKeyPresent(span, AttributeAWSServiceName) || IsKeyPresent(span, AttributeAWSOperationName))
+        {
+            remoteService = NormalizeRemoteServiceName(span, GetRemoteService(span, AttributeAWSServiceName));
+            remoteOperation = GetRemoteOperation(span, AttributeAWSOperationName);
         }
         else if (IsKeyPresent(span, AttributeDbSystem)
             || IsKeyPresent(span, AttributeDbOperation)
@@ -375,7 +381,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
-        if (isAwsSDKSpan(span))
+        if (IsAwsSDKSpan(span))
         {
             if (IsKeyPresent(span, AttributeAWSDynamoTableName))
             {
@@ -402,12 +408,12 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
             }
-        } else if (isDBSpan(span))
-        {
-            remoteResourceType = DB_CONNECTION_RESOURCE_TYPE;
-            remoteResourceIdentifier = getDbConnection(span);
         }
-        
+        else if (IsDBSpan(span))
+        {
+            remoteResourceType = DbConnectionResourceType;
+            remoteResourceIdentifier = GetDbConnection(span);
+        }
 
         if (remoteResourceType != null && remoteResourceIdentifier != null)
         {
@@ -499,8 +505,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         string[] logParams = { attributeKey, span.Kind.GetType().Name, span.Context.SpanId.ToString() };
         Logger.Log(LogLevel.Trace, "No valid {0} value found for {1} span {2}", logParams);
     }
-    
-    private static string getDbConnection(Activity span)
+
+    private static string? GetDbConnection(Activity span)
     {
         var dbName = span.GetTagItem(AttributeDbName);
         string? dbConnection = null;
@@ -509,57 +515,78 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         {
             var serverAddress = span.GetTagItem(AttributeServerAddress);
             var serverPort = span.GetTagItem(AttributeServerPort);
-            dbConnection = buildDbConnection(serverAddress.ToString(), serverPort == null? null : (long)serverPort);
-        } else if (IsKeyPresent(span, AttributeNetPeerName))
+            dbConnection = BuildDbConnection(serverAddress?.ToString(), serverPort == null ? null : (long)serverPort);
+        }
+        else if (IsKeyPresent(span, AttributeNetPeerName))
         {
             var networkPeerAddress = span.GetTagItem(AttributeNetPeerName);
             var networkPeerPort = span.GetTagItem(AttributeNetPeerPort);
-            dbConnection = buildDbConnection(networkPeerAddress.ToString(), networkPeerPort == null? null : (long)networkPeerPort);
-        } else if (IsKeyPresent(span, AttributeServerSocketAddress)) {
+            dbConnection = BuildDbConnection(networkPeerAddress?.ToString(), networkPeerPort == null ? null : (long)networkPeerPort);
+        }
+        else if (IsKeyPresent(span, AttributeServerSocketAddress))
+        {
             var serverSocketAddress = span.GetTagItem(AttributeServerSocketAddress);
             var serverSocketPort = span.GetTagItem(AttributeServerSocketPort);
-            dbConnection = buildDbConnection(serverSocketAddress.ToString(), serverSocketPort == null? null: (long)serverSocketPort);
-        } else if (IsKeyPresent(span, AttributeDbConnectionString)) {
-            var connectionstring= span.GetTagItem(AttributeDbConnectionString);
-            dbConnection = buildDbConnection(connectionstring.ToString());
+            dbConnection = BuildDbConnection(serverSocketAddress?.ToString(), serverSocketPort == null ? null : (long)serverSocketPort);
+        }
+        else if (IsKeyPresent(span, AttributeDbConnectionString))
+        {
+            var connectionString = span.GetTagItem(AttributeDbConnectionString);
+            dbConnection = BuildDbConnection(connectionString?.ToString());
         }
 
         // return empty resource identifier if db server is not found
-        if (dbConnection != null && dbName != null) {
+        if (dbConnection != null && dbName != null)
+        {
             return EscapeDelimiters(dbName.ToString()) + "|" + dbConnection;
         }
+
         return dbConnection;
     }
-    
-    private static string buildDbConnection(string? address, long? port) {
-        return EscapeDelimiters(address) + (port != null ? "|" + port : "");
+
+    private static string BuildDbConnection(string? address, long? port)
+    {
+        return EscapeDelimiters(address) + (port != null ? "|" + port : string.Empty);
     }
-    
-    private static string buildDbConnection(string connectionString) {
-        Uri uri;
-        String address;
-        int port;
-        try {
-            uri = new Uri(connectionString);
-            address = uri.Host;
-            port = uri.Port;
-        } catch (UriFormatException e) {
+
+    private static string? BuildDbConnection(string? connectionString)
+    {
+        if (connectionString == null)
+        {
             Console.WriteLine("Invalid DB Connection String");
             return null;
         }
-        
+
+        Uri uri;
+        string address;
+        int port;
+        try
+        {
+            uri = new Uri(connectionString);
+            address = uri.Host;
+            port = uri.Port;
+        }
+        catch (UriFormatException)
+        {
+            Console.WriteLine("Invalid DB Connection String");
+            return null;
+        }
+
         if (string.IsNullOrEmpty(address))
         {
             return null;
         }
 
-        return EscapeDelimiters(address) + (port != -1 ? "|" + port.ToString() : "");
+        return EscapeDelimiters(address) + (port != -1 ? "|" + port.ToString() : string.Empty);
     }
-    
-    private static string EscapeDelimiters(string input) {
-        if (input == null) {
+
+    private static string? EscapeDelimiters(string? input)
+    {
+        if (input == null)
+        {
             return null;
         }
+
         return input.Replace("^", "^^").Replace("|", "^|");
     }
 }

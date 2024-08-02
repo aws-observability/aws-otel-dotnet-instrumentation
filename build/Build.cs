@@ -155,6 +155,11 @@ internal partial class Build : NukeBuild
                 "net8.0" / "OpenTelemetry.Sampler.AWS.dll",
                 this.openTelemetryDistributionFolder / "net");
 
+            FileSystemTasks.CopyFileToDirectory(
+                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                "net8.0" / "AWSSDK.Core.dll",
+                this.openTelemetryDistributionFolder / "net");
+
             if (EnvironmentInfo.IsWin)
             {
                 FileSystemTasks.CopyDirectoryRecursively(
@@ -208,7 +213,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .Executes(() =>
         {
             var fileName = GetOTelAutoInstrumentationFileName();
-            this.openTelemetryDistributionFolder.ZipTo(RootDirectory / "bin" / ("AWS-" + fileName), compressionLevel: CompressionLevel.SmallestSize, fileMode: FileMode.Create);
+            this.openTelemetryDistributionFolder.ZipTo(RootDirectory / "bin" / ("aws-distro-" + fileName), compressionLevel: CompressionLevel.SmallestSize, fileMode: FileMode.Create);
         });
 
     private Target Compile => _ => _
