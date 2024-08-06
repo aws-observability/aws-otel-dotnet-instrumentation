@@ -42,7 +42,7 @@ jobs:
         with:
           repository: aws-observability/aws-application-signals-test-framework
 #          ref: ${{ inputs.caller-workflow-name == 'main-build' && 'main' || github.ref }}
-          ref: 'dotnetE2ETests'
+          ref: 'dotnetMergeBranch'
           fetch-depth: 0
 
       - name: Initiate Gradlew Daemon
