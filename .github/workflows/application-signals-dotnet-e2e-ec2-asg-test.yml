@@ -147,9 +147,9 @@ jobs:
           done
 
       - name: Get the sample app and EC2 instance information
-        working-directory: terraform/python/ec2/asg
+        working-directory: terraform/dotnet/ec2/asg
         run: |
-          main_service_instance_id=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names python-ec2-single-asg-${{ env.TESTING_ID }} --region ${{ env.E2E_TEST_AWS_REGION }} --query "AutoScalingGroups[].Instances[0].InstanceId" --output text)
+          main_service_instance_id=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names dotnet-ec2-single-asg-${{ env.TESTING_ID }} --region ${{ env.E2E_TEST_AWS_REGION }} --query "AutoScalingGroups[].Instances[0].InstanceId" --output text)
           main_service_private_dns_name=$(aws ec2 describe-instances --instance-ids $main_service_instance_id --region ${{ env.E2E_TEST_AWS_REGION }} --query "Reservations[].Instances[].PrivateDnsName" --output text)
           echo "INSTANCE_ID=$main_service_instance_id" >> $GITHUB_ENV
           echo "MAIN_SERVICE_ENDPOINT=localhost:8000" >> $GITHUB_ENV
