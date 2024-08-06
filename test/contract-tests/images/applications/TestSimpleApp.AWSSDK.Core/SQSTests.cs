@@ -37,6 +37,6 @@ public class SQSTests(
 
     protected override Task CreateError(CancellationToken cancellationToken)
     {
-        return errorSqs.CreateQueueAsync(new CreateQueueRequest { QueueName = "test_queue" }, cancellationToken);
+        return errorSqs.DeleteQueueAsync(new DeleteQueueRequest { QueueUrl = "http://sqs.us-east-1.localstack:4566/000000000000/test_queue_error" });
     }
 }

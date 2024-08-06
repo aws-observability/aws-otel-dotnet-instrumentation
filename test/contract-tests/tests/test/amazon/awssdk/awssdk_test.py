@@ -147,13 +147,13 @@ class AWSSdkTest(ContractTestBase):
             1,
             0,
             remote_service="AWS::S3",
-            remote_operation="PutBucket",
+            remote_operation="DeleteBucket",
             remote_resource_type="AWS::S3::Bucket",
-            remote_resource_identifier="-",
+            remote_resource_identifier="test-bucket-error",
             request_specific_attributes={
-                SpanAttributes.AWS_S3_BUCKET: "-",
+                SpanAttributes.AWS_S3_BUCKET: "test-bucket-error",
             },
-            span_name="S3.PutBucket",
+            span_name="S3.DeleteBucket",
         )
 
     def test_s3_fault(self):
@@ -217,13 +217,13 @@ class AWSSdkTest(ContractTestBase):
             1,
             0,
             remote_service="AWS::DynamoDB",
-            remote_operation="CreateTable",
+            remote_operation="DeleteTable",
             remote_resource_type="AWS::DynamoDB::Table",
-            remote_resource_identifier="test_table",
+            remote_resource_identifier="test_table_error",
             request_specific_attributes={
-                SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
+                SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table_error"],
             },
-            span_name="DynamoDB.CreateTable",
+            span_name="DynamoDB.DeleteTable",
         )
 
     def test_dynamodb_fault(self):
@@ -302,13 +302,13 @@ class AWSSdkTest(ContractTestBase):
             1,
             0,
             remote_service="AWS::SQS",
-            remote_operation="CreateQueue",
+            remote_operation="DeleteQueue",
             remote_resource_type="AWS::SQS::Queue",
-            remote_resource_identifier="sqserror",
+            remote_resource_identifier="test_queue_error",
             request_specific_attributes={
-                _AWS_SQS_QUEUE_URL: "http://error.test:8080/000000000000/sqserror",
+                _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue_error",
             },
-            span_name="SQS.CreateQueue",
+            span_name="SQS.DeleteQueue",
         )
 
     def test_sqs_fault(self):
@@ -367,8 +367,8 @@ class AWSSdkTest(ContractTestBase):
             "kinesis/error",
             "GET",
             400,
-            0,
             1,
+            0,
             remote_service="AWS::Kinesis",
             remote_operation="DeleteStream",
             remote_resource_type="AWS::Kinesis::Stream",
@@ -488,41 +488,61 @@ class AWSSdkTest(ContractTestBase):
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
 
-        self.assertEqual(len(target_metrics), 1)
-        target_metric: Metric = target_metrics[0]
-        print(target_metric)
-        if len(target_metrics) > 1:
-            print(target_metrics[1])
-        dp_list: List[ExponentialHistogramDataPoint] = target_metric.exponential_histogram.data_points
-        dp_list_count: int = kwargs.get("dp_count", 1)
-        self.assertEqual(len(dp_list), dp_list_count)
-        dependency_dp: ExponentialHistogramDataPoint = dp_list[0]
-        service_dp: ExponentialHistogramDataPoint = dp_list[1]
-        if len(dp_list[1].attributes) > len(dp_list[0].attributes):
-            dependency_dp = dp_list[1]
-            service_dp = dp_list[0]
-        attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(dependency_dp.attributes)
+        if (len(target_metrics) == 2):
+            dependency_target_metric: Metric = target_metrics[0]
+            service_target_metric: Metric = target_metrics[1]
+            # Test dependency metric
+            dep_dp_list: List[ExponentialHistogramDataPoint] = dependency_target_metric.exponential_histogram.data_points
+            dep_dp_list_count: int = kwargs.get("dp_count", 1)
+            self.assertEqual(len(dep_dp_list), dep_dp_list_count)
+            dependency_dp: ExponentialHistogramDataPoint = dep_dp_list[0]
+            service_dp_list = service_target_metric.exponential_histogram.data_points
+            service_dp_list_count = kwargs.get("dp_count", 1)
+            self.assertEqual(len(service_dp_list), service_dp_list_count)
+            service_dp: ExponentialHistogramDataPoint = service_dp_list[0]
+            if len(service_dp_list[0].attributes) > len(dep_dp_list[0].attributes):
+                dependency_dp = service_dp_list[0]
+                service_dp = dep_dp_list[0]
+            self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
+            self._assert_service_dp_attributes(service_dp, expected_sum, metric_name)
+        elif (len(target_metrics) == 1):
+            target_metric: Metric = target_metrics[0]
+            dp_list: List[ExponentialHistogramDataPoint] = target_metric.exponential_histogram.data_points
+            dp_list_count: int = kwargs.get("dp_count", 2)
+            self.assertEqual(len(dp_list), dp_list_count)
+            dependency_dp: ExponentialHistogramDataPoint = dp_list[0]
+            service_dp: ExponentialHistogramDataPoint = dp_list[1]
+            if len(dp_list[1].attributes) > len(dp_list[0].attributes):
+                dependency_dp = dp_list[1]
+                service_dp = dp_list[0]
+            self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
+            self._assert_service_dp_attributes(service_dp, expected_sum, metric_name)
+        else:
+            raise AssertionError("Target metrics count is incorrect")
+    
+    def _assert_dependency_dp_attributes(self, dependency_dp: ExponentialHistogramDataPoint, expected_sum: int, metric_name: str, **kwargs):
+        attribute_dict = self._get_attributes_dict(dependency_dp.attributes)
         self._assert_str_attribute(attribute_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
         self._assert_str_attribute(attribute_dict, AWS_REMOTE_SERVICE, kwargs.get("remote_service"))
         self._assert_str_attribute(attribute_dict, AWS_REMOTE_OPERATION, kwargs.get("remote_operation"))
         self._assert_str_attribute(attribute_dict, AWS_SPAN_KIND, "CLIENT")
+        
         remote_resource_type = kwargs.get("remote_resource_type", "None")
         remote_resource_identifier = kwargs.get("remote_resource_identifier", "None")
         if remote_resource_type != "None":
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_TYPE, remote_resource_type)
         if remote_resource_identifier != "None":
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_IDENTIFIER, remote_resource_identifier)
+        
         self.check_sum(metric_name, dependency_dp.sum, expected_sum)
 
-        attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(service_dp.attributes)
-        # See comment on AWS_LOCAL_OPERATION in _assert_aws_attributes
+    def _assert_service_dp_attributes(self, service_dp: ExponentialHistogramDataPoint, expected_sum: int, metric_name: str):
+        attribute_dict = self._get_attributes_dict(service_dp.attributes)
         self._assert_str_attribute(attribute_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
         self._assert_str_attribute(attribute_dict, AWS_SPAN_KIND, "LOCAL_ROOT")
         self.check_sum(metric_name, service_dp.sum, expected_sum)
 
     # pylint: disable=consider-using-enumerate
     def _assert_array_value_ddb_table_name(self, attributes_dict: Dict[str, AnyValue], key: str, expect_values: list):
-        print(attributes_dict)
-        print(expect_values)
         self.assertIn(key, attributes_dict)
         self.assertEqual(attributes_dict[key].string_value, expect_values[0])

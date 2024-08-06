@@ -36,6 +36,6 @@ public class S3Tests(
 
     protected override Task CreateError(CancellationToken cancellationToken)
     {
-        return errorClient.PutBucketAsync(new PutBucketRequest { BucketName = "valid-bucket-name" }, cancellationToken);
+        return errorClient.DeleteBucketAsync(new DeleteBucketRequest { BucketName = "test-bucket-error" });
     }
 }

@@ -48,11 +48,6 @@ public class DynamoDBTests(
 
     protected override Task CreateError(CancellationToken cancellationToken)
     {
-        return errorDdb.CreateTableAsync(new CreateTableRequest
-        {
-            TableName = "test_table", AttributeDefinitions = [new AttributeDefinition { AttributeName = "Id", AttributeType = ScalarAttributeType.S }],
-            KeySchema = [new KeySchemaElement { AttributeName = "Id", KeyType = KeyType.HASH }],
-            BillingMode = BillingMode.PAY_PER_REQUEST
-        }, cancellationToken);
+        return errorDdb.DeleteTableAsync(new DeleteTableRequest { TableName = "test_table_error" });
     }
 }
