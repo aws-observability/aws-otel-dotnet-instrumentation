@@ -152,7 +152,7 @@ jobs:
           main_service_instance_id=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names dotnet-ec2-single-asg-${{ env.TESTING_ID }} --region ${{ env.E2E_TEST_AWS_REGION }} --query "AutoScalingGroups[].Instances[0].InstanceId" --output text)
           main_service_private_dns_name=$(aws ec2 describe-instances --instance-ids $main_service_instance_id --region ${{ env.E2E_TEST_AWS_REGION }} --query "Reservations[].Instances[].PrivateDnsName" --output text)
           echo "INSTANCE_ID=$main_service_instance_id" >> $GITHUB_ENV
-          echo "MAIN_SERVICE_ENDPOINT=localhost:8000" >> $GITHUB_ENV
+          echo "MAIN_SERVICE_ENDPOINT=localhost:8080" >> $GITHUB_ENV
           echo "PRIVATE_DNS_NAME=$main_service_private_dns_name" >> $GITHUB_ENV
           echo "EC2_INSTANCE_AMI=$(terraform output ec2_instance_ami)" >> $GITHUB_ENV
           echo "REMOTE_SERVICE_IP=$(terraform output sample_app_remote_service_private_ip)" >> $GITHUB_ENV
