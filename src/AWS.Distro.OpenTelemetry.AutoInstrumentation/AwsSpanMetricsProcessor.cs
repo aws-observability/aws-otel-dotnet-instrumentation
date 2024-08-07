@@ -97,7 +97,8 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private void RecordErrorOrFault(Activity span, ActivityTagsCollection attributes)
     {
         KeyValuePair<string, object?>[] attributesArray = attributes.ToArray();
-        object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode);
+        // object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode);
+        object? httpStatusCode = span.GetTagItem(AttributeHttpResponseStatusCode) ?? span.GetTagItem("http.status_code");
         ActivityStatusCode statusCode = span.Status;
 
         if (httpStatusCode == null)

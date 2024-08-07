@@ -1,0 +1,242 @@
+name: Release Build
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to tag the release with, e.g., 1.2.0
+        required: true
+
+env:
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_PUBLIC_ECR_REGION: us-east-1
+  AWS_PRIVATE_ECR_REGION: us-west-2
+  RELEASE_PUBLIC_REPOSITORY: public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet
+  RELEASE_PRIVATE_REPOSITORY: 020628701572.dkr.ecr.us-west-2.amazonaws.com/adot-autoinstrumentation-dotnet
+  RELEASE_PRIVATE_REGISTRY: 020628701572.dkr.ecr.us-west-2.amazonaws.com
+  RELEASE_PRIVATE_S3: s3://adot-autoinstrumentation-dotnet-staging
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build-and-upload:
+    strategy:
+      fail-fast: false
+      matrix:
+        aws-region: [ 'us-east-1' ]
+    uses: ./.github/workflows/main_build.yml
+    secrets: inherit
+    with:
+      caller-workflow-name: 'release_build_workflow'
+
+  release:
+    needs: [build-and-upload]
+    environment: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
+        uses: actions/checkout@v4
+
+      - name: Download Linux x64 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          path: ./artifacts/windows
+
+      - name: Download Linux X64 MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: ./artifacts/linux/x64-musl
+
+      - name: Configure AWS credentials for Private S3 Bucket
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Upload to Private S3 Bucket
+        run: |
+          PREFIX="Release_v${{github.event.inputs.version}}"
+
+          find ./artifacts/ -name "*.zip" | while read file; do
+          base=$(basename "$file")
+          aws s3 cp "$file" "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/$base"
+          done
+
+      # Publish to GitHub releases
+      - name: Create GH release
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        run: |
+          gh release create --target "$GITHUB_REF_NAME" \
+             --title "Release v${{ github.event.inputs.version }}" \
+             "v${{ github.event.inputs.version }}" \
+              --notes "Release Verions v${{ github.event.inputs.version }}"
+
+      - name: Upload artifacts to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREFIX="Release_v${{github.event.inputs.version}}_"
+
+          find ./artifacts/ -name "*.zip" | while read file; do
+          base=$(basename "$file")
+          cp "$file" "$base"
+          gh release upload "v${{ github.event.inputs.version }}" \
+            $base \
+            --clobber
+          done
+
+  release-image:
+    needs: [release]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        include:
+          - os: windows-2022
+          - os: windows-2019
+          - os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Linux x64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+
+      - name: Download Linux X64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          path: ./artifacts/linux/x64-musl
+
+      - name: Unzip Linux Artifact
+        if: runner.os == 'Linux'
+        run: |
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+          unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+
+      - name: Download Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          path: ./artifacts/windows
+
+      - name: Unzip Windows Artifact
+        if: runner.os == 'Windows'
+        run: |
+          Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
+        shell: powershell
+
+
+      - name: Configure AWS credentials for public ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
+
+      # https://github.com/docker/docker-credential-helpers/issues/190
+      - name: Fix Public ECR login issue on GitHub Windows Runner
+        if: runner.os == 'Windows'
+        run: |
+          echo '{"auths": {"https://index.docker.io/v1/": {}}, "HttpHeaders": { "User-Agent": "Docker-Client/19.03.12 (windows)"}}' | out-file -encoding ASCII ~/.docker/config.json
+        shell: powershell
+
+      - name: Login to Amazon public ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Linux container
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+
+      - name: Build Windows container
+        if: runner.os == 'Windows'
+        run: |
+          $osInfo = systeminfo | Select-String "OS Version"
+          if ($osInfo -match "10.0.17763") {
+            Echo "Build image for Windows Server 2019"
+            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 -f ./Dockerfile.windows2019 .
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+          } elseif ($osInfo -match "10.0.20348") {
+            Echo "Build image for Windows Server 2022"
+            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          } else {
+              Echo "Unknown Windows Server version: $osInfo"
+              exit 1
+          }
+        shell: powershell
+
+  release-multi-platform-image:
+    needs: [release-image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+      - name: Log in to AWS private ECR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.RELEASE_PRIVATE_REGISTRY }}
+
+      - name: Configure AWS credentials for public ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
+
+      - name: Log in to AWS public ECR
+        uses: docker/login-action@v3
+        with:
+          registry: public.ecr.aws
+
+      - name: Create multi-platform image and push to Amazon private ECR
+        run: |
+          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+
+      - name: Create multi-platform image and push to Amazon public ECR
+        run: |
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
