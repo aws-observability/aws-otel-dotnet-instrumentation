@@ -839,6 +839,36 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeAWSDynamoTableName, "aws_table_name" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeGenAiModelId, "gen_ai_model_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockAgentId, "aws_agent_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockDataSourceId, "aws_data_source_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id");
     }
 
     private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)
@@ -878,6 +908,12 @@ public class AwsMetricAttributesGeneratorTest
     [Fact]
     public void TestNormalizeRemoteServiceName_AwsSdk()
     {
+        // AWS SDK V3
+        this.TestAwsSdkServiceNormalization("Bedrock Runtime", "AWS::BedrockRuntime");
+        this.TestAwsSdkServiceNormalization("Bedrock", "AWS::Bedrock");
+        this.TestAwsSdkServiceNormalization("Bedrock Agent", "AWS::Bedrock");
+        this.TestAwsSdkServiceNormalization("Bedrock Agent Runtime", "AWS::Bedrock");
+
         // AWS SDK V2
         this.TestAwsSdkServiceNormalization("AmazonDynamoDBv2", "AWS::DynamoDB");
         this.TestAwsSdkServiceNormalization("AmazonKinesis", "AWS::Kinesis");

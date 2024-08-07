@@ -23,6 +23,25 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 {
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
+
+    // Normalized remote service names for supported AWS services
+    private static readonly string NormalizedDynamoDBServiceName = "AWS::DynamoDB";
+    private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
+    private static readonly string NormalizedS3ServiceName = "AWS::S3";
+    private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
+    private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
+    private static readonly string DB_CONNECTION_RESOURCE_TYPE = "DB::Connection";
+
+    // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
+    private static readonly string GraphQL = "graphql";
+
+    // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
+    // If service name is not specified, SDK defaults the service name starting with unknown_service
+    private static readonly string OtelUnknownServicePrefix = "unknown_service";
+
     // This is currently not in latest version of the Opentelemetry.SemanticConventions library.
     // although it's available here:
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.SemanticConventions/Attributes/ServiceAttributes.cs#L48C25-L48C45
@@ -366,6 +385,12 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
+                case "Bedrock":
+                case "Bedrock Agent":
+                case "Bedrock Agent Runtime":
+                    return NormalizedBedrockServiceName;
+                case "Bedrock Runtime":
+                    return NormalizedBedrockRuntimeServiceName;
                 default:
                     return "AWS::" + serviceName;
             }
@@ -408,8 +433,32 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
             }
-        }
-        else if (IsDBSpan(span))
+            else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Guardrail";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockGuardrailId);
+            }
+            else if (IsKeyPresent(span, AttributeGenAiModelId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Model";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeGenAiModelId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockAgentId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Agent";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockAgentId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockDataSourceId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockDataSourceId);
+            }
+        } else if (isDBSpan(span))
         {
             remoteResourceType = DbConnectionResourceType;
             remoteResourceIdentifier = GetDbConnection(span);
