@@ -367,6 +367,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
                 case "Bedrock":
+                case "Bedrock Agent":
+                case "Bedrock Agent Runtime":
                     return NormalizedBedrockServiceName;
                 case "Bedrock Runtime":
                     return NormalizedBedrockRuntimeServiceName;
@@ -421,6 +423,21 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::Model";
                 remoteResourceIdentifier = (string?)span.GetTagItem(AttributeGenAiModelId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockAgentId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::Agent";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockAgentId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId);
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockDataSourceId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
+                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockDataSourceId);
             }
         } else if (IsDBSpan(span))
         {
