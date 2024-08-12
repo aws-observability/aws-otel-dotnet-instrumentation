@@ -124,7 +124,7 @@ internal sealed class AwsSpanProcessingUtil
             return "/";
         }
 
-        string[] paths = httpTarget.Split("/");
+        string[] paths = httpTarget.Split('/');
         if (paths.Length > 1)
         {
             return "/" + paths[1];

@@ -91,10 +91,11 @@ public class SamplerUtil
         double pollingInterval = DefaultRulesPollingIntervalSeconds;
         if (tracesSamplerArg != null)
         {
-            var args = tracesSamplerArg.Split(",");
+            var args = tracesSamplerArg.Split(',');
             foreach (string arg in args)
             {
-                var keyValue = arg.Split("=", 2);
+                char[] charSeparators = new char[] { '=' };
+                var keyValue = arg.Split(charSeparators, 2);
                 if (keyValue.Length != 2)
                 {
                     continue;
