@@ -45,6 +45,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
+    private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DbConnectionResourceType = "DB::Connection";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.

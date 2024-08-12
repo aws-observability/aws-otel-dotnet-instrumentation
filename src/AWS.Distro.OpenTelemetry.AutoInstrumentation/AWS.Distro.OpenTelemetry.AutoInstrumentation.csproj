@@ -42,7 +42,7 @@
 
   <!-- TODO: Once upstream release is done, move the dependency to use upstream version -->
   <ItemGroup>
-    <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" />
+    <!-- <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" /> -->
   </ItemGroup>
 
 </Project>
