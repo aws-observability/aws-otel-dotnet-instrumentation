@@ -20,6 +20,7 @@ rm -rf dist/contract_tests*
 # Install python dependency for contract-test
 pip3 install pymysql
 pip3 install cryptography
+pip3 install build pytest
 
 # To be clear, install binary for psycopg2 have no negative influence on otel here
 # since Otel-Instrumentation running in container that install psycopg2 from source

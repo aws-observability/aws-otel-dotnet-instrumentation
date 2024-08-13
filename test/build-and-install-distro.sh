@@ -16,5 +16,6 @@ check_if_step_failed_and_exit "There was an error building AWS Otel DotNet, exit
 
 cd test
 rm -rf ./OpenTelemetryDistribution
+mkdir -p ./dist
 cp -r ../OpenTelemetryDistribution ./dist
 check_if_step_failed_and_exit "There was an error moving OpenTelemetryDistribution to the sample app , exiting"
