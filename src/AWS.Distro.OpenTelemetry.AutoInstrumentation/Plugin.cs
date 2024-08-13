@@ -198,6 +198,9 @@ public class Plugin
             return ResourceBuilder.CreateDefault();
         }
 
+        // The current version of the AWS Resource Detectors doesn't build the EKS and ECS resource detectors
+        // for NETFRAMEWORK. More details are found here: https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/1177#discussion_r1193329666
+        // We need to work with upstream to support these detectors for windows.
         var builder = ResourceBuilder.CreateDefault()
             .AddDetector(new AWSEC2ResourceDetector());
 #if !NETFRAMEWORK
