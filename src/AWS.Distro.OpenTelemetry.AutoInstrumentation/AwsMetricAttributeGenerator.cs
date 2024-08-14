@@ -406,9 +406,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
-                remoteResourceIdentifier = EscapeDelimiters(
-                    GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl))
-                );
+                remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
             }
         }
         else if (IsDBSpan(span))
