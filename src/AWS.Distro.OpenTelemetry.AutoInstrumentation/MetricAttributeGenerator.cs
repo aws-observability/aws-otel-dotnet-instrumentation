@@ -14,9 +14,6 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public interface IMetricAttributeGenerator
 {
-    const string ServiceMetric = "Service";
-    const string DependencyMetric = "Dependency";
-
     /// <summary>
     /// Given a span and associated resource, produce meaningful metric attributes for metrics produced
     /// from the span. If no metrics should be generated from this span, return empty attributes map.

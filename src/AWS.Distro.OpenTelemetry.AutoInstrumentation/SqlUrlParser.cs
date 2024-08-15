@@ -30,7 +30,7 @@ public class SqsUrlParser
         }
 
         url = url.Replace(HttpSchema, string.Empty).Replace(HttpsSchema, string.Empty);
-        string[] splitUrl = url.Split("/");
+        string[] splitUrl = url.Split('/');
         if (splitUrl.Length == 3 && IsAccountId(splitUrl[1]) && IsValidQueueName(splitUrl[2]))
         {
             return splitUrl[2];

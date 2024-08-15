@@ -60,12 +60,12 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         Dictionary<string, ActivityTagsCollection> attributesMap = new Dictionary<string, ActivityTagsCollection>();
         if (ShouldGenerateServiceMetricAttributes(span))
         {
-            attributesMap.Add(IMetricAttributeGenerator.ServiceMetric, this.GenerateServiceMetricAttributes(span, resource));
+            attributesMap.Add(MetricAttributeGeneratorConstants.ServiceMetric, this.GenerateServiceMetricAttributes(span, resource));
         }
 
         if (ShouldGenerateDependencyMetricAttributes(span))
         {
-            attributesMap.Add(IMetricAttributeGenerator.DependencyMetric, this.GenerateDependencyMetricAttributes(span, resource));
+            attributesMap.Add(MetricAttributeGeneratorConstants.DependencyMetric, this.GenerateDependencyMetricAttributes(span, resource));
         }
 
         return attributesMap;

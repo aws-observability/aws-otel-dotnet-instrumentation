@@ -62,7 +62,7 @@ public class AwsMetricAttributesSpanProcessorTest
     {
         this.BuildSpanAttributes(false);
         Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.MetricAttributesHelper());
-        ActivityTagsCollection expectMetricAttributes = expectAttributes[IMetricAttributeGenerator.ServiceMetric];
+        ActivityTagsCollection expectMetricAttributes = expectAttributes[MetricAttributeGeneratorConstants.ServiceMetric];
 
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.span, Resource.Empty))
             .Returns(expectAttributes);
@@ -245,12 +245,12 @@ public class AwsMetricAttributesSpanProcessorTest
         Dictionary<string, ActivityTagsCollection> dict = new Dictionary<string, ActivityTagsCollection>();
         if (AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(span))
         {
-            dict[IMetricAttributeGenerator.DependencyMetric] = containsAttribute ? tagsCollection : new ActivityTagsCollection();
+            dict[MetricAttributeGeneratorConstants.DependencyMetric] = containsAttribute ? tagsCollection : new ActivityTagsCollection();
         }
 
         if (AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(span))
         {
-            dict[IMetricAttributeGenerator.ServiceMetric] = containsAttribute ? tagsCollection : new ActivityTagsCollection();
+            dict[MetricAttributeGeneratorConstants.ServiceMetric] = containsAttribute ? tagsCollection : new ActivityTagsCollection();
         }
 
         return dict;

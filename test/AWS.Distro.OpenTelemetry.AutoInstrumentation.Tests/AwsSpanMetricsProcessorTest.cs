@@ -62,13 +62,13 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         this.meter.Tags.AddItem(new KeyValuePair<string, object?>("test", "test"));
         meterListener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
                 {
-                    var list = GlobalCallbackData.CallList is null ?[] : GlobalCallbackData.CallList;
+                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
                     list.Add(new KeyValuePair<string, object>(instrument.Name, new KeyValuePair<long, object>(measurement, tags[0])));
                     GlobalCallbackData.CallList = list;
                 });
         meterListener.SetMeasurementEventCallback<double>((instrument, measurement, tags, state) =>
                 {
-                    var list = GlobalCallbackData.CallList is null ?[] : GlobalCallbackData.CallList;
+                    var list = GlobalCallbackData.CallList is null ? [] : GlobalCallbackData.CallList;
                     list.Add(new KeyValuePair<string, object>(instrument.Name, new KeyValuePair<double, object>(measurement, tags[0])));
                     GlobalCallbackData.CallList = list;
                 });
@@ -225,11 +225,11 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
         this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
-        var serviceMetrics = expectAttributes[IMetricAttributeGenerator.ServiceMetric];
+        var serviceMetrics = expectAttributes[MetricAttributeGeneratorConstants.ServiceMetric];
         var serviceKVP = new KeyValuePair<string, object>(
             serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService =[];
+        List<KeyValuePair<string, object?>> expectedService = [];
         expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
         expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(1, serviceKVP)));
         expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, serviceKVP)));
@@ -247,11 +247,11 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource))
             .Returns(expectAttributes);
         this.awsSpanMetricsProcessor.OnEnd(this.spanDataMock);
-        var serviceMetrics = expectAttributes[IMetricAttributeGenerator.ServiceMetric];
+        var serviceMetrics = expectAttributes[MetricAttributeGeneratorConstants.ServiceMetric];
         var serviceKVP = new KeyValuePair<string, object>(
             serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService =[];
+        List<KeyValuePair<string, object?>> expectedService = [];
         expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
         expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
         expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(5.5, serviceKVP)));
@@ -330,14 +330,14 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildMetricAttributes(true, this.spanDataMock);
         if (awsStatusCode != null)
         {
-            expectAttributes[IMetricAttributeGenerator.ServiceMetric]["new service key"] = "new service value";
+            expectAttributes[MetricAttributeGeneratorConstants.ServiceMetric]["new service key"] = "new service value";
 
-            expectAttributes[IMetricAttributeGenerator.ServiceMetric]
+            expectAttributes[MetricAttributeGeneratorConstants.ServiceMetric]
                 .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
 
-            expectAttributes[IMetricAttributeGenerator.DependencyMetric]["new dependency key"] = "new dependency value";
+            expectAttributes[MetricAttributeGeneratorConstants.DependencyMetric]["new dependency key"] = "new dependency value";
 
-            expectAttributes[IMetricAttributeGenerator.DependencyMetric]
+            expectAttributes[MetricAttributeGeneratorConstants.DependencyMetric]
                 .Add(new KeyValuePair<string, object?>(AttributeHttpResponseStatusCode, awsStatusCode));
         }
 
@@ -398,16 +398,16 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         ExpectedStatusMetric expectedStatusMetric)
     {
         var expectedList = new List<KeyValuePair<string, object?>>();
-        var serviceMetrics = metricAttributesMap[IMetricAttributeGenerator.ServiceMetric];
+        var serviceMetrics = metricAttributesMap[MetricAttributeGeneratorConstants.ServiceMetric];
         var serviceKVP = new KeyValuePair<string, object>(
             serviceMetrics.Keys.FirstOrDefault(),
             serviceMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedService =[];
-        var dependencyMetrics = metricAttributesMap[IMetricAttributeGenerator.DependencyMetric];
+        List<KeyValuePair<string, object?>> expectedService = [];
+        var dependencyMetrics = metricAttributesMap[MetricAttributeGeneratorConstants.DependencyMetric];
         var dependencyKVP = new KeyValuePair<string, object>(
             dependencyMetrics.Keys.FirstOrDefault(),
             dependencyMetrics.Values.FirstOrDefault());
-        List<KeyValuePair<string, object?>> expectedDependency =[];
+        List<KeyValuePair<string, object?>> expectedDependency = [];
 
         switch (expectedStatusMetric)
         {
@@ -460,11 +460,11 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         var expectedList = new List<KeyValuePair<string, object?>>();
         if (wantedServiceMetricInvocation > 0)
         {
-            var serviceMetrics = metricAttributesMap[IMetricAttributeGenerator.ServiceMetric];
+            var serviceMetrics = metricAttributesMap[MetricAttributeGeneratorConstants.ServiceMetric];
             var serviceKVP = new KeyValuePair<string, object>(
                 serviceMetrics.Keys.FirstOrDefault(),
                 serviceMetrics.Values.FirstOrDefault());
-            List<KeyValuePair<string, object?>> expectedService =[];
+            List<KeyValuePair<string, object?>> expectedService = [];
             expectedService.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, serviceKVP)));
             expectedService.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, serviceKVP)));
             expectedService.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, serviceKVP)));
@@ -474,11 +474,11 @@ public class AwsSpanMetricsProcessorTest : IDisposable
 
         if (wantedDependencyMetricInvocation > 0)
         {
-            var dependencyMetrics = metricAttributesMap[IMetricAttributeGenerator.DependencyMetric];
+            var dependencyMetrics = metricAttributesMap[MetricAttributeGeneratorConstants.DependencyMetric];
             var dependencyKVP = new KeyValuePair<string, object>(
                 dependencyMetrics.Keys.FirstOrDefault(),
                 dependencyMetrics.Values.FirstOrDefault());
-            List<KeyValuePair<string, object?>> expectedDependency =[];
+            List<KeyValuePair<string, object?>> expectedDependency = [];
             expectedDependency.Add(new KeyValuePair<string, object>("error", new KeyValuePair<long, object>(0, dependencyKVP)));
             expectedDependency.Add(new KeyValuePair<string, object>("fault", new KeyValuePair<long, object>(0, dependencyKVP)));
             expectedDependency.Add(new KeyValuePair<string, object>("latency", new KeyValuePair<double, object>(this.testLatencyMillis, dependencyKVP)));
@@ -508,12 +508,12 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         {
             if (AwsSpanProcessingUtil.ShouldGenerateDependencyMetricAttributes(span))
             {
-                attributes.Add(IMetricAttributeGenerator.DependencyMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new dependency key", "new dependency value")]));
+                attributes.Add(MetricAttributeGeneratorConstants.DependencyMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new dependency key", "new dependency value")]));
             }
 
             if (AwsSpanProcessingUtil.ShouldGenerateServiceMetricAttributes(span))
             {
-                attributes.Add(IMetricAttributeGenerator.ServiceMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new service key", "new service value")]));
+                attributes.Add(MetricAttributeGeneratorConstants.ServiceMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>("new service key", "new service value")]));
             }
         }
 

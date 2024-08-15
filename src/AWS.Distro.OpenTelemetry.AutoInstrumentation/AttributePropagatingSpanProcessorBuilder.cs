@@ -19,7 +19,7 @@ public class AttributePropagatingSpanProcessorBuilder
     private Func<Activity, string> propagationDataExtractor = GetIngressOperation;
     private string propagationDataKey = AttributeAWSLocalOperation;
     private ReadOnlyCollection<string> attributesKeysToPropagate =
-        new ReadOnlyCollection<string>([AttributeAWSRemoteService, AttributeAWSRemoteOperation]);
+        new ReadOnlyCollection<string>(new List<string> { AttributeAWSRemoteService, AttributeAWSRemoteOperation });
 
     private AttributePropagatingSpanProcessorBuilder()
     {
