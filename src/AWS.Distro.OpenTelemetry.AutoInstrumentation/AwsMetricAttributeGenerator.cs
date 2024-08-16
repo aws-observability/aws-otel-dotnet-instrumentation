@@ -386,27 +386,27 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             if (IsKeyPresent(span, AttributeAWSDynamoTableName))
             {
                 remoteResourceType = NormalizedDynamoDBServiceName + "::Table";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSDynamoTableName);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSDynamoTableName));
             }
             else if (IsKeyPresent(span, AttributeAWSKinesisStreamName))
             {
                 remoteResourceType = NormalizedKinesisServiceName + "::Stream";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSKinesisStreamName);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSKinesisStreamName));
             }
             else if (IsKeyPresent(span, AttributeAWSS3Bucket))
             {
                 remoteResourceType = NormalizedS3ServiceName + "::Bucket";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSS3Bucket);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSS3Bucket));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSSQSQueueName);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueName));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
-                remoteResourceIdentifier = GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+                remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
             }
         }
         else if (IsDBSpan(span))
