@@ -97,15 +97,15 @@ public class AwsMetricAttributesSpanProcessor : BaseProcessor<Activity>
 
         if (generatesServiceMetrics && generatesDependencyMetrics)
         {
-            attributes = this.CopyAttributesWithLocalRoot(attributeMap[IMetricAttributeGenerator.DependencyMetric]);
+            attributes = this.CopyAttributesWithLocalRoot(attributeMap[MetricAttributeGeneratorConstants.DependencyMetric]);
         }
         else if (generatesServiceMetrics)
         {
-            attributes = attributeMap[IMetricAttributeGenerator.ServiceMetric];
+            attributes = attributeMap[MetricAttributeGeneratorConstants.ServiceMetric];
         }
         else if (generatesDependencyMetrics)
         {
-            attributes = attributeMap[IMetricAttributeGenerator.DependencyMetric];
+            attributes = attributeMap[MetricAttributeGeneratorConstants.DependencyMetric];
         }
 
         if (attributes.Count != 0)

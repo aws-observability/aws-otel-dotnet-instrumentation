@@ -119,52 +119,18 @@ internal partial class Build : NukeBuild
         .After(this.Compile)
         .Executes(() =>
         {
-            // TODO: fix build script to copy dependencies without manually setting them here.
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "Newtonsoft.Json.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "OpenTelemetry.Extensions.AWS.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "OpenTelemetry.ResourceDetectors.AWS.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "OpenTelemetry.SemanticConventions.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "AWS.Distro.OpenTelemetry.AutoInstrumentation.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "OpenTelemetry.Instrumentation.AWS.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "OpenTelemetry.Sampler.AWS.dll",
-                this.openTelemetryDistributionFolder / "net");
-
-            FileSystemTasks.CopyFileToDirectory(
-                RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                "net8.0" / "AWSSDK.Core.dll",
-                this.openTelemetryDistributionFolder / "net");
+            FileSystemTasks.CopyDirectoryRecursively(
+                    RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                    "net6.0",
+                    this.openTelemetryDistributionFolder / "net",
+                    DirectoryExistsPolicy.Merge,
+                    FileExistsPolicy.Skip);
 
             if (EnvironmentInfo.IsWin)
             {
                 FileSystemTasks.CopyDirectoryRecursively(
                     RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                    "net8.0",
+                    "net462",
                     this.openTelemetryDistributionFolder / "netfx",
                     DirectoryExistsPolicy.Merge,
                     FileExistsPolicy.Skip);

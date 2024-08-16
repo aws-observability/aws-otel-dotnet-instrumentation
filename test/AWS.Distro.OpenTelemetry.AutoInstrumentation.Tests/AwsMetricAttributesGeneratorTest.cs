@@ -570,7 +570,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeServerPort, (long)3306);
 
         this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource)
-            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         this.spanDataMock.Dispose();
@@ -608,7 +608,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeServerPort, (long)3306);
 
         this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource)
-            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         this.spanDataMock.Dispose();
@@ -638,7 +638,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeServerSocketPort, (long)3306);
 
         this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource)
-            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         this.spanDataMock.Dispose();
@@ -649,7 +649,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeDbName, "db_name");
 
         this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource)
-            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         this.spanDataMock.Dispose();
@@ -686,7 +686,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeDbConnectionString, "hsqldb:mem:");
 
         this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource)
-            .TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         this.spanDataMock.Dispose();
@@ -802,7 +802,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeAWSRemoteService, "TestString");
 
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualRemoteService);
         Assert.Equal("TestString", actualRemoteService);
         this.spanDataMock.Dispose();
@@ -839,6 +839,19 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeAWSDynamoTableName, "aws_table_name" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
+
+        // validate behavior of AttributeAWSDynamoTableName with special chars('|', '^')
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableName, "aws_table|name" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableName, "aws_table^name" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name");
     }
 
     private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)
@@ -855,7 +868,7 @@ public class AwsMetricAttributesGeneratorTest
         }
 
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteResourceType, out var actualAWSRemoteResourceType);
         dependencyMetric.TryGetValue(AttributeAWSRemoteResourceIdentifier, out var actualAWSRemoteResourceIdentifier);
         Assert.Equal(type, actualAWSRemoteResourceType);
@@ -870,7 +883,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
         this.spanDataMock.SetTag(AttributeRpcService, serviceName);
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
         Assert.Equal(serviceName, actualServiceName);
     }
@@ -921,7 +934,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
         this.spanDataMock.SetTag(AttributeRpcService, serviceName);
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
         Assert.Equal(expectedRemoteService, actualServiceName);
         this.spanDataMock.Dispose();
@@ -934,7 +947,7 @@ public class AwsMetricAttributesGeneratorTest
         this.spanDataMock.SetTag(remoteServiceKey, "TestString");
 
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualRemoteService);
         Assert.Equal("Peer service", actualRemoteService);
         this.spanDataMock.Dispose();
@@ -969,7 +982,7 @@ public class AwsMetricAttributesGeneratorTest
         }
 
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteOperation, out var actualRemoteOperation);
         Assert.Equal(expectedRemoteOperation, actualRemoteOperation);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualRemoteService);
@@ -983,7 +996,7 @@ public class AwsMetricAttributesGeneratorTest
         }
 
         attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(this.spanDataMock, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteOperation, out actualRemoteOperation);
         Assert.Equal(expectedRemoteOperation, actualRemoteOperation);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out actualRemoteService);
@@ -995,8 +1008,8 @@ public class AwsMetricAttributesGeneratorTest
     {
         Dictionary<string, ActivityTagsCollection> attributeMap =
             this.generator.GenerateMetricAttributeMapFromSpan(span, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.ServiceMetric, out ActivityTagsCollection serviceMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         if (attributeMap.Count > 0)
         {
             switch (span.Kind)
@@ -1025,8 +1038,8 @@ public class AwsMetricAttributesGeneratorTest
     {
         Dictionary<string, ActivityTagsCollection> attributeMap =
             this.generator.GenerateMetricAttributeMapFromSpan(span, this.resource);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.ServiceMetric, out ActivityTagsCollection serviceMetric);
-        attributeMap.TryGetValue(IMetricAttributeGenerator.DependencyMetric, out ActivityTagsCollection dependencyMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.ServiceMetric, out ActivityTagsCollection serviceMetric);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
 
         Assert.True(serviceMetric != null);
         Assert.True(serviceMetric.Count == expectServiceAttributes.Count);

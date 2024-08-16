@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
@@ -32,6 +33,7 @@ public class Plugin
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
+    private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -54,13 +56,13 @@ public class Plugin
             // This is the function that sets the propagators in OTEL:
             // https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/5d438056871e9eeaa483840693139491407c136f/src/OpenTelemetry.AutoInstrumentation/Configurations/EnvironmentConfigurationSdkHelper.cs#L44
             // and this is where where it's being called: https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/5d438056871e9eeaa483840693139491407c136f/src/OpenTelemetry.AutoInstrumentation/Instrumentation.cs#L133
-            Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(
-            [
+            Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(new List<TextMapPropagator>
+            {
                 new TraceContextPropagator(), // W3C tracecontext
                 new B3Propagator(singleHeader: true), // b3
                 new B3Propagator(singleHeader: false), // b3multi
                 new AWSXRayPropagator(), // xray
-            ]));
+            }));
 
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
@@ -188,10 +190,26 @@ public class Plugin
 
     private ResourceBuilder GetResourceBuilder()
     {
-        return ResourceBuilder.CreateDefault()
-                .AddDetector(new AWSEC2ResourceDetector())
-                .AddDetector(new AWSEKSResourceDetector())
-                .AddDetector(new AWSECSResourceDetector());
+        // ResourceDetectors are enabled by default. Adding config to be able to disable during local testing
+        var resourceDetectorsEnabled = System.Environment.GetEnvironmentVariable(ResourceDetectorEnableConfig) ?? "true";
+
+        if (resourceDetectorsEnabled != "true")
+        {
+            return ResourceBuilder.CreateDefault();
+        }
+
+        // The current version of the AWS Resource Detectors doesn't build the EKS and ECS resource detectors
+        // for NETFRAMEWORK. More details are found here: https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/1177#discussion_r1193329666
+        // We need to work with upstream to support these detectors for windows.
+        var builder = ResourceBuilder.CreateDefault()
+            .AddDetector(new AWSEC2ResourceDetector());
+#if !NETFRAMEWORK
+        builder
+            .AddDetector(new AWSEKSResourceDetector())
+            .AddDetector(new AWSECSResourceDetector());
+#endif
+
+        return builder;
     }
 
     private OtlpMetricExporter ApplicationSignalsExporterProvider()
