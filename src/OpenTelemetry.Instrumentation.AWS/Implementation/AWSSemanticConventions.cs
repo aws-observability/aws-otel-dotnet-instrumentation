@@ -16,6 +16,16 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSS3BucketName = "aws.s3.bucket";
     public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
 
+    // AWS Bedrock service attributes not yet defined in semantic conventions
+    public const string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";
+    public const string AttributeAWSBedrockAgentId = "aws.bedrock.agent.id";
+    public const string AttributeAWSBedrockKnowledgeBaseId = "aws.bedrock.knowledge_base.id";
+    public const string AttributeAWSBedrockDataSourceId = "aws.bedrock.data_source.id";
+
+    // should be global convention for Gen AI attributes
+    public const string AttributeGenAiModelId = "gen_ai.request.model";
+    public const string AttributeGenAiSystem = "gen_ai.system";
+
     public const string AttributeHttpStatusCode = "http.status_code";
     public const string AttributeHttpResponseContentLength = "http.response_content_length";
 
