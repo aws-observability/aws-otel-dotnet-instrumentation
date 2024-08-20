@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from logging import INFO, Logger, getLogger
 from typing import Dict, List
-
 from docker.types import EndpointConfig
 from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from testcontainers.localstack import LocalStackContainer
@@ -39,7 +38,6 @@ class AWSSdkTest(ContractTestBase):
             "AWS_SDK_S3_ENDPOINT": "http://s3.localstack:4566",
             "AWS_SDK_ENDPOINT": "http://localstack:4566",
             "AWS_REGION": "us-west-2",
-            "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED": "false",
             "AWS_ACCESS_KEY_ID": "testcontainers-localstack",
             "AWS_SECRET_ACCESS_KEY": "testcontainers-localstack"
         }
@@ -78,6 +76,7 @@ class AWSSdkTest(ContractTestBase):
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
         cls._local_stack.start()
+
 
     @classmethod
     @override
@@ -126,7 +125,7 @@ class AWSSdkTest(ContractTestBase):
         self.do_test_requests(
             "s3/deleteobject/delete-object/some-object/test-bucket-name",
             "GET",
-            200,
+            204,
             0,
             0,
             remote_service="AWS::S3",
