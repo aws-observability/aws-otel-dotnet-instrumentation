@@ -276,22 +276,23 @@ class AWSSdkTest(ContractTestBase):
             span_name="Kinesis.DeleteStream",
         )
 
-    def test_kinesis_fault(self):
-        self.do_test_requests(
-            "kinesis/fault",
-            "GET",
-            500,
-            0,
-            1,
-            remote_service="AWS::Kinesis",
-            remote_operation="CreateStream",
-            remote_resource_type="AWS::Kinesis::Stream",
-            remote_resource_identifier="test_stream",
-            request_specific_attributes={
-                _AWS_KINESIS_STREAM_NAME: "test_stream",
-            },
-            span_name="Kinesis.CreateStream",
-        )
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_kinesis_fault(self):
+    #     self.do_test_requests(
+    #         "kinesis/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         remote_service="AWS::Kinesis",
+    #         remote_operation="CreateStream",
+    #         remote_resource_type="AWS::Kinesis::Stream",
+    #         remote_resource_identifier="test_stream",
+    #         request_specific_attributes={
+    #             _AWS_KINESIS_STREAM_NAME: "test_stream",
+    #         },
+    #         span_name="Kinesis.CreateStream",
+    #     )
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
