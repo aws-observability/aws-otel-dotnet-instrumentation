@@ -6,11 +6,7 @@ from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from typing_extensions import override
 
 from amazon.base.contract_test_base import ContractTestBase
-<<<<<<< HEAD
-from amazon.utils.application_signals_constants import AWS_LOCAL_SERVICE, AWS_SPAN_KIND, HTTP_RESPONSE_STATUS, HTTP_REQUEST_METHOD, LATENCY_METRIC
-=======
 from amazon.utils.application_signals_constants import AWS_LOCAL_OPERATION, AWS_LOCAL_SERVICE, AWS_SPAN_KIND, HTTP_RESPONSE_STATUS, HTTP_REQUEST_METHOD, LATENCY_METRIC
->>>>>>> main
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 from opentelemetry.proto.metrics.v1.metrics_pb2 import ExponentialHistogramDataPoint, Metric
 from opentelemetry.proto.trace.v1.trace_pb2 import Span
@@ -37,12 +33,7 @@ class EfCoreTest(ContractTestBase):
 
     def test_post_success(self) -> None:
         self.do_test_requests(
-<<<<<<< HEAD
-            "/blogs", "POST", 200, 0, 0, request_method="POST"
-        )
-=======
             "/blogs", "POST", 200, 0, 0, request_method="POST", local_operation="POST /blogs")
->>>>>>> main
 
     def test_route(self) -> None:
         self.do_test_requests(
@@ -51,12 +42,8 @@ class EfCoreTest(ContractTestBase):
             200,
             0,
             0,
-<<<<<<< HEAD
-            request_method="GET"
-=======
             request_method="GET",
             local_operation="GET /blogs/{id}"
->>>>>>> main
         )
 
     def test_delete_success(self) -> None:
@@ -117,10 +104,6 @@ class EfCoreTest(ContractTestBase):
         for resource_scope_metric in resource_scope_metrics:
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         if (len(target_metrics) == 2):
             dependency_target_metric: Metric = target_metrics[0]
             service_target_metric: Metric = target_metrics[1]
