@@ -36,11 +36,11 @@ class NetCoreTest(ContractTestBase):
         self.do_test_requests("/fault", "GET", 500, 0, 1)
 
     def test_success_post(self) -> None:
-        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0)
+        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success/postmethod")
     def test_error_post(self) -> None:
-        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0)
+        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0, request_method="POST", local_operation="POST /error/postmethod")
     def test_fault_post(self) -> None:
-        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1)
+        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1, request_method="POST", local_operation="POST /fault/postmethod")
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
@@ -51,7 +51,7 @@ class NetCoreTest(ContractTestBase):
                 target_spans.append(resource_scope_span.span)
 
         self.assertEqual(len(target_spans), 1)
-        self._assert_aws_attributes(target_spans[0].attributes)
+        self._assert_aws_attributes(target_spans[0].attributes, kwargs.get("request_method"), kwargs.get("local_operation"))
 
     def _assert_aws_attributes(self, attributes_list: List[KeyValue]) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
