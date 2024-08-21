@@ -24,7 +24,8 @@ permissions:
   contents: read
 
 env:
-  SAMPLE_APP_ZIP: s3://${{ secrets.APP_SIGNALS_E2E_EC2_JAR }}-prod-${{ inputs.aws-region }}/dotnet-sample-app.zip
+#  SAMPLE_APP_ZIP: s3://${{ secrets.APP_SIGNALS_E2E_EC2_JAR }}-prod-${{ inputs.aws-region }}/dotnet-sample-app.zip
+  SAMPLE_APP_ZIP: "wget -O ./dotnet-sample-app.zip https://github.com/aws-observability/aws-application-signals-test-framework/raw/dotnetE2ETests/sample-apps/dotnet/dotnet-sample-app.zip"
   METRIC_NAMESPACE: ApplicationSignals
   LOG_GROUP_NAME: /aws/application-signals/data
   ADOT_WHEEL_NAME: ${{ inputs.staging_wheel_name }}
