@@ -44,6 +44,12 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
 
+      - name: Download Linux arm64 Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          path: ./artifacts/linux/arm64
+
       - name: Download Windows Artifact
         uses: actions/download-artifact@v3
         with:
@@ -55,6 +61,12 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: ./artifacts/linux/x64-musl
+      
+      - name: Download Linux arm64 MUSL Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          path: ./artifacts/linux/arm64-musl
 
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
@@ -123,11 +135,27 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
           path: ./artifacts/linux/x64-musl
 
+      - name: Download Linux arm64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          path: ./artifacts/linux/arm64
+
+      - name: Download Linux arm64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          path: ./artifacts/linux/arm64-musl
+
       - name: Unzip Linux Artifact
         if: runner.os == 'Linux'
         run: |
           unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
           unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+          unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
+          unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
@@ -181,6 +209,16 @@ jobs:
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
 
+      - name: Build Linux arm64 container
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          cd ./arm64
+          docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+
       - name: Build Windows container
         if: runner.os == 'Windows'
         run: |
@@ -231,12 +269,12 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon private ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
 
       - name: Create multi-platform image and push to Amazon public ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm46 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
