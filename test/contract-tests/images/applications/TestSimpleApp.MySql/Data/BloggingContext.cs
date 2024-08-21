@@ -22,7 +22,6 @@ public class BloggingContext : DbContext
     {
         // connect to mysql with connection string from app settings
         var connectionString = String.Format("server={0}; database={1}; user={2}; password={3}", DbHost, DbName, DbUser, DbPass);
-        Console.WriteLine(connectionString);
         if (DbType == "postgresql")
         {
             connectionString = String.Format("Host={0}; Database={1}; Username={2}; Password={3}", DbHost, DbName, DbUser, DbPass);

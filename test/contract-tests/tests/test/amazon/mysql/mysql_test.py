@@ -179,10 +179,6 @@ class MySqlTest(DatabaseContractTestBase):
         for dp in dp_list:
             attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(dp.attributes)
             if AWS_REMOTE_RESOURCE_IDENTIFIER in attribute_dict:
-                print("1111")
-                print(self.get_remote_resource_identifier())
-                print(attribute_dict)
-                print(attribute_dict[AWS_REMOTE_RESOURCE_IDENTIFIER].string_value)
                 if attribute_dict[AWS_REMOTE_RESOURCE_IDENTIFIER].string_value == self.get_remote_resource_identifier():
                     dependency_dp = dp
         return dependency_dp, service_dp
