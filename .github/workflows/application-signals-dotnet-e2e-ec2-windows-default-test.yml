@@ -29,7 +29,7 @@ env:
   LOG_GROUP_NAME: /aws/application-signals/data
   ADOT_WHEEL_NAME: ${{ inputs.staging_wheel_name }}
   TEST_RESOURCES_FOLDER: ${GITHUB_WORKSPACE}
-  GET_CW_AGENT_RPM_COMMAND: "wget -O .\amazon-cloudwatch-agent.msi https://amazoncloudwatch-agent.s3.amazonaws.com/windows/amd64/latest/amazon-cloudwatch-agent.msi"
+  GET_CW_AGENT_RPM_COMMAND: "wget -O ./amazon-cloudwatch-agent.msi https://amazoncloudwatch-agent.s3.amazonaws.com/windows/amd64/latest/amazon-cloudwatch-agent.msi"
 
 jobs:
   dotnet-e2e-ec2-default-test:
