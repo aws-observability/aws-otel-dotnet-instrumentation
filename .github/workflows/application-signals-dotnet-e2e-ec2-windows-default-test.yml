@@ -95,7 +95,7 @@ jobs:
 #          else
 #            echo GET_ADOT_DISTRO_COMMAND="dotnet3.9 -m pip install ${{ env.ADOT_WHEEL_NAME }}" >> $GITHUB_ENV
 #          fi
-#
+
       - name: Initiate Terraform
         uses: ./.github/workflows/actions/execute_and_retry
         with:
