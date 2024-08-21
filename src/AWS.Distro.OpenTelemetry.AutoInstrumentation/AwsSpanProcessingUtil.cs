@@ -52,6 +52,10 @@ internal sealed class AwsSpanProcessingUtil
     // If we add a longer keyword to the sql dialect keyword list, need to update the constant below.
     internal static readonly int MaxKeywordLength = 27;
 
+    // TODO: remove once supported by Semantic Conventions
+    internal static readonly string AttributeGenAiModelId = "gen_ai.request.model";
+    internal static readonly string AttributeGenAiSystem = "gen_ai.system";
+
     internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
     private const string SqlDialectKeywordsJson = "configuration/sql_dialect_keywords.json";

@@ -31,9 +31,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     public static readonly string AttributeServerAddress = "server.address";
     public static readonly string AttributeServerPort = "server.port";
 
-    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/62b88fef65f770db7fe40fcd3f053fe743a64c83/src/Shared/SemanticConventions.cs#L108
-    public static readonly string AttributeServerSocketAddress = "server.socket.address";
-
     // This is not mentioned in upstream but java have that part
     public static readonly string AttributeServerSocketPort = "server.socket.port";
 
@@ -419,27 +416,27 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::Guardrail";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockGuardrailId);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockGuardrailId));
             }
             else if (IsKeyPresent(span, AttributeGenAiModelId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::Model";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeGenAiModelId);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeGenAiModelId));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockAgentId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::Agent";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockAgentId);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockAgentId));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockDataSourceId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
-                remoteResourceIdentifier = (string?)span.GetTagItem(AttributeAWSBedrockDataSourceId);
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockDataSourceId));
             }
         } else if (IsDBSpan(span))
         {

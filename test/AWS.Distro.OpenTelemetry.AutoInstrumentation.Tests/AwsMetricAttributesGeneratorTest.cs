@@ -8,6 +8,7 @@ using Moq;
 using OpenTelemetry.Resources;
 using Xunit;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsMetricAttributeGenerator;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
@@ -861,9 +862,21 @@ public class AwsMetricAttributesGeneratorTest
 
         attributesCombination = new Dictionary<string, object>
         {
+            { AttributeAWSBedrockGuardrailId, "aws_guardrail_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
             { AttributeGenAiModelId, "gen_ai_model_id" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeGenAiModelId, "gen_ai_model_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_^^id");
 
         attributesCombination = new Dictionary<string, object>
         {
@@ -873,15 +886,33 @@ public class AwsMetricAttributesGeneratorTest
 
         attributesCombination = new Dictionary<string, object>
         {
+            { AttributeAWSBedrockAgentId, "aws_agent_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_^^id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id");
 
         attributesCombination = new Dictionary<string, object>
         {
+            { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_^^id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
             { AttributeAWSBedrockDataSourceId, "aws_data_source_id" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSBedrockDataSourceId, "aws_data_source_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_^^id");
     }
 
     private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)

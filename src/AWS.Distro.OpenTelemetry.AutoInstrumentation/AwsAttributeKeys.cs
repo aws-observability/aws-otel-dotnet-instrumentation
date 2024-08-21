@@ -51,7 +51,6 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSBedrockAgentId = "aws.bedrock.agent.id";
     internal static readonly string AttributeAWSBedrockKnowledgeBaseId = "aws.bedrock.knowledge_base.id";
     internal static readonly string AttributeAWSBedrockDataSourceId = "aws.bedrock.data_source.id";
-    internal static readonly string AttributeGenAiModelId = "gen_ai.request.model";
 
     internal static readonly string AttributeHttpResponseContentLength = "http.response_content_length";
 
