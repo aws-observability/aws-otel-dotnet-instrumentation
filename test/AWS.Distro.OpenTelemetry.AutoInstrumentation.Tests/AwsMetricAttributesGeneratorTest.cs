@@ -839,6 +839,19 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeAWSDynamoTableName, "aws_table_name" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
+
+        // validate behavior of AttributeAWSDynamoTableName with special chars('|', '^')
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableName, "aws_table|name" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableName, "aws_table^name" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name");
     }
 
     private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)

@@ -21,7 +21,7 @@ builder.Services
     .AddKeyedSingleton<IAmazonS3>("fault-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>(true)))
     .AddKeyedSingleton<IAmazonSQS>("fault-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>(true)))
     .AddKeyedSingleton<IAmazonKinesis>("fault-kinesis", new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
-    // error client
+    //error client
     .AddKeyedSingleton<IAmazonDynamoDB>("error-ddb", new AmazonDynamoDBClient(AmazonClientConfigHelper.CreateConfig<AmazonDynamoDBConfig>()))
     .AddKeyedSingleton<IAmazonS3>("error-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>()))
     .AddKeyedSingleton<IAmazonSQS>("error-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>()))
@@ -44,9 +44,13 @@ app.MapGet("s3/createobject/put-object/some-object/{bucketName}", (S3Tests s3, s
     .WithName("put-object")
     .WithOpenApi();
 
-app.MapGet("s3/deleteobject/delete-object/some-object/{bucketName}", (S3Tests s3, string? bucketName) => s3.DeleteObject(bucketName))
-    .WithName("delete-object")
-    .WithOpenApi();
+app.MapGet("s3/deleteobject/delete-object/some-object/{bucketName}", (S3Tests s3, string? bucketName) =>
+{
+    s3.DeleteObject(bucketName);
+    return Results.NoContent();
+})
+.WithName("delete-object")
+.WithOpenApi();
 
 app.MapGet("s3/deletebucket/delete-bucket/{bucketName}", (S3Tests s3, string? bucketName) => s3.DeleteBucket(bucketName))
     .WithName("delete-bucket")
@@ -105,7 +109,6 @@ app.MapGet("kinesis/deletestream/my-stream", (KinesisTests kinesis) => kinesis.D
     .WithOpenApi();
 
 app.MapGet("kinesis/fault", (KinesisTests kinesis) => kinesis.Fault()).WithName("kinesis-fault").WithOpenApi();
-
 app.MapGet("kinesis/error", (KinesisTests kinesis) => kinesis.Error()).WithName("kinesis-error").WithOpenApi();
 
 app.Run();
