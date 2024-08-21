@@ -115,7 +115,8 @@ jobs:
           while [ $retry_counter -lt $max_retry ]; do
             echo "Attempt $retry_counter"
             deployment_failed=0
-            terraform apply -auto-approve || deployment_failed=$?
+            terraform apply -auto-approve \
+               || deployment_failed=$?
 #            terraform apply -auto-approve \
 #              -var="aws_region=${{ inputs.aws-region }}" \
 #              -var="test_id=${{ env.TESTING_ID }}" \
