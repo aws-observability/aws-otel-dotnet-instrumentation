@@ -115,13 +115,14 @@ jobs:
           while [ $retry_counter -lt $max_retry ]; do
             echo "Attempt $retry_counter"
             deployment_failed=0
-            terraform apply -auto-approve \
-              -var="aws_region=${{ inputs.aws-region }}" \
-              -var="test_id=${{ env.TESTING_ID }}" \
-              -var="sample_app_zip=${{ env.SAMPLE_APP_ZIP }}" \
-              -var="get_cw_agent_rpm_command=${{ env.GET_CW_AGENT_RPM_COMMAND }}" \
-              -var="get_adot_distro_command=${{ env.GET_ADOT_DISTRO_COMMAND }}" \
-            || deployment_failed=$?
+            terraform apply -auto-approve || deployment_failed=$?
+#            terraform apply -auto-approve \
+#              -var="aws_region=${{ inputs.aws-region }}" \
+#              -var="test_id=${{ env.TESTING_ID }}" \
+#              -var="sample_app_zip=${{ env.SAMPLE_APP_ZIP }}" \
+#              -var="get_cw_agent_rpm_command=${{ env.GET_CW_AGENT_RPM_COMMAND }}" \
+#              -var="get_adot_distro_command=${{ env.GET_ADOT_DISTRO_COMMAND }}" \
+#            || deployment_failed=$?
           
             if [ $deployment_failed -eq 1 ]; then
               echo "Terraform deployment was unsuccessful. Will attempt to retry deployment."
