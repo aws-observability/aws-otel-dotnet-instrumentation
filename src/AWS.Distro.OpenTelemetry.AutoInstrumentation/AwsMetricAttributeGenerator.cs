@@ -36,6 +36,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     // This is not mentioned in upstream but java have that part
     public static readonly string AttributeServerSocketPort = "server.socket.port";
+    public static readonly string AttributeDBUser = "db.user";
 
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
@@ -89,6 +90,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         SetRemoteServiceAndOperation(span, attributes);
         SetRemoteResourceTypeAndIdentifier(span, attributes);
         SetSpanKindForDependency(span, attributes);
+        SetRemoteDbUser(span, attributes);
 
         return attributes;
     }
@@ -419,6 +421,14 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         {
             attributes.Add(AttributeAWSRemoteResourceType, remoteResourceType);
             attributes.Add(AttributeAWSRemoteResourceIdentifier, remoteResourceIdentifier);
+        }
+    }
+
+    private static void SetRemoteDbUser(Activity span, ActivityTagsCollection attributes)
+    {
+        if (IsDBSpan(span) && IsKeyPresent(span, AttributeDBUser))
+        {
+            attributes.Add(AttributeAWSRemoteDBUser, (string?)span.GetTagItem(AttributeDBUser));
         }
     }
 

@@ -9,6 +9,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSSpanKind = "aws.span.kind";
     internal static readonly string AttributeAWSLocalService = "aws.local.service";
     internal static readonly string AttributeAWSLocalOperation = "aws.local.operation";
+    internal static readonly string AttributeAWSRemoteDBUser = "aws.remote.db.user";
     internal static readonly string AttributeAWSRemoteService = "aws.remote.service";
     internal static readonly string AttributeAWSRemoteOperation = "aws.remote.operation";
 
