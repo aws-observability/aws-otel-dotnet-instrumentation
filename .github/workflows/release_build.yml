@@ -65,7 +65,7 @@ jobs:
       - name: Download Linux arm64 MUSL Artifact
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: ./artifacts/linux/arm64-musl
 
       - name: Configure AWS credentials for Private S3 Bucket
@@ -146,7 +146,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-arm64-musl
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: ./artifacts/linux/arm64-musl
 
       - name: Unzip Linux Artifact
@@ -154,6 +154,7 @@ jobs:
         run: |
           unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
           unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+          mkdir ./arm64
           unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
           unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 

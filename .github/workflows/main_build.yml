@@ -122,7 +122,7 @@ jobs:
       - name: Upload Artifact on MUSL arm64 Linux
         uses: actions/upload-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
   dotnet-e2e-ec2-default-test:
