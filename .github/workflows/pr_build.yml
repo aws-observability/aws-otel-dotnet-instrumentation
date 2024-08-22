@@ -93,3 +93,25 @@ jobs:
           docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
           docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
+
+  contract-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up and run contract tests with pytest
+        run: |
+          cd test
+          bash ./build-and-install-distro.sh
+          bash ./set-up-contract-tests.sh
+          pytest contract-tests/tests
