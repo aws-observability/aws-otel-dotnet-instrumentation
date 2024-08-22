@@ -110,7 +110,9 @@ jobs:
           done
 
   release-image:
-    needs: [release]
+    # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
+    # since deleting from Private ECR is not possible.
+    needs: [release, build-release-nuget]
     runs-on: ${{ matrix.os }}
     continue-on-error: true
     strategy:

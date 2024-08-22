@@ -1,0 +1,37 @@
+name: Unlist Nuget Package
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version of the Distro to Unlist, e.g., 1.2.0
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build-release-nuget:
+    runs-on: windows-latest
+
+    strategy:
+        fail-fast: true
+
+    steps:
+      - name: Assume nuget role
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Unllist packages from Nuget.org
+        run: >
+          $nugetKey = aws secretsmanager get-secret-value
+          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
+          --region ${{ env.AWS_SIGNING_KEY_REGION }}
+          --output text
+          --query SecretString | ConvertFrom-Json
+
+          nuget delete AWS.Distro.OpenTelemetry.AutoInstrumentation ${{github.event.inputs.version}}
+          -Source https://api.nuget.org/v3/index.json
+          -ApiKey $nugetKey.Key
