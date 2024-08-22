@@ -33,7 +33,7 @@ env:
   GET_CW_AGENT_RPM_COMMAND: "wget -O ./amazon-cloudwatch-agent.msi https://amazoncloudwatch-agent.s3.amazonaws.com/windows/amd64/latest/amazon-cloudwatch-agent.msi"
 
 jobs:
-  dotnet-e2e-ec2-default-test:
+  dotnet-e2e-ec2-default-windows-test:
     runs-on: ubuntu-latest
     container:
       image: public.ecr.aws/h6o3z5z9/aws-application-signals-test-framework-workflow-container:latest
