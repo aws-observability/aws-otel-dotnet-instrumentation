@@ -63,4 +63,4 @@ jobs:
     with:
       aws-region: ${{ matrix.aws-region }}
       caller-workflow-name: 'appsignals-dotnet-e2e-ec2-canary-test'
-      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-windows.zip'
