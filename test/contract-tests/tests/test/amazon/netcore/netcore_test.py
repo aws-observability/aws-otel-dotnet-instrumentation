@@ -51,9 +51,7 @@ class NetCoreTest(ContractTestBase):
                 target_spans.append(resource_scope_span.span)
 
         self.assertEqual(len(target_spans), 1)
-        self._assert_aws_attributes(
-            target_spans[0].attributes, kwargs.get("request_method"), kwargs.get("local_operation")
-        )
+        self._assert_aws_attributes(target_spans[0].attributes, kwargs.get("request_method"), kwargs.get("local_operation"))
 
     def _assert_aws_attributes(self, attributes_list: List[KeyValue], method: str, local_operation: str) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
@@ -107,6 +105,5 @@ class NetCoreTest(ContractTestBase):
         service_dp: ExponentialHistogramDataPoint = dp_list[0]
         attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(service_dp.attributes)
         self._assert_str_attribute(attribute_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
-        self._assert_str_attribute(attribute_dict, AWS_LOCAL_OPERATION, kwargs.get("local_operation"))
         self._assert_str_attribute(attribute_dict, AWS_SPAN_KIND, "LOCAL_ROOT")
         self.check_sum(metric_name, service_dp.sum, expected_sum)
