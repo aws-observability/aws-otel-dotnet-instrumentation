@@ -6,7 +6,7 @@ from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from typing_extensions import override
 
 from amazon.base.contract_test_base import ContractTestBase
-from amazon.utils.application_signals_constants import AWS_LOCAL_SERVICE, AWS_SPAN_KIND, AWS_REMOTE_SERVICE, AWS_REMOTE_OPERATION
+from amazon.utils.application_signals_constants import AWS_LOCAL_OPERATION, AWS_LOCAL_SERVICE, AWS_SPAN_KIND, AWS_REMOTE_SERVICE, AWS_REMOTE_OPERATION
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 from opentelemetry.proto.metrics.v1.metrics_pb2 import ExponentialHistogramDataPoint, Metric
 from opentelemetry.proto.trace.v1.trace_pb2 import Span
@@ -29,11 +29,11 @@ class NetCoreTest(ContractTestBase):
         }
     
     def test_success(self) -> None:
-        self.do_test_requests("/success", "GET", 200, 0, 0)
+        self.do_test_requests("/success", "GET", 200, 0, 0, request_method="GET", local_operation="GET /success")
     def test_error(self) -> None:
-        self.do_test_requests("/error", "GET", 400, 1, 0)
+        self.do_test_requests("/error", "GET", 400, 1, 0, request_method="GET", local_operation="GET /error")
     def test_fault(self) -> None:
-        self.do_test_requests("/fault", "GET", 500, 0, 1)
+        self.do_test_requests("/fault", "GET", 500, 0, 1, request_method="GET", local_operation="GET /fault")
 
     def test_success_post(self) -> None:
         self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success/postmethod")
@@ -53,9 +53,10 @@ class NetCoreTest(ContractTestBase):
         self.assertEqual(len(target_spans), 1)
         self._assert_aws_attributes(target_spans[0].attributes, kwargs.get("request_method"), kwargs.get("local_operation"))
 
-    def _assert_aws_attributes(self, attributes_list: List[KeyValue]) -> None:
+    def _assert_aws_attributes(self, attributes_list: List[KeyValue], method: str, local_operation: str) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
+        self._assert_str_attribute(attributes_dict, AWS_LOCAL_OPERATION, local_operation)
         self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, "LOCAL_ROOT")
 
     @override
