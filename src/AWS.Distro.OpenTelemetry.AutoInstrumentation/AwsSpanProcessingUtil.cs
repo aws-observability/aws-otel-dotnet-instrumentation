@@ -54,13 +54,18 @@ internal sealed class AwsSpanProcessingUtil
 
     internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
-    private const string SqlDialectKeywordsJson = "configuration/sql_dialect_keywords.json";
-
     internal static List<string> GetDialectKeywords()
     {
         try
         {
-            using (StreamReader r = new StreamReader(SqlDialectKeywordsJson))
+            string sqlDialectKeywordsJsonFullPath = "configuration/sql_dialect_keywords.json";
+            string otelDotnetAutoHome = Environment.GetEnvironmentVariable("OTEL_DOTNET_AUTO_HOME") ?? string.Empty;
+            if (!string.IsNullOrEmpty(otelDotnetAutoHome))
+            {
+                sqlDialectKeywordsJsonFullPath = Path.Combine(otelDotnetAutoHome, "configuration", "sql_dialect_keywords.json");
+            }
+
+            using (StreamReader r = new StreamReader(sqlDialectKeywordsJsonFullPath))
             {
                 string json = r.ReadToEnd();
                 JObject jObject = JObject.Parse(json);
