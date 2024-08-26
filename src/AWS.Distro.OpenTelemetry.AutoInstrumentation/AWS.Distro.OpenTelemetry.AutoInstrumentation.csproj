@@ -59,6 +59,9 @@
     <Content Include="adot-launch.*">
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
+    <Content Include="configuration/**">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </Content>
     <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.6.0">
       <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
     </PackageReference>
