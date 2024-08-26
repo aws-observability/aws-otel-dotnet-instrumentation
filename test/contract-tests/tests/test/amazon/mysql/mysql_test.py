@@ -138,7 +138,7 @@ class MySqlTest(DatabaseContractTestBase):
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_SERVICE, self.get_remote_service())
         # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/81
-        # self._assert_str_attribute(attributes_dict, AWS_REMOTE_OPERATION, kwargs.get("sql_command"))
+        self._assert_str_attribute(attributes_dict, AWS_REMOTE_OPERATION, kwargs.get("sql_command"))
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_TYPE, "DB::Connection")
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_DB_USER, DATABASE_USER)
         self._assert_str_attribute(

@@ -72,7 +72,7 @@ class Psycopg2Test(DatabaseContractTestBase):
     def get_application_extra_environment_variables():
         return {
             "ASPNETCORE_ENVIRONMENT": "Development",
-            "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED": "true",
+            "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED": "false",
             "DB_TYPE": "postgresql",
             "DB_HOST": DATABASE_HOST,
             "DB_USER": DATABASE_USER,
@@ -152,7 +152,7 @@ class Psycopg2Test(DatabaseContractTestBase):
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_SERVICE, self.get_remote_service())
         # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/81
-        # self._assert_str_attribute(attributes_dict, AWS_REMOTE_OPERATION, kwargs.get("sql_command"))
+        self._assert_str_attribute(attributes_dict, AWS_REMOTE_OPERATION, kwargs.get("sql_command"))
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_TYPE, "DB::Connection")
         self._assert_str_attribute(attributes_dict, AWS_REMOTE_DB_USER, DATABASE_USER)
         self._assert_str_attribute(
