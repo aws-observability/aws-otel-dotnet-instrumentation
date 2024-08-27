@@ -12,7 +12,7 @@ public static class AmazonClientConfigHelper
     {
         return new T
         {
-            ServiceURL = isFault ? faultEndpoint : errorEndpoint, Timeout = defaultTimeout, RetryMode = RequestRetryMode.Legacy
+            ServiceURL = isFault ? faultEndpoint : errorEndpoint, Timeout = defaultTimeout, RetryMode = RequestRetryMode.Standard
         };
     }
 }
