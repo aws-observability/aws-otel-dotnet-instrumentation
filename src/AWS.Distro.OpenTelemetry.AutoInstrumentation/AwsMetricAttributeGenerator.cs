@@ -438,7 +438,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockDataSourceId));
             }
-        } else if (IsDBSpan(span))
+        }
+        else if (IsDBSpan(span))
         {
             remoteResourceType = DbConnectionResourceType;
             remoteResourceIdentifier = GetDbConnection(span);

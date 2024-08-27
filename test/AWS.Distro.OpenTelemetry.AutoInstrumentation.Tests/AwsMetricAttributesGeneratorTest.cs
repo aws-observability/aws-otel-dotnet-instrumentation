@@ -952,7 +952,6 @@ public class AwsMetricAttributesGeneratorTest
     [Fact]
     public void TestNormalizeRemoteServiceName_AwsSdk()
     {
-        // AWS SDK V3
         this.TestAwsSdkServiceNormalization("Bedrock Runtime", "AWS::BedrockRuntime");
         this.TestAwsSdkServiceNormalization("Bedrock", "AWS::Bedrock");
         this.TestAwsSdkServiceNormalization("Bedrock Agent", "AWS::Bedrock");
