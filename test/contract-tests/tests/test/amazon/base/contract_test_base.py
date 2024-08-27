@@ -101,6 +101,7 @@ class ContractTestBase(TestCase):
             .with_env("OTEL_DOTNET_AUTO_PLUGINS", "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation")
             .with_env("CORECLR_ENABLE_PROFILING", "1")
             .with_env("CORECLR_PROFILER", "{918728DD-259F-4A6A-AC2B-B85E1B658318}")
+            .with_env("RESOURCE_DETECTORS_ENABLED", "false")
             .with_kwargs(network=NETWORK_NAME, networking_config=application_networking_config)
             .with_name(self.get_application_image_name())
         )

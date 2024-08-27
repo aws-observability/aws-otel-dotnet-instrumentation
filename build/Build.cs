@@ -12,7 +12,7 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 internal partial class Build : NukeBuild
 {
-    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.6.0";
+    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.7.0";
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
     [Solution("AWS.Distro.OpenTelemetry.AutoInstrumentation.sln")]
@@ -146,6 +146,15 @@ internal partial class Build : NukeBuild
             FileSystemTasks.CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
         });
 
+    private Target CopyConfiguration => _ => _
+        .After(this.AddAWSPlugins)
+        .Executes(() =>
+        {
+            var source = RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "configuration";
+            var dest = this.openTelemetryDistributionFolder / "configuration";
+            FileSystemTasks.CopyDirectoryRecursively(source, dest, DirectoryExistsPolicy.Merge, FileExistsPolicy.Skip);
+        });
+
     private Target ExtendLicenseFile => _ => _
         .After(this.AddAWSPlugins)
         .Executes(() =>
@@ -175,6 +184,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
 
     private Target PackAWSDistribution => _ => _
         .After(this.CopyInstrumentScripts)
+        .After(this.CopyConfiguration)
         .After(this.ExtendLicenseFile)
         .Executes(() =>
         {
@@ -235,6 +245,7 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .DependsOn(this.Compile)
         .DependsOn(this.AddAWSPlugins)
         .DependsOn(this.CopyInstrumentScripts)
+        .DependsOn(this.CopyConfiguration)
         .DependsOn(this.ExtendLicenseFile)
         // .DependsOn(RunUnitTests)
         // .DependsOn(RunIntegrationTests)

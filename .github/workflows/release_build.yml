@@ -10,6 +10,7 @@ env:
   AWS_DEFAULT_REGION: us-east-1
   AWS_PUBLIC_ECR_REGION: us-east-1
   AWS_PRIVATE_ECR_REGION: us-west-2
+  AWS_SIGNING_KEY_REGION: us-west-2
   RELEASE_PUBLIC_REPOSITORY: public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet
   RELEASE_PRIVATE_REPOSITORY: 020628701572.dkr.ecr.us-west-2.amazonaws.com/adot-autoinstrumentation-dotnet
   RELEASE_PRIVATE_REGISTRY: 020628701572.dkr.ecr.us-west-2.amazonaws.com
@@ -109,7 +110,9 @@ jobs:
           done
 
   release-image:
-    needs: [release]
+    # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
+    # since deleting from Private ECR is not possible.
+    needs: [release, build-release-nuget]
     runs-on: ${{ matrix.os }}
     continue-on-error: true
     strategy:
@@ -279,3 +282,73 @@ jobs:
           docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm46 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
+
+  build-release-nuget:
+    needs: [release]
+    runs-on: windows-latest
+
+    strategy:
+        fail-fast: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Install dependencies
+        run: dotnet restore .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
+
+      - name: Build solution
+        run: >
+          dotnet build .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
+          /p:Configuration=Release
+          /p:_IsPacking=true
+          --no-restore
+
+      - name: Assume signer role
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_ARTIFACT_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Invoke Signing script
+        env:
+          UNSIGNED_BUCKET: ${{ secrets.AWS_UNSIGNED_BUCKET_NAME }}
+          SIGNED_BUCKET: ${{ secrets.AWS_SIGNED_BUCKET_NAME }}
+        #TODO: There is probably a better way to pass in a list of paths as a single parameter to the script.
+        run: |
+          .\buildtools\sign_files.ps1 -Filters AWS.Distro.OpenTelemetry.AutoInstrumentation.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
+          .\buildtools\sign_files.ps1 -Filters OpenTelemetry.Instrumentation.AWS.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
+          
+      - name: Pack nugets
+        run: >
+          dotnet pack
+          .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
+          /p:Version=${{github.event.inputs.version}}
+          --no-build
+          -c Release
+          -o .\Deployment\nuget-packages
+
+      - name: Upload nugets to this GitHub Action run as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nuget-packages
+          path: Deployment/nuget-packages/
+
+      - name: Assume nuget role
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Push packages to Nuget.org
+        run: >
+          $nugetKey = aws secretsmanager get-secret-value
+          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
+          --region ${{ env.AWS_SIGNING_KEY_REGION }}
+          --output text
+          --query SecretString | ConvertFrom-Json
+
+          nuget push
+          .\Deployment\nuget-packages\*.nupkg
+          -Source https://api.nuget.org/v3/index.json
+          -ApiKey $nugetKey.Key
