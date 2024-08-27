@@ -525,19 +525,19 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         {
             var serverAddress = span.GetTagItem(AttributeServerAddress);
             var serverPort = span.GetTagItem(AttributeServerPort);
-            dbConnection = BuildDbConnection(serverAddress?.ToString(), serverPort == null ? null : (long)serverPort);
+            dbConnection = BuildDbConnection(serverAddress?.ToString(), serverPort == null ? null : Convert.ToInt64(serverPort));
         }
         else if (IsKeyPresent(span, AttributeNetPeerName))
         {
             var networkPeerAddress = span.GetTagItem(AttributeNetPeerName);
             var networkPeerPort = span.GetTagItem(AttributeNetPeerPort);
-            dbConnection = BuildDbConnection(networkPeerAddress?.ToString(), networkPeerPort == null ? null : (long)networkPeerPort);
+            dbConnection = BuildDbConnection(networkPeerAddress?.ToString(), networkPeerPort == null ? null : Convert.ToInt64(networkPeerPort));
         }
         else if (IsKeyPresent(span, AttributeServerSocketAddress))
         {
             var serverSocketAddress = span.GetTagItem(AttributeServerSocketAddress);
             var serverSocketPort = span.GetTagItem(AttributeServerSocketPort);
-            dbConnection = BuildDbConnection(serverSocketAddress?.ToString(), serverSocketPort == null ? null : (long)serverSocketPort);
+            dbConnection = BuildDbConnection(serverSocketAddress?.ToString(), serverSocketPort == null ? null : Convert.ToInt64(serverSocketPort));
         }
         else if (IsKeyPresent(span, AttributeDbConnectionString))
         {

@@ -527,6 +527,26 @@ public class AwsMetricAttributesGeneratorTest
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
 
+        // Validate BuildDbConnection string when server port is string
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, "3306" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
+        // Validate BuildDbConnection string when server port is int32
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, (long)3306 },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
         // Validate behaviour of DB_NAME with '|' char, SERVER_ADDRESS and SERVER_PORT exist
         attributesCombination = new Dictionary<string, object>
         {
@@ -585,6 +605,26 @@ public class AwsMetricAttributesGeneratorTest
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
 
+        // Validate BuildDbConnection string when AttributeNetPeerPort is int32
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeNetPeerName, "abc.com" },
+            { AttributeNetPeerPort, 3306 },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
+        // Validate BuildDbConnection string when AttributeNetPeerPort is string
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeNetPeerName, "abc.com" },
+            { AttributeNetPeerPort, "3306" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
         // Validate behaviour of DB_NAME, NET_PEER_NAME exist
         attributesCombination = new Dictionary<string, object>
         {
@@ -620,6 +660,26 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbName, "db_name" },
             { AttributeServerSocketAddress, "abc.com" },
             { AttributeServerSocketPort, (long)3306 },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
+        // Validate BuildDbConnection string when AttributeServerSocketPort is int32
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerSocketAddress, "abc.com" },
+            { AttributeServerSocketPort, 3306 },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+
+        // Validate BuildDbConnection string when AttributeServerSocketPort is string
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeServerSocketAddress, "abc.com" },
+            { AttributeServerSocketPort, "3306" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
 
