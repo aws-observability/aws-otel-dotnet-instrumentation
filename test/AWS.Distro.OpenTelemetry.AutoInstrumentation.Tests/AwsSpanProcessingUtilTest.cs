@@ -214,6 +214,23 @@ public class AwsSpanProcessingUtilTest
     }
 
     [Fact]
+    public void TestIsDBSpanTrue()
+    {
+        var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
+        spanDataMock.SetTag(AttributeDbSystem, "sqlite");
+        spanDataMock.Start();
+        Assert.True(AwsSpanProcessingUtil.IsDBSpan(spanDataMock));
+    }
+
+    [Fact]
+    public void TestIsDBSpanFalse()
+    {
+        var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
+        spanDataMock.Start();
+        Assert.False(AwsSpanProcessingUtil.IsDBSpan(spanDataMock));
+    }
+
+    [Fact]
     public void TestShouldUseInternalOperationFalse()
     {
         var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
