@@ -62,7 +62,7 @@
     <Content Include="configuration/**">
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.6.0">
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.7.0">
       <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
