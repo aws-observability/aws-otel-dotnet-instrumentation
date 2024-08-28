@@ -97,11 +97,15 @@ internal sealed class AwsSpanProcessingUtil
     internal static string GetIngressOperation(Activity span)
     {
         string operation = span.DisplayName;
+
         if (ShouldUseInternalOperation(span))
         {
             operation = InternalOperation;
         }
-        else if (!IsValidOperation(span, operation))
+
+        // workaround for now so that both Server and Consumer spans have same operation
+        // TODO: Update this and other languages so that all of them set the operation during propagation.
+        else if (!IsValidOperation(span, operation) || IsKeyPresent(span, AttributeUrlPath))
         {
             operation = GenerateIngressOperation(span);
         }
