@@ -36,11 +36,11 @@ class NetCoreTest(ContractTestBase):
         self.do_test_requests("/fault", "GET", 500, 0, 1, request_method="GET", local_operation="GET /fault")
 
     def test_success_post(self) -> None:
-        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success/postmethod")
+        self.do_test_requests("/success/postmethod", "POST", 200, 0, 0, request_method="POST", local_operation="POST /success")
     def test_error_post(self) -> None:
-        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0, request_method="POST", local_operation="POST /error/postmethod")
+        self.do_test_requests("/error/postmethod", "POST", 400, 1, 0, request_method="POST", local_operation="POST /error")
     def test_fault_post(self) -> None:
-        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1, request_method="POST", local_operation="POST /fault/postmethod")
+        self.do_test_requests("/fault/postmethod", "POST", 500, 0, 1, request_method="POST", local_operation="POST /fault")
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
