@@ -69,6 +69,18 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: ./artifacts/linux/arm64-musl
 
+      - name: Download bash installation script
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-otel-dotnet-install.sh
+          path: ./installationScripts
+      
+      - name: Download psm1 installation script
+        uses: actions/download-artifact@v3
+        with:
+          name: AWS.Otel.DotNet.Auto.psm1
+          path: ./installationScripts
+
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -83,6 +95,8 @@ jobs:
           base=$(basename "$file")
           aws s3 cp "$file" "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/$base"
           done
+          aws s3 cp ./installationScripts/aws-otel-dotnet-install.sh "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/aws-otel-dotnet-install.sh"
+          aws s3 cp ./installationScripts/AWS.Otel.DotNet.Auto.psm1 "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/AWS.Otel.DotNet.Auto.psm1"
 
       # Publish to GitHub releases
       - name: Create GH release
@@ -108,6 +122,12 @@ jobs:
             $base \
             --clobber
           done
+          gh release upload "v${{ github.event.inputs.version }}" \
+            ./installationScripts/aws-otel-dotnet-install.sh \
+            --clobber
+          gh release upload "v${{ github.event.inputs.version }}" \
+            ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
+            --clobber
 
   release-image:
     # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR

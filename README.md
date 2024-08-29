@@ -12,6 +12,10 @@ apply some small configuration changes, and our OpenTelemetry friends takes care
 1. Having one of [VSCode](https://code.visualstudio.com/docs/languages/dotnet), Visual Studio, or ReSharper installed
 2. Having dotnet cli installed.
 
+## Important
+
+Although this repository is released under the Apache-2.0 license, some Dockerfiles uses Windows as a base image, which is licensed under the following terms https://learn.microsoft.com/en-us/virtualization/windowscontainers/images-eula.
+
 ## Building the Project
 
 ### Building Locally

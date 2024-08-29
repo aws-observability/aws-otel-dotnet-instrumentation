@@ -20,5 +20,5 @@ check_if_step_failed_and_exit "There was an error moving OpenTelemetryDistributi
 docker build -t aspnetapp .
 check_if_step_failed_and_exit "There was an error building the docker container, exiting"
 
-docker-compose up 
+docker compose up 
 check_if_step_failed_and_exit "There was an error starting up the sample app, exiting"

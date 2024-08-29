@@ -98,8 +98,10 @@ jobs:
         run: |
           DEV_VERSION="${{ github.event.inputs.version }}.dev0"
           sed -i "s/public static string version = \".*\";/public static string version = \"${DEV_VERSION}\";/" src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
+          sed -i "s/public static string version = \".*\";/public static string version = \"${VERSION}\";/" build/Version.cs
           VERSION="${{ github.event.inputs.version }}"
           git add src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
+          git add build/Build.InstallationScripts.cs
           git commit -m "Prepare main for next development cycle: Update version to $DEV_VERSION"
           git push --set-upstream origin "prepare-main-for-next-dev-cycle-${VERSION}"
 

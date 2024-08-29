@@ -53,6 +53,20 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+      
+      - name: Upload bash installation script
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v3
+        with:
+          name: aws-otel-dotnet-install.sh
+          path: InstallationScripts/aws-otel-dotnet-install.sh
+
+      - name: Upload psm1 installation script
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v3
+        with:
+          name: AWS.Otel.DotNet.Auto.psm1
+          path: InstallationScripts/AWS.Otel.DotNet.Auto.psm1
 
       - name: Upload Artifact on Windows
         if: runner.os == 'Windows'

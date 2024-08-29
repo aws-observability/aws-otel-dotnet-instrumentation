@@ -144,7 +144,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       SUFIX="dll"
       ;;
     *)
-      echo "BUG: Invalid OS_TYPE. Submit an issue in https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation." >&2
+      echo "BUG: Invalid OS_TYPE. Submit an issue in https://github.com/aws-observability/aws-otel-dotnet-instrumentation." >&2
       return 1
       ;;
   esac
@@ -170,6 +170,16 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
   else
     export CORECLR_PROFILER_PATH="$OTEL_DOTNET_AUTO_HOME/$DOTNET_RUNTIME_ID/OpenTelemetry.AutoInstrumentation.Native.$SUFIX"
   fi
+
+  # AWS OTEL DOTNET 
+  export OTEL_DOTNET_AUTO_PLUGINS="AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"
+  export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+  export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316"
+  export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics"
+  export OTEL_METRICS_EXPORTER="none"
+  export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
+  export OTEL_TRACES_SAMPLER="xray"
+  export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000"
 fi
 
 exec "$@"

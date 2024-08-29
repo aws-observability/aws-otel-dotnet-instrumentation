@@ -91,6 +91,7 @@ jobs:
       - name: Update version in file
         run: |
           sed -i "s/public static string version = \".*\";/public static string version = \"${VERSION}\";/" src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
+          sed -i "s/public static string version = \".*\";/public static string version = \"${VERSION}\";/" build/Build.InstallationScripts.cs
           git commit -am "Update version to ${VERSION}"
           git push origin "v${VERSION}_release"
 

@@ -50,12 +50,12 @@ test -z "$OTEL_DOTNET_AUTO_HOME" && OTEL_DOTNET_AUTO_HOME="$HOME/.otel-dotnet-au
 test -z "$TMPDIR" && TMPDIR="$(mktemp -d)"
 test -z "$VERSION" && VERSION="v{{VERSION}}"
 
-RELEASES_URL="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases"
-ARCHIVE="opentelemetry-dotnet-instrumentation-$OS_TYPE.zip"
+RELEASES_URL="https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases"
+ARCHIVE="aws-distro-opentelemetry-dotnet-instrumentation-$OS_TYPE.zip"
 
 # In case of Linux, use architecture in the download path
 if echo "$OS_TYPE" | grep -q "linux"; then
-  ARCHIVE="opentelemetry-dotnet-instrumentation-$OS_TYPE-$ARCHITECTURE.zip"
+  ARCHIVE="aws-distro-opentelemetry-dotnet-instrumentation-$OS_TYPE-$ARCHITECTURE.zip"
 fi
 
 TMPFILE="$TMPDIR/$ARCHIVE"
