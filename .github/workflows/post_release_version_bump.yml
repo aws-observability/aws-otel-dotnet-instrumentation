@@ -98,7 +98,7 @@ jobs:
         run: |
           DEV_VERSION="${{ github.event.inputs.version }}.dev0"
           sed -i "s/public static string version = \".*\";/public static string version = \"${DEV_VERSION}\";/" src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
-          sed -i "s/public static string version = \".*\";/public static string version = \"${VERSION}\";/" build/Version.cs
+          sed -i "s/private readonly string version = \".*\";/private readonly string version = \"${DEV_VERSION}\";/" build/Build.InstallationScripts.cs
           VERSION="${{ github.event.inputs.version }}"
           git add src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           git add build/Build.InstallationScripts.cs
