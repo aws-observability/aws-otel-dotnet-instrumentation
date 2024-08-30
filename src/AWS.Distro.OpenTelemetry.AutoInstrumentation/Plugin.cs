@@ -35,6 +35,12 @@ public class Plugin
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
 
+    private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
+        {
+            { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
+            { "telemetry.distro.version", Version.version + "-aws" },
+        };
+
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
     /// </summary>public void Initializing()
@@ -93,7 +99,7 @@ public class Plugin
 
             MeterProvider provider = Sdk.CreateMeterProviderBuilder()
             .AddReader(metricReader)
-            .ConfigureResource(builder => this.GetResourceBuilder())
+            .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder))
             .AddMeter("AwsSpanMetricsProcessor")
             .AddView(instrument =>
             {
@@ -106,6 +112,7 @@ public class Plugin
             .Build();
 
             Resource resource = provider.GetResource();
+            resource.Attributes.ToList().ForEach(attribute => Console.WriteLine(attribute.Key + " " + attribute.Value));
             BaseProcessor<Activity> spanMetricsProcessor = AwsSpanMetricsProcessorBuilder.Create(resource).Build();
             tracerProvider.AddProcessor(spanMetricsProcessor);
         }
@@ -120,7 +127,8 @@ public class Plugin
     {
         if (this.IsApplicationSignalsEnabled())
         {
-            var resource = this.GetResourceBuilder().Build();
+            var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
+            var resource = resourceBuilder.Build();
             var processor = AwsMetricAttributesSpanProcessorBuilder.Create(resource).Build();
             builder.AddProcessor(processor);
         }
@@ -140,7 +148,8 @@ public class Plugin
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            var resource = this.GetResourceBuilder().Build();
+            var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
+            var resource = resourceBuilder.Build();
             Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler(resource));
             builder.SetSampler(alwaysRecordSampler);
         }
@@ -156,13 +165,7 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public ResourceBuilder ConfigureResource(ResourceBuilder builder)
     {
-        Dictionary<string, object> attributes = new Dictionary<string, object>
-        {
-            { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
-            { "telemetry.auto.version", Version.version + "-aws" },
-        };
-        builder
-                .AddAttributes(attributes);
+        builder.AddAttributes(DistroAttributes);
         return builder;
     }
 
@@ -188,21 +191,22 @@ public class Plugin
         return System.Environment.GetEnvironmentVariable(ApplicationSignalsEnabledConfig) == "true";
     }
 
-    private ResourceBuilder GetResourceBuilder()
+    private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder)
     {
+        builder.AddAttributes(DistroAttributes);
+
         // ResourceDetectors are enabled by default. Adding config to be able to disable during local testing
         var resourceDetectorsEnabled = System.Environment.GetEnvironmentVariable(ResourceDetectorEnableConfig) ?? "true";
 
         if (resourceDetectorsEnabled != "true")
         {
-            return ResourceBuilder.CreateDefault();
+            return builder;
         }
 
         // The current version of the AWS Resource Detectors doesn't build the EKS and ECS resource detectors
         // for NETFRAMEWORK. More details are found here: https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/1177#discussion_r1193329666
         // We need to work with upstream to support these detectors for windows.
-        var builder = ResourceBuilder.CreateDefault()
-            .AddDetector(new AWSEC2ResourceDetector());
+        builder.AddDetector(new AWSEC2ResourceDetector());
 #if !NETFRAMEWORK
         builder
             .AddDetector(new AWSEKSResourceDetector())
