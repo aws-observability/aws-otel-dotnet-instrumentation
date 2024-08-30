@@ -112,7 +112,6 @@ public class Plugin
             .Build();
 
             Resource resource = provider.GetResource();
-            resource.Attributes.ToList().ForEach(attribute => Console.WriteLine(attribute.Key + " " + attribute.Value));
             BaseProcessor<Activity> spanMetricsProcessor = AwsSpanMetricsProcessorBuilder.Create(resource).Build();
             tracerProvider.AddProcessor(spanMetricsProcessor);
         }
