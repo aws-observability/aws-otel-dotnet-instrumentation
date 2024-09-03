@@ -75,7 +75,7 @@ jobs:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ secrets.E2E_TEST_ROLE_ARN }}
           aws-region: ${{ inputs.aws-region }}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4.1.7
         if: inputs.caller-workflow-name == 'main-build'
         with:
           name: ${{ env.ADOT_WHEEL_NAME }}
