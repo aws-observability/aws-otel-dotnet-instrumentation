@@ -32,7 +32,7 @@ jobs:
       caller-workflow-name: 'release_build_workflow'
 
   release:
-    needs: [build-and-upload]
+    needs: [build-and-upload, build-release-nuget]
     environment: Release
     runs-on: ubuntu-latest
     steps:
@@ -54,13 +54,13 @@ jobs:
       - name: Download Windows Artifact
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
 
       - name: Download Linux X64 MUSL Artifact
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
           path: ./artifacts/linux/x64-musl
       
       - name: Download Linux arm64 MUSL Artifact
@@ -80,6 +80,12 @@ jobs:
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: ./installationScripts
+      
+      - name: Download nuget package
+        uses: actions/download-artifact@v3
+        with:
+          name: nuget-packages.zip
+          path: ./artifacts/nuget
 
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
@@ -155,7 +161,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-x64-musl
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
           path: ./artifacts/linux/x64-musl
 
       - name: Download Linux arm64 Artifact
@@ -185,7 +191,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/download-artifact@v3
         with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
 
       - name: Unzip Windows Artifact
@@ -299,12 +305,11 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon public ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm46 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
 
   build-release-nuget:
-    needs: [release]
     runs-on: windows-latest
 
     strategy:
@@ -315,13 +320,12 @@ jobs:
         uses: actions/checkout@v2
         
       - name: Install dependencies
-        run: dotnet restore .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
+        run: dotnet restore .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation /p:_IsPacking=true
 
       - name: Build solution
         run: >
           dotnet build .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
           /p:Configuration=Release
-          /p:_IsPacking=true
           --no-restore
 
       - name: Assume signer role
@@ -351,7 +355,7 @@ jobs:
       - name: Upload nugets to this GitHub Action run as an artifact
         uses: actions/upload-artifact@v3
         with:
-          name: nuget-packages
+          name: nuget-packages.zip
           path: Deployment/nuget-packages/
 
       - name: Assume nuget role
