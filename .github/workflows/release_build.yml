@@ -299,7 +299,7 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon public ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm46 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
 
