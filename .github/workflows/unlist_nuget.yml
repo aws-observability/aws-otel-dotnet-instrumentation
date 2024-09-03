@@ -6,6 +6,9 @@ on:
         description: The version of the Distro to Unlist, e.g., 1.2.0
         required: true
 
+env:
+  AWS_SIGNING_KEY_REGION: us-west-2
+
 permissions:
   id-token: write
   contents: write
