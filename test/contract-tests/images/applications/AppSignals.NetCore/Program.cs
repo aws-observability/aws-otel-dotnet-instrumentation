@@ -56,4 +56,11 @@ app.MapPost("/fault/postmethod", async () =>
     .WithName("FaultPost")
     .WithOpenApi();
 
+app.MapGet("/outgoing-http-call", async () =>
+    {
+        return Results.Ok();
+    })
+    .WithName("outgoing-http-call")
+    .WithOpenApi();
+
 app.Run();
