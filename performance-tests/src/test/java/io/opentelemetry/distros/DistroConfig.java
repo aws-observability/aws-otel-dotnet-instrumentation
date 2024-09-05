@@ -1,0 +1,104 @@
+/*
+ * Copyright The OpenTelemetry Authors
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ */
+
+package io.opentelemetry.distros;
+
+import java.util.Collections;
+import java.util.Map;
+
+public enum DistroConfig {
+  // NONE("none", "no distro at all", false, Collections.EMPTY_MAP),
+
+  NONE("none", "no distro at all", false, Map.of("CORECLR_ENABLE_PROFILING", "0", "DOTNET_STARTUP_HOOKS", "")),
+  APPLICATION_SIGNALS_DISABLED(
+      "application_signals_disabled",
+      "ADOT distro with Application Signals disabled",
+      true,
+      Map.of("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "false", "OTEL_TRACES_SAMPLER", "xray")),
+  APPLICATION_SIGNALS_NO_TRACES(
+      "application_signals_no_traces",
+      "ADOT distro with Application Signals enabled and no tracing",
+      true,
+      Map.of(
+          "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+          "true",
+          "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+          "http://collector:4317",
+          "OTEL_TRACES_SAMPLER",
+          "always_off")),
+  APPLICATION_SIGNALS_TRACES(
+      "application_signals_traces",
+      "ADOT distro with Application Signals enabled and tracing",
+      true,
+      Map.of(
+          "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+          "true",
+          "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+          "http://collector:4317",
+          "OTEL_TRACES_SAMPLER",
+          "xray")),
+  APPLICATION_SIGNALS_TRACES_ALWAYS_ON(
+    "application_signals_traces_always_on",
+    "ADOT distro with Application Signals enabled and tracing always on",
+    true,
+    Map.of(
+        "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+        "true",
+        "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+        "http://collector:4317",
+        "OTEL_TRACES_SAMPLER",
+        "always_on"));
+
+  // APPLICATION_SIGNALS_TRACES_ALWAYS_ON(
+  //   "application_signals_traces_always_on",
+  //   "ADOT distro with Application Signals enabled and tracing always on",
+  //   true,
+  //   Map.of(
+  //       "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+  //       "true",
+  //       "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+  //       "http://collector:4317",
+  //       "OTEL_TRACES_SAMPLER",
+  //       "always_on"));
+
+  // APPLICATION_SIGNALS_DISABLED(
+  //     "application_signals_disabled",
+  //     "ADOT distro with Application Signals disabled",
+  //     true,
+  //     Map.of("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "false", "OTEL_TRACES_SAMPLER", "xray"));
+
+  private final String name;
+  private final String description;
+  private final boolean doInstrument;
+  private final Map<String, String> additionalEnvVars;
+
+  DistroConfig(
+      String name,
+      String description,
+      boolean doInstrument,
+      Map<String, String> additionalEnvVars) {
+    this.name = name;
+    this.description = description;
+    this.doInstrument = doInstrument;
+    this.additionalEnvVars = additionalEnvVars;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public String getDescription() {
+    return description;
+  }
+
+  public boolean doInstrument() {
+    return doInstrument;
+  }
+
+  public Map<String, String> getAdditionalEnvVars() {
+    return Collections.unmodifiableMap(additionalEnvVars);
+  }
+}

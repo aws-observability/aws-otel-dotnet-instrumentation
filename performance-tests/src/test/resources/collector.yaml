@@ -1,0 +1,34 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+
+exporters:
+  logging/logging_debug:
+    loglevel: debug
+  logging/logging_info:
+    loglevel: info
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging/logging_info]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging/logging_info]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging/logging_info]
+
+  extensions: [health_check]
