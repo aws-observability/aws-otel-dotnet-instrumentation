@@ -12,15 +12,84 @@ import java.util.Map;
 public enum DistroConfig {
   // NONE("none", "no distro at all", false, Collections.EMPTY_MAP),
 
-  NONE("none", "no distro at all", false, Map.of("CORECLR_ENABLE_PROFILING", "0", "DOTNET_STARTUP_HOOKS", "")),
+  NONE(
+      "none", 
+      "no distro at all", 
+      false, 
+      Map.of(
+          "CORECLR_ENABLE_PROFILING", 
+          "0", 
+          "DOTNET_STARTUP_HOOKS", 
+          "")),
+
+  OTEL_DOTNET(
+      "otel_dotnet",
+      "Vanilla OpenTelemetry .NET with 5% traceidratio",
+      true,
+      Map.of(
+          "CORECLR_PROFILER_PATH",
+          "/opt/otel-dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so",
+          "DOTNET_ADDITIONAL_DEPS",
+          "/opt/otel-dotnet/AdditionalDeps",
+          "DOTNET_SHARED_STORE",
+          "/opt/otel-dotnet/store",
+          "DOTNET_STARTUP_HOOKS",
+          "/opt/otel-dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll",
+          "OTEL_DOTNET_AUTO_HOME",
+          "/opt/otel-dotnet/",
+          "OTEL_DOTNET_AUTO_PLUGINS",
+          "",
+          // "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED",
+          // "true",
+          // "OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED",
+          // "true",
+          "OTEL_TRACES_SAMPLER",
+          "traceidratio",
+          "OTEL_TRACES_SAMPLER_ARG",
+          "0.05")),
+
   APPLICATION_SIGNALS_DISABLED(
-      "application_signals_disabled",
-      "ADOT distro with Application Signals disabled",
-      true,
-      Map.of("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "false", "OTEL_TRACES_SAMPLER", "xray")),
-  APPLICATION_SIGNALS_NO_TRACES(
-      "application_signals_no_traces",
-      "ADOT distro with Application Signals enabled and no tracing",
+        "application_signals_disabled",
+        "ADOT distro with Application Signals disabled and 5% traceidratio",
+        true,
+        Map.of(
+            "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+            "false",
+          // "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED",
+          // "true",
+          // "OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED",
+          // "true",
+            "OTEL_TRACES_SAMPLER",
+            "traceidratio",
+            "OTEL_TRACES_SAMPLER_ARG",
+            "0.05")),
+
+  // APPLICATION_SIGNALS_NO_TRACES(
+  //     "application_signals_no_traces",
+  //     "ADOT distro with Application Signals enabled and no tracing",
+  //     true,
+  //     Map.of(
+  //         "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+  //         "true",
+  //         "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+  //         "http://collector:4317",
+  //         "OTEL_TRACES_SAMPLER",
+  //         "always_off")),
+  // APPLICATION_SIGNALS_TRACES(
+  //     "application_signals_traces",
+  //     "ADOT distro with Application Signals enabled and tracing",
+  //     true,
+  //     Map.of(
+  //         "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+  //         "true",
+  //         "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
+  //         "http://collector:4317",
+  //         "OTEL_TRACES_SAMPLER",
+  //         "xray")),
+
+    APPLICATION_SIGNALS_TRACES_5(
+      "application_signals_traces_5",
+      "ADOT distro with Application Signals enabled and tracing of 5% traceidratio",
       true,
       Map.of(
           "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
@@ -28,20 +97,12 @@ public enum DistroConfig {
           "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
           "http://collector:4317",
           "OTEL_TRACES_SAMPLER",
-          "always_off")),
-  APPLICATION_SIGNALS_TRACES(
-      "application_signals_traces",
-      "ADOT distro with Application Signals enabled and tracing",
-      true,
-      Map.of(
-          "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
-          "true",
-          "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
-          "http://collector:4317",
-          "OTEL_TRACES_SAMPLER",
-          "xray")),
-  APPLICATION_SIGNALS_TRACES_ALWAYS_ON(
-    "application_signals_traces_always_on",
+          "traceidratio",
+          "OTEL_TRACES_SAMPLER_ARG",
+          "0.05")),
+
+  APPLICATION_SIGNALS_TRACES_100(
+    "application_signals_traces_100",
     "ADOT distro with Application Signals enabled and tracing always on",
     true,
     Map.of(
@@ -52,23 +113,6 @@ public enum DistroConfig {
         "OTEL_TRACES_SAMPLER",
         "always_on"));
 
-  // APPLICATION_SIGNALS_TRACES_ALWAYS_ON(
-  //   "application_signals_traces_always_on",
-  //   "ADOT distro with Application Signals enabled and tracing always on",
-  //   true,
-  //   Map.of(
-  //       "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
-  //       "true",
-  //       "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT",
-  //       "http://collector:4317",
-  //       "OTEL_TRACES_SAMPLER",
-  //       "always_on"));
-
-  // APPLICATION_SIGNALS_DISABLED(
-  //     "application_signals_disabled",
-  //     "ADOT distro with Application Signals disabled",
-  //     true,
-  //     Map.of("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "false", "OTEL_TRACES_SAMPLER", "xray"));
 
   private final String name;
   private final String description;

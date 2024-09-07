@@ -12,26 +12,36 @@ import java.util.stream.Stream;
 
 /** Defines all test configurations */
 public enum Configs {
-  // ALL_100_TPS(
+  ALL_100_TPS(
+      TestConfig.builder()
+          .name("all-100-tps")
+          .description("Compares all DistroConfigs (100TPS test)")
+          .withDistroConfigs(DistroConfig.values())
+          .warmupSeconds(10)
+          .maxRequestRate(100)
+          .duration(System.getenv("DURATION"))
+          .concurrentConnections(System.getenv("CONCURRENCY"))
+          .build()),
+  // ALL_600_TPS(
   //     TestConfig.builder()
-  //         .name("all-100-tps")
-  //         .description("Compares all DistroConfigs (100TPS test)")
+  //         .name("all-600-tps")
+  //         .description("Compares all DistroConfigs (600TPS test)")
   //         .withDistroConfigs(DistroConfig.values())
   //         .warmupSeconds(10)
-  //         .maxRequestRate(100)
+  //         .maxRequestRate(600)
   //         .duration(System.getenv("DURATION"))
   //         .concurrentConnections(System.getenv("CONCURRENCY"))
   //         .build()),
-  // ALL_800_TPS(
-  //     TestConfig.builder()
-  //         .name("all-800-tps")
-  //         .description("Compares all DistroConfigs (800TPS test)")
-  //         .withDistroConfigs(DistroConfig.values())
-  //         .warmupSeconds(10)
-  //         .maxRequestRate(800)
-  //         .duration(System.getenv("DURATION"))
-  //         .concurrentConnections(System.getenv("CONCURRENCY"))
-  //         .build());
+  ALL_800_TPS(
+      TestConfig.builder()
+          .name("all-800-tps")
+          .description("Compares all DistroConfigs (800TPS test)")
+          .withDistroConfigs(DistroConfig.values())
+          .warmupSeconds(10)
+          .maxRequestRate(800)
+          .duration(System.getenv("DURATION"))
+          .concurrentConnections(System.getenv("CONCURRENCY"))
+          .build());
 
   // ALL_100_TPS(
   //   TestConfig.builder()
@@ -44,16 +54,16 @@ public enum Configs {
   //       .concurrentConnections(System.getenv("CONCURRENCY"))
   //       .build());
 
-    ALL_400_TPS(
-      TestConfig.builder()
-          .name("all-400-tps")
-          .description("Compares all DistroConfigs (400TPS test)")
-          .withDistroConfigs(DistroConfig.values())
-          .warmupSeconds(10)
-          .maxRequestRate(400)
-          .duration(System.getenv("DURATION"))
-          .concurrentConnections(System.getenv("CONCURRENCY"))
-          .build());
+    // ALL_400_TPS(
+    //   TestConfig.builder()
+    //       .name("all-400-tps")
+    //       .description("Compares all DistroConfigs (400TPS test)")
+    //       .withDistroConfigs(DistroConfig.values())
+    //       .warmupSeconds(10)
+    //       .maxRequestRate(400)
+    //       .duration(System.getenv("DURATION"))
+    //       .concurrentConnections(System.getenv("CONCURRENCY"))
+    //       .build());
 
   // ALL_600_TPS(
   //     TestConfig.builder()
