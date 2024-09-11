@@ -43,6 +43,7 @@ jobs:
   dotnet-ec2-default-test:
     needs: [ upload-main-build ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
     with:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
