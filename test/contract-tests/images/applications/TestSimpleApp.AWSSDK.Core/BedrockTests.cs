@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using Amazon.Bedrock;
 using Amazon.Bedrock.Model;
@@ -10,12 +11,26 @@ using Amazon.BedrockAgentRuntime.Model;
 
 namespace TestSimpleApp.AWSSDK.Core;
 
-public class BedrockTests(ILogger<BedrockTests> logger) : ContractTest(logger)
+public class BedrockTests(
+    IAmazonBedrock bedrock,
+    ILogger<BedrockTests> logger) :
+    ContractTest(logger)
 {
-    public Task GetGuardrail()
+    public Task<GetGuardrailResponse> GetGuardrail()
     {
-        Console.Log("GetGuardrail");
-        return Task.CompletedTask;
+        return bedrock.GetGuardrailAsync(new GetGuardrailRequest
+        {
+            GuardrailIdentifier = "test-guardrail",
+        });
+    }
+
+    public GetGuardrailResponse GetGuardrailResponse()
+    {
+        return new GetGuardrailResponse
+        {
+            HttpStatusCode = HttpStatusCode.OK,
+            GuardrailId = "test-guardrail",
+        };
     }
 
     protected override Task CreateFault(CancellationToken cancellationToken)

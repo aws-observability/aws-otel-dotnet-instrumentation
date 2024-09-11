@@ -17,7 +17,7 @@ builder.Services
     .AddSingleton<IAmazonS3>(provider => new AmazonS3Client(new AmazonS3Config { ServiceURL = "http://localstack:4566", ForcePathStyle = true }))
     .AddSingleton<IAmazonSQS>(provider => new AmazonSQSClient(new AmazonSQSConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonKinesis>(provider => new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
-    // .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localstack:4566" }))
+    .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localhost:8080" }))
     // fault client
     .AddKeyedSingleton<IAmazonDynamoDB>("fault-ddb", new AmazonDynamoDBClient(AmazonClientConfigHelper.CreateConfig<AmazonDynamoDBConfig>(true)))
     .AddKeyedSingleton<IAmazonS3>("fault-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>(true)))
@@ -31,8 +31,8 @@ builder.Services
     .AddSingleton<S3Tests>()
     .AddSingleton<DynamoDBTests>()
     .AddSingleton<SQSTests>()
-    .AddSingleton<KinesisTests>();
-    // .AddSingleton<BedrockTests>();
+    .AddSingleton<KinesisTests>()
+    .AddSingleton<BedrockTests>();
 
 var app = builder.Build();
 
@@ -117,5 +117,7 @@ app.MapGet("kinesis/error", (KinesisTests kinesis) => kinesis.Error()).WithName(
 app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrail())
     .WithName("get-guardrail")
     .WithOpenApi();
+
+app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
 
 app.Run();

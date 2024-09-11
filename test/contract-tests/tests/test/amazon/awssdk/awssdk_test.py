@@ -27,7 +27,7 @@ _logger.setLevel(INFO)
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
-_AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail_id"
+_AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent_id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base_id"
 _AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source_id"
@@ -299,22 +299,22 @@ class AWSSdkTest(ContractTestBase):
     #         span_name="Kinesis.CreateStream",
     #     )
 
-    # def test_bedrock_get_guardrail(self):
-    #     self.do_test_requests(
-    #         "bedrock/getguardrail/get-guardrail",
-    #         "GET",
-    #         200,
-    #         0,
-    #         0,
-    #         remote_service="AWS::Bedrock",
-    #         remote_operation="GetGuardrail",
-    #         remote_resource_type="AWS::Bedrock::Guardrail",
-    #         remote_resource_identifier="bt4o77i015cu",
-    #         request_specific_attributes={
-    #             _AWS_BEDROCK_GUARDRAIL_ID: "bt4o77i015cu",
-    #         },
-    #         span_name="Bedrock.GetGuardrail",
-    #     )
+    def test_bedrock_get_guardrail(self):
+        self.do_test_requests(
+            "bedrock/getguardrail/get-guardrail",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::Bedrock",
+            remote_operation="GetGuardrail",
+            remote_resource_type="AWS::Bedrock::Guardrail",
+            remote_resource_identifier="test-guardrail",
+            request_specific_attributes={
+                _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
+            },
+            span_name="Bedrock.GetGuardrail",
+        )
 
     # def test_bedrock_runtime_invoke_model(self):
     #     self.do_test_requests(

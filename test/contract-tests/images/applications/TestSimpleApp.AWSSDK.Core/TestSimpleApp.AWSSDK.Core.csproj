@@ -13,7 +13,7 @@
         <PackageReference Include="AWSSDK.SQS" Version="4.0.0-preview" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-        <PackageReference Include="AWSSDK.Bedrock" Version="3.7.303.3"/>
+        <PackageReference Include="AWSSDK.Bedrock" Version="4.0.0-preview"/>
         <PackageReference Include="AWSSDK.BedrockRuntime" Version="3.7.303.3"/>
         <PackageReference Include="AWSSDK.BedrockAgent" Version="3.7.303.3"/>
         <PackageReference Include="AWSSDK.BedrockAgentRuntime" Version="3.7.303.3"/>
