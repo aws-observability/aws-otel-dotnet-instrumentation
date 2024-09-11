@@ -29,7 +29,8 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.E2E_IAD_TEST_ACCOUNT_ARN }}
+          role-to-assume: ${{ secrets.STAING_ARTIFACTS_ACCESS_ROLE }}
+          role-external-id: ApplicationSignalsDotnet
           aws-region: us-east-1
 
       - uses: actions/download-artifact@v3
