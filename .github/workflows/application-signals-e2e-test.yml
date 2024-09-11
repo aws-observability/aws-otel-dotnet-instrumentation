@@ -1,0 +1,49 @@
+## Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+## SPDX-License-Identifier: Apache-2.0
+
+# This is a reusable workflow for running the E2E test for Application Signals.
+# It is meant to be called from another workflow.
+# Read more about reusable workflows: https://docs.github.com/en/actions/using-workflows/reusing-workflows#overview
+name: E2E Testing
+on:
+  workflow_call:
+    inputs:
+      ec2-default-image-name:
+        required: false
+        type: string
+        default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ inputs.aws-region }}'
+  cancel-in-progress: false
+
+
+jobs:
+  upload-main-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.E2E_IAD_TEST_ACCOUNT_ARN }}
+          aws-region: us-east-1
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.ec2-default-image-name }}
+
+      - name: Upload main-build files to s3
+        run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+
+  java-ec2-default-e2e-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
