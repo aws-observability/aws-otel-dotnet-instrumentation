@@ -23,6 +23,36 @@ concurrency:
 
 
 jobs:
+  build-ecr-staging-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.ec2-default-image-name }}
+          path: ./artifacts/linux/x64
+          
+      - name: Unzip Linux Artifact
+        run: |
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+          
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Build And Push Linux container
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:staging-linux-amd64-${{github.sha}} -f ./Dockerfile.linux .
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:staging-linux-amd64-${{github.sha}}
+      
   upload-main-build:
     runs-on: ubuntu-latest
     steps:
@@ -48,3 +78,11 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      
+  dotnet-eks-default-test:
+    needs: [ build-ecr-staging-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+    with:
+      adot-image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:staging-linux-amd64-${{github.sha}}
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
