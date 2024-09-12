@@ -28,6 +28,8 @@ env:
 jobs:
   build-ecr-staging-image:
     runs-on: ubuntu-latest
+    outputs: 
+      staging-image: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:staging-linux-amd64-${{github.sha}}
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v3
@@ -87,6 +89,6 @@ jobs:
     needs: [ build-ecr-staging-image ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     with:
-      adot-image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:staging-linux-amd64-${{github.sha}}
+      adot-image-name: ${{ needs.build-ecr-staging-image.outputs.staging-image }}
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
