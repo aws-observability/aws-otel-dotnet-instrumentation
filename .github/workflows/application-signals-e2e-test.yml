@@ -21,6 +21,9 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ inputs.aws-region }}'
   cancel-in-progress: false
 
+env:
+  RELEASE_PRIVATE_REPOSITORY: ${{secrets.STAGING_ARTIFACTS_ACCESS_ACCOUNT}}.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging
+  RELEASE_PRIVATE_REGISTRY: ${{secrets.STAGING_ARTIFACTS_ACCESS_ACCOUNT}}.dkr.ecr.us-east-1.amazonaws.com
 
 jobs:
   build-ecr-staging-image:
@@ -39,7 +42,8 @@ jobs:
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          role-to-assume: ${{ secrets.STAING_ARTIFACTS_ACCESS_ROLE }}
+          role-external-id: ApplicationSignalsDotnet
           aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
 
       - name: Login to Amazon private ECR
