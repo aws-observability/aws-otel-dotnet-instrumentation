@@ -20,6 +20,7 @@ builder.Services
     .AddSingleton<IAmazonS3>(provider => new AmazonS3Client(new AmazonS3Config { ServiceURL = "http://localstack:4566", ForcePathStyle = true }))
     .AddSingleton<IAmazonSQS>(provider => new AmazonSQSClient(new AmazonSQSConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonKinesis>(provider => new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    // bedrock services are not supported by localstack, so we mock the API responses on the same server
     .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localhost:8080" }))
     .AddSingleton<IAmazonBedrockRuntime>(provider => new AmazonBedrockRuntimeClient(new AmazonBedrockRuntimeConfig { ServiceURL = "http://localhost:8080" }))
     .AddSingleton<IAmazonBedrockAgent>(provider => new AmazonBedrockAgentClient(new AmazonBedrockAgentConfig { ServiceURL = "http://localhost:8080" }))
@@ -148,6 +149,8 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
     .WithName("retrieve")
     .WithOpenApi();
 
+// reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,
+// we write our own responses with the necessary data to mimic the expected behavior of the Bedrock services.
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
 app.MapPost("model/test-model/invoke", (BedrockTests bedrock) => bedrock.InvokeModelResponse());
 app.MapGet("agents/test-agent", (BedrockTests bedrock) => bedrock.GetAgentResponse());

@@ -525,11 +525,11 @@ class AWSSdkTest(ContractTestBase):
             service_target_metric: Metric = target_metrics[1]
             # Test dependency metric
             dep_dp_list: List[ExponentialHistogramDataPoint] = dependency_target_metric.exponential_histogram.data_points
-            dep_dp_list_count: int = kwargs.get("dep_dp_count", 1)
+            dep_dp_list_count: int = kwargs.get("dp_count", 1)
             self.assertEqual(len(dep_dp_list), dep_dp_list_count)
             dependency_dp: ExponentialHistogramDataPoint = dep_dp_list[0]
             service_dp_list = service_target_metric.exponential_histogram.data_points
-            service_dp_list_count = kwargs.get("service_dp_count", 1)
+            service_dp_list_count = kwargs.get("dp_count", 1)
             self.assertEqual(len(service_dp_list), service_dp_list_count)
             service_dp: ExponentialHistogramDataPoint = service_dp_list[0]
             if len(service_dp_list[0].attributes) > len(dep_dp_list[0].attributes):
