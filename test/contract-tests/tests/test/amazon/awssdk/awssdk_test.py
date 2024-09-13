@@ -476,6 +476,8 @@ class AWSSdkTest(ContractTestBase):
         self.assertEqual(target_spans[0].name, kwargs.get("span_name"))
         self._assert_semantic_conventions_attributes(
             target_spans[0].attributes,
+            # For most cases, rpc_service is the same as the service name after "AWS::" prefix. Bedrock services are
+            # the only exception to this, so we pass the rpc_service explicitly in the test case.
             kwargs.get("rpc_service") if "rpc_service" in kwargs else kwargs.get("remote_service").split("::")[-1],
             kwargs.get("remote_service"),
             kwargs.get("remote_operation"),
@@ -518,7 +520,7 @@ class AWSSdkTest(ContractTestBase):
         for resource_scope_metric in resource_scope_metrics:
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
-        # for bedrock test cases, extra metric is generated from internally generated response. remove it here
+        # For bedrock test cases, extra metric is generated from internally generated response. remove it here
         self._filter_bedrock_metrics(target_metrics)
         if (len(target_metrics) == 2):
             dependency_target_metric: Metric = target_metrics[0]
