@@ -31,7 +31,6 @@ public class BedrockTests(
 
     public GetGuardrailResponse GetGuardrailResponse()
     {
-        Console.WriteLine("GetGuardrailResponse");
         return new GetGuardrailResponse
         {
             HttpStatusCode = HttpStatusCode.OK,
@@ -39,41 +38,18 @@ public class BedrockTests(
         };
     }
 
-    public async Task<InvokeModelResponse> InvokeModel()
+    public void InvokeModel()
     {
-        try
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
         {
-            var result = await bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
-            {
-                ModelId = "amazon.titan-text-express-v1",
-            });
-            Console.WriteLine("HTTPStatusCode:" + result.HttpStatusCode);
-            return result;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine("Exception occured in InvokeModel: " + e.Message);
-            throw;
-        }
+            ModelId = "test-model",
+        });
+        return;
     }
 
-    public object InvokeModelResponse()
+    public void InvokeModelResponse()
     {
-        Console.WriteLine("InvokeModelResponse");
-        try
-        {
-            var result = new
-            {
-                HttpStatusCode = HttpStatusCode.OK,
-            };
-            Console.WriteLine(result);
-            return result;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine("Exception occured in InvokeModelResponse: " + e.Message);
-            throw;
-        }
+        return;
     }
 
     public Task<GetAgentResponse> GetAgent()
@@ -125,22 +101,20 @@ public class BedrockTests(
         };
     }
 
-    public Task<InvokeAgentResponse> InvokeAgent()
+    public void InvokeAgent()
     {
-        return bedrockAgentRuntime.InvokeAgentAsync(new InvokeAgentRequest
+        bedrockAgentRuntime.InvokeAgentAsync(new InvokeAgentRequest
         {
             AgentId = "test-agent",
             AgentAliasId = "test-agent-alias",
             SessionId = "test-session",
         });
+        return;
     }
 
-    public InvokeAgentResponse InvokeAgentResponse()
+    public void InvokeAgentResponse()
     {
-        return new InvokeAgentResponse
-        {
-            HttpStatusCode = HttpStatusCode.OK,
-        };
+        return;
     }
 
     public Task<RetrieveResponse> Retrieve()
