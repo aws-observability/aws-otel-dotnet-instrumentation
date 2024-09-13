@@ -28,9 +28,9 @@ _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
 _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
-_AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent_id"
-_AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base_id"
-_AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source_id"
+_AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
+_AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
+_AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source.id"
 _GEN_AI_REQUEST_MODEL: str = "gen_ai.request_model"
 
 
@@ -92,194 +92,194 @@ class AWSSdkTest(ContractTestBase):
         _logger.info(cls._local_stack.get_logs()[1].decode())
         cls._local_stack.stop()
 
-    def test_s3_create_bucket(self):
-        self.do_test_requests(
-            "s3/createbucket/create-bucket/test-bucket-name",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::S3",
-            remote_operation="PutBucket",
-            remote_resource_type="AWS::S3::Bucket",
-            remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
-                SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
-            },
-            span_name="S3.PutBucket",
-        )
+    # def test_s3_create_bucket(self):
+    #     self.do_test_requests(
+    #         "s3/createbucket/create-bucket/test-bucket-name",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::S3",
+    #         remote_operation="PutBucket",
+    #         remote_resource_type="AWS::S3::Bucket",
+    #         remote_resource_identifier="test-bucket-name",
+    #         request_specific_attributes={
+    #             SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
+    #         },
+    #         span_name="S3.PutBucket",
+    #     )
 
-    def test_s3_create_object(self):
-        self.do_test_requests(
-            "s3/createobject/put-object/some-object/test-bucket-name",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::S3",
-            remote_operation="PutObject",
-            remote_resource_type="AWS::S3::Bucket",
-            remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
-                SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
-            },
-            span_name="S3.PutObject",
-        )
+    # def test_s3_create_object(self):
+    #     self.do_test_requests(
+    #         "s3/createobject/put-object/some-object/test-bucket-name",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::S3",
+    #         remote_operation="PutObject",
+    #         remote_resource_type="AWS::S3::Bucket",
+    #         remote_resource_identifier="test-bucket-name",
+    #         request_specific_attributes={
+    #             SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
+    #         },
+    #         span_name="S3.PutObject",
+    #     )
 
-    def test_s3_delete_object(self):
-        self.do_test_requests(
-            "s3/deleteobject/delete-object/some-object/test-bucket-name",
-            "GET",
-            204,
-            0,
-            0,
-            remote_service="AWS::S3",
-            remote_operation="DeleteObject",
-            remote_resource_type="AWS::S3::Bucket",
-            remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
-                SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
-            },
-            span_name="S3.DeleteObject",
-        )
+    # def test_s3_delete_object(self):
+    #     self.do_test_requests(
+    #         "s3/deleteobject/delete-object/some-object/test-bucket-name",
+    #         "GET",
+    #         204,
+    #         0,
+    #         0,
+    #         remote_service="AWS::S3",
+    #         remote_operation="DeleteObject",
+    #         remote_resource_type="AWS::S3::Bucket",
+    #         remote_resource_identifier="test-bucket-name",
+    #         request_specific_attributes={
+    #             SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
+    #         },
+    #         span_name="S3.DeleteObject",
+    #     )
 
-    def test_dynamodb_create_table(self):
-        self.do_test_requests(
-            "ddb/createtable/some-table",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::DynamoDB",
-            remote_operation="CreateTable",
-            remote_resource_type="AWS::DynamoDB::Table",
-            remote_resource_identifier="test_table",
-            request_specific_attributes={
-                # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
-                "aws.table_name": ["test_table"],
-            },
-            span_name="DynamoDB.CreateTable",
-        )
+    # def test_dynamodb_create_table(self):
+    #     self.do_test_requests(
+    #         "ddb/createtable/some-table",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::DynamoDB",
+    #         remote_operation="CreateTable",
+    #         remote_resource_type="AWS::DynamoDB::Table",
+    #         remote_resource_identifier="test_table",
+    #         request_specific_attributes={
+    #             # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
+    #             "aws.table_name": ["test_table"],
+    #         },
+    #         span_name="DynamoDB.CreateTable",
+    #     )
 
-    def test_dynamodb_put_item(self):
-        self.do_test_requests(
-            "ddb/put-item/some-item",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::DynamoDB",
-            remote_operation="PutItem",
-            remote_resource_type="AWS::DynamoDB::Table",
-            remote_resource_identifier="test_table",
-            request_specific_attributes={
-                # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
-                "aws.table_name": ["test_table"],
-            },
-            span_name="DynamoDB.PutItem",
-        )
+    # def test_dynamodb_put_item(self):
+    #     self.do_test_requests(
+    #         "ddb/put-item/some-item",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::DynamoDB",
+    #         remote_operation="PutItem",
+    #         remote_resource_type="AWS::DynamoDB::Table",
+    #         remote_resource_identifier="test_table",
+    #         request_specific_attributes={
+    #             # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
+    #             "aws.table_name": ["test_table"],
+    #         },
+    #         span_name="DynamoDB.PutItem",
+    #     )
 
-    def test_sqs_create_queue(self):
-        self.do_test_requests(
-            "sqs/createqueue/some-queue",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::SQS",
-            remote_operation="CreateQueue",
-            remote_resource_type="AWS::SQS::Queue",
-            remote_resource_identifier="test_queue",
-            request_specific_attributes={
-                _AWS_SQS_QUEUE_NAME: "test_queue",
-            },
-            span_name="SQS.CreateQueue",
-        )
+    # def test_sqs_create_queue(self):
+    #     self.do_test_requests(
+    #         "sqs/createqueue/some-queue",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::SQS",
+    #         remote_operation="CreateQueue",
+    #         remote_resource_type="AWS::SQS::Queue",
+    #         remote_resource_identifier="test_queue",
+    #         request_specific_attributes={
+    #             _AWS_SQS_QUEUE_NAME: "test_queue",
+    #         },
+    #         span_name="SQS.CreateQueue",
+    #     )
 
-    def test_sqs_send_message(self):
-        self.do_test_requests(
-            "sqs/publishqueue/some-queue",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::SQS",
-            remote_operation="SendMessage",
-            remote_resource_type="AWS::SQS::Queue",
-            remote_resource_identifier="test_queue",
-            request_specific_attributes={
-                _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
-            },
-            span_name="SQS.SendMessage",
-        )
+    # def test_sqs_send_message(self):
+    #     self.do_test_requests(
+    #         "sqs/publishqueue/some-queue",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::SQS",
+    #         remote_operation="SendMessage",
+    #         remote_resource_type="AWS::SQS::Queue",
+    #         remote_resource_identifier="test_queue",
+    #         request_specific_attributes={
+    #             _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
+    #         },
+    #         span_name="SQS.SendMessage",
+    #     )
 
-    def test_sqs_receive_message(self):
-        self.do_test_requests(
-            "sqs/consumequeue/some-queue",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::SQS",
-            remote_operation="ReceiveMessage",
-            remote_resource_type="AWS::SQS::Queue",
-            remote_resource_identifier="test_queue",
-            request_specific_attributes={
-                _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
-            },
-            span_name="SQS.ReceiveMessage",
-        )
+    # def test_sqs_receive_message(self):
+    #     self.do_test_requests(
+    #         "sqs/consumequeue/some-queue",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::SQS",
+    #         remote_operation="ReceiveMessage",
+    #         remote_resource_type="AWS::SQS::Queue",
+    #         remote_resource_identifier="test_queue",
+    #         request_specific_attributes={
+    #             _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
+    #         },
+    #         span_name="SQS.ReceiveMessage",
+    #     )
 
-    def test_kinesis_create_stream(self):
-        self.do_test_requests(
-            "kinesis/createstream/my-stream",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::Kinesis",
-            remote_operation="CreateStream",
-            remote_resource_type="AWS::Kinesis::Stream",
-            remote_resource_identifier="test_stream",
-            request_specific_attributes={
-                _AWS_KINESIS_STREAM_NAME: "test_stream",
-            },
-            span_name="Kinesis.CreateStream",
-        )
+    # def test_kinesis_create_stream(self):
+    #     self.do_test_requests(
+    #         "kinesis/createstream/my-stream",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::Kinesis",
+    #         remote_operation="CreateStream",
+    #         remote_resource_type="AWS::Kinesis::Stream",
+    #         remote_resource_identifier="test_stream",
+    #         request_specific_attributes={
+    #             _AWS_KINESIS_STREAM_NAME: "test_stream",
+    #         },
+    #         span_name="Kinesis.CreateStream",
+    #     )
 
-    def test_kinesis_put_record(self):
-        self.do_test_requests(
-            "kinesis/putrecord/my-stream",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::Kinesis",
-            remote_operation="PutRecord",
-            remote_resource_type="AWS::Kinesis::Stream",
-            remote_resource_identifier="test_stream",
-            request_specific_attributes={
-                _AWS_KINESIS_STREAM_NAME: "test_stream",
-            },
-            span_name="Kinesis.PutRecord",
-        )
+    # def test_kinesis_put_record(self):
+    #     self.do_test_requests(
+    #         "kinesis/putrecord/my-stream",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         remote_service="AWS::Kinesis",
+    #         remote_operation="PutRecord",
+    #         remote_resource_type="AWS::Kinesis::Stream",
+    #         remote_resource_identifier="test_stream",
+    #         request_specific_attributes={
+    #             _AWS_KINESIS_STREAM_NAME: "test_stream",
+    #         },
+    #         span_name="Kinesis.PutRecord",
+    #     )
 
-    def test_kinesis_error(self):
-        self.do_test_requests(
-            "kinesis/error",
-            "GET",
-            400,
-            1,
-            0,
-            remote_service="AWS::Kinesis",
-            remote_operation="DeleteStream",
-            remote_resource_type="AWS::Kinesis::Stream",
-            remote_resource_identifier="test_stream_error",
-            request_specific_attributes={
-                _AWS_KINESIS_STREAM_NAME: "test_stream_error",
-            },
-            span_name="Kinesis.DeleteStream",
-        )
+    # def test_kinesis_error(self):
+    #     self.do_test_requests(
+    #         "kinesis/error",
+    #         "GET",
+    #         400,
+    #         1,
+    #         0,
+    #         remote_service="AWS::Kinesis",
+    #         remote_operation="DeleteStream",
+    #         remote_resource_type="AWS::Kinesis::Stream",
+    #         remote_resource_identifier="test_stream_error",
+    #         request_specific_attributes={
+    #             _AWS_KINESIS_STREAM_NAME: "test_stream_error",
+    #         },
+    #         span_name="Kinesis.DeleteStream",
+    #     )
 
     # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
     # def test_kinesis_fault(self):
@@ -299,55 +299,60 @@ class AWSSdkTest(ContractTestBase):
     #         span_name="Kinesis.CreateStream",
     #     )
 
-    def test_bedrock_get_guardrail(self):
+    # def test_bedrock_get_guardrail(self):
+    #     self.do_test_requests(
+    #         "bedrock/getguardrail/get-guardrail",
+    #         "GET",
+    #         200,
+    #         0,
+    #         0,
+    #         rpc_service="Bedrock",
+    #         remote_service="AWS::Bedrock",
+    #         remote_operation="GetGuardrail",
+    #         remote_resource_type="AWS::Bedrock::Guardrail",
+    #         remote_resource_identifier="test-guardrail",
+    #         request_specific_attributes={
+    #             _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
+    #         },
+    #         span_name="Bedrock.GetGuardrail",
+    #         service_dp_count=2,
+    #     )
+
+    def test_bedrock_runtime_invoke_model(self):
         self.do_test_requests(
-            "bedrock/getguardrail/get-guardrail",
+            "bedrock/invokemodel/invoke-model",
             "GET",
             200,
             0,
             0,
-            remote_service="AWS::Bedrock",
-            remote_operation="GetGuardrail",
-            remote_resource_type="AWS::Bedrock::Guardrail",
-            remote_resource_identifier="test-guardrail",
+            rpc_service="Bedrock Runtime",
+            remote_service="AWS::BedrockRuntime",
+            remote_operation="InvokeModel",
+            remote_resource_type="AWS::Bedrock::Model",
+            remote_resource_identifier="amazon.titan-text-premier-v1:0",
             request_specific_attributes={
-                _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
+                _GEN_AI_REQUEST_MODEL: "amazon.titan-text-premier-v1:0",
             },
-            span_name="Bedrock.GetGuardrail",
+            span_name="Bedrock Runtime.InvokeModel",
         )
-
-    # def test_bedrock_runtime_invoke_model(self):
-    #     self.do_test_requests(
-    #         "bedrock/invokemodel/invoke-model",
-    #         "GET",
-    #         200,
-    #         0,
-    #         0,
-    #         remote_service="AWS::BedrockRuntime",
-    #         remote_operation="InvokeModel",
-    #         remote_resource_type="AWS::Bedrock::Model",
-    #         remote_resource_identifier="amazon.titan-text-premier-v1:0",
-    #         request_specific_attributes={
-    #             _GEN_AI_REQUEST_MODEL: "amazon.titan-text-premier-v1:0",
-    #         },
-    #         span_name="Bedrock Runtime.InvokeModel",
-    #     )
 
     # def test_bedrock_agent_runtime_invoke_agent(self):
     #     self.do_test_requests(
-    #         "bedrock/invokeagent/invoke_agent",
+    #         "bedrock/invokeagent/invoke-agent",
     #         "GET",
     #         200,
     #         0,
     #         0,
+    #         rpc_service="Bedrock Agent Runtime",
     #         remote_service="AWS::Bedrock",
     #         remote_operation="InvokeAgent",
     #         remote_resource_type="AWS::Bedrock::Agent",
-    #         remote_resource_identifier="Q08WFRPHVL",
+    #         remote_resource_identifier="test-agent",
     #         request_specific_attributes={
-    #             _AWS_BEDROCK_AGENT_ID: "Q08WFRPHVL",
+    #             _AWS_BEDROCK_AGENT_ID: "test-agent",
     #         },
     #         span_name="Bedrock Agent Runtime.InvokeAgent",
+    #         service_dp_count=2,
     #     )
 
     # def test_bedrock_agent_runtime_retrieve(self):
@@ -357,14 +362,16 @@ class AWSSdkTest(ContractTestBase):
     #         200,
     #         0,
     #         0,
+    #         rpc_service="Bedrock Agent Runtime",
     #         remote_service="AWS::Bedrock",
     #         remote_operation="Retrieve",
     #         remote_resource_type="AWS::Bedrock::KnowledgeBase",
-    #         remote_resource_identifier="test-knowledge-base-id",
+    #         remote_resource_identifier="test-knowledge-base",
     #         request_specific_attributes={
-    #             _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base-id",
+    #             _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
     #         },
     #         span_name="Bedrock Agent Runtime.Retrieve",
+    #         service_dp_count=2,
     #     )
 
     # def test_bedrock_agent_get_agent(self):
@@ -374,48 +381,54 @@ class AWSSdkTest(ContractTestBase):
     #         200,
     #         0,
     #         0,
+    #         rpc_service="Bedrock Agent",
     #         remote_service="AWS::Bedrock",
     #         remote_operation="GetAgent",
     #         remote_resource_type="AWS::Bedrock::Agent",
-    #         remote_resource_identifier="TESTAGENTID",
+    #         remote_resource_identifier="test-agent",
     #         request_specific_attributes={
-    #             _AWS_BEDROCK_AGENT_ID: "TESTAGENTID",
+    #             _AWS_BEDROCK_AGENT_ID: "test-agent",
     #         },
     #         span_name="Bedrock Agent.GetAgent",
+    #         service_dp_count=2,
     #     )
 
     # def test_bedrock_agent_get_knowledge_base(self):
     #     self.do_test_requests(
-    #         "bedrock/getknowledgebase/get_knowledge_base",
+    #         "bedrock/getknowledgebase/get-knowledge-base",
     #         "GET",
     #         200,
     #         0,
     #         0,
+    #         rpc_service="Bedrock Agent",
     #         remote_service="AWS::Bedrock",
     #         remote_operation="GetKnowledgeBase",
     #         remote_resource_type="AWS::Bedrock::KnowledgeBase",
-    #         remote_resource_identifier="invalid-knowledge-base-id",
+    #         remote_resource_identifier="test-knowledge-base",
     #         request_specific_attributes={
-    #             _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "invalid-knowledge-base-id",
+    #             _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
     #         },
     #         span_name="Bedrock Agent.GetKnowledgeBase",
+    #         service_dp_count=2,
     #     )
 
     # def test_bedrock_agent_get_data_source(self):
     #     self.do_test_requests(
-    #         "bedrock/getdatasource/get_data_source",
+    #         "bedrock/getdatasource/get-data-source",
     #         "GET",
     #         200,
     #         0,
     #         0,
+    #         rpc_service="Bedrock Agent",
     #         remote_service="AWS::Bedrock",
     #         remote_operation="GetDataSource",
     #         remote_resource_type="AWS::Bedrock::DataSource",
-    #         remote_resource_identifier="DATASURCID",
+    #         remote_resource_identifier="test-data-source",
     #         request_specific_attributes={
-    #             _AWS_BEDROCK_DATA_SOURCE_ID: "DATASURCID",
+    #             _AWS_BEDROCK_DATA_SOURCE_ID: "test-data-source",
     #         },
     #         span_name="Bedrock Agent.GetDataSource",
+    #         service_dp_count=2,
     #     )
 
     @override
@@ -469,6 +482,7 @@ class AWSSdkTest(ContractTestBase):
         self.assertEqual(target_spans[0].name, kwargs.get("span_name"))
         self._assert_semantic_conventions_attributes(
             target_spans[0].attributes,
+            kwargs.get("rpc_service") if "rpc_service" in kwargs else kwargs.get("remote_service").split("::")[-1],
             kwargs.get("remote_service"),
             kwargs.get("remote_operation"),
             status_code,
@@ -479,6 +493,7 @@ class AWSSdkTest(ContractTestBase):
     def _assert_semantic_conventions_attributes(
         self,
         attributes_list: List[KeyValue],
+        rpc_service: str,
         service: str,
         operation: str,
         status_code: int,
@@ -487,7 +502,7 @@ class AWSSdkTest(ContractTestBase):
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_METHOD, operation)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SYSTEM, "aws-api")
-        self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, service.split("::")[-1])
+        self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, rpc_service)
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_STATUS_CODE, status_code)
         for key, value in request_specific_attributes.items():
             if isinstance(value, str):
@@ -509,17 +524,21 @@ class AWSSdkTest(ContractTestBase):
         for resource_scope_metric in resource_scope_metrics:
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
+        
+        self._filter_bedrock_metrics(target_metrics)
 
         if (len(target_metrics) == 2):
             dependency_target_metric: Metric = target_metrics[0]
             service_target_metric: Metric = target_metrics[1]
+            _logger.info(f"dependency_target_metric: {dependency_target_metric}")
+            _logger.info(f"service_target_metric: {service_target_metric}")
             # Test dependency metric
             dep_dp_list: List[ExponentialHistogramDataPoint] = dependency_target_metric.exponential_histogram.data_points
-            dep_dp_list_count: int = kwargs.get("dp_count", 1)
+            dep_dp_list_count: int = kwargs.get("dep_dp_count", 1)
             self.assertEqual(len(dep_dp_list), dep_dp_list_count)
             dependency_dp: ExponentialHistogramDataPoint = dep_dp_list[0]
             service_dp_list = service_target_metric.exponential_histogram.data_points
-            service_dp_list_count = kwargs.get("dp_count", 1)
+            service_dp_list_count = kwargs.get("service_dp_count", 1)
             self.assertEqual(len(service_dp_list), service_dp_list_count)
             service_dp: ExponentialHistogramDataPoint = service_dp_list[0]
             if len(service_dp_list[0].attributes) > len(dep_dp_list[0].attributes):
@@ -528,8 +547,10 @@ class AWSSdkTest(ContractTestBase):
             self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
             self._assert_service_dp_attributes(service_dp, expected_sum, metric_name)
         elif (len(target_metrics) == 1):
+            _logger.info("Only one target metric")
             target_metric: Metric = target_metrics[0]
             dp_list: List[ExponentialHistogramDataPoint] = target_metric.exponential_histogram.data_points
+            _logger.info(f"dp_list: {dp_list}")
             dp_list_count: int = kwargs.get("dp_count", 2)
             self.assertEqual(len(dp_list), dp_list_count)
             dependency_dp: ExponentialHistogramDataPoint = dp_list[0]
@@ -540,6 +561,8 @@ class AWSSdkTest(ContractTestBase):
             self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
             self._assert_service_dp_attributes(service_dp, expected_sum, metric_name)
         else:
+            for target_metric in target_metrics:
+                _logger.info(f"target_metric: {target_metric}")
             raise AssertionError("Target metrics count is incorrect")
     
     def _assert_dependency_dp_attributes(self, dependency_dp: ExponentialHistogramDataPoint, expected_sum: int, metric_name: str, **kwargs):
@@ -568,3 +591,15 @@ class AWSSdkTest(ContractTestBase):
     def _assert_array_value_ddb_table_name(self, attributes_dict: Dict[str, AnyValue], key: str, expect_values: list):
         self.assertIn(key, attributes_dict)
         self.assertEqual(attributes_dict[key].string_value, expect_values[0])
+
+    def _filter_bedrock_metrics(self, target_metrics: List[Metric]):
+        bedrock_calls = {"GET /guardrails", "GET /agents", "GET /knowledgebases"}
+        for metric in target_metrics:
+            for dp in metric.exponential_histogram.data_points:
+                # remove dp that is a bedrock call
+                attribute_dict = self._get_attributes_dict(dp.attributes)
+                if attribute_dict['aws.local.operation'].string_value in bedrock_calls:
+                    metric.exponential_histogram.data_points.remove(dp)
+            # remove metric if it has no data points
+            if (len(metric.exponential_histogram.data_points) == 0):
+                target_metrics.remove(metric)

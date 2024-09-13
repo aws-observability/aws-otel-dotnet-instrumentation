@@ -1,4 +1,7 @@
 using Amazon.Bedrock;
+using Amazon.BedrockAgent;
+using Amazon.BedrockAgentRuntime;
+using Amazon.BedrockRuntime;
 using Amazon.DynamoDBv2;
 using Amazon.Kinesis;
 using Amazon.S3;
@@ -18,6 +21,9 @@ builder.Services
     .AddSingleton<IAmazonSQS>(provider => new AmazonSQSClient(new AmazonSQSConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonKinesis>(provider => new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localhost:8080" }))
+    .AddSingleton<IAmazonBedrockRuntime>(provider => new AmazonBedrockRuntimeClient(new AmazonBedrockRuntimeConfig { ServiceURL = "http://localhost:8080" }))
+    .AddSingleton<IAmazonBedrockAgent>(provider => new AmazonBedrockAgentClient(new AmazonBedrockAgentConfig { ServiceURL = "http://localhost:8080" }))
+    .AddSingleton<IAmazonBedrockAgentRuntime>(provider => new AmazonBedrockAgentRuntimeClient(new AmazonBedrockAgentRuntimeConfig { ServiceURL = "http://localhost:8080" }))
     // fault client
     .AddKeyedSingleton<IAmazonDynamoDB>("fault-ddb", new AmazonDynamoDBClient(AmazonClientConfigHelper.CreateConfig<AmazonDynamoDBConfig>(true)))
     .AddKeyedSingleton<IAmazonS3>("fault-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>(true)))
@@ -118,6 +124,36 @@ app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedro
     .WithName("get-guardrail")
     .WithOpenApi();
 
+app.MapGet("bedrock/invokemodel/invoke-model", (BedrockTests bedrock) => bedrock.InvokeModel())
+    .WithName("invoke-model")
+    .WithOpenApi();
+
+app.MapGet("bedrock/getagent/get-agent", (BedrockTests bedrock) => bedrock.GetAgent())
+    .WithName("get-agent")
+    .WithOpenApi();
+
+app.MapGet("bedrock/getknowledgebase/get-knowledge-base", (BedrockTests bedrock) => bedrock.GetKnowledgeBase())
+    .WithName("get-knowledge-base")
+    .WithOpenApi();
+
+app.MapGet("bedrock/getdatasource/get-data-source", (BedrockTests bedrock) => bedrock.GetDataSource())
+    .WithName("get-data-source")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokeagent/invoke-agent", (BedrockTests bedrock) => bedrock.InvokeAgent())
+    .WithName("invoke-agent")
+    .WithOpenApi();
+
+app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrieve())
+    .WithName("retrieve")
+    .WithOpenApi();
+
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
+app.MapPost("model/amazon.titan-text-express-v1/invoke", (BedrockTests bedrock) => bedrock.InvokeModelResponse());
+app.MapGet("agents/test-agent", (BedrockTests bedrock) => bedrock.GetAgentResponse());
+app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedrock.GetKnowledgeBaseResponse());
+app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
+app.MapPost("agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text", (BedrockTests bedrock) => bedrock.InvokeAgentResponse());
+app.MapPost("knowledgebases/test-knowledge-base/retrieve", (BedrockTests bedrock) => bedrock.RetrieveResponse());
 
 app.Run();
