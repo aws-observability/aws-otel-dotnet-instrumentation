@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using OpenTelemetry.Trace;
-using System.ComponentModel;
+using System.Diagnostics;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -41,15 +41,7 @@ public sealed class AlwaysRecordSampler : Sampler
     /// <inheritdoc/>
     public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
     {
-        Console.WriteLine("=== AlwaysRecordSampler::samplingParameters start ===");
-        foreach (PropertyDescriptor descriptor in TypeDescriptor.GetProperties(samplingParameters))
-        {
-            string name = descriptor.Name;
-            object value = descriptor.GetValue(samplingParameters);
-            Console.WriteLine("{0}={1}", name, value);
-        }
-        Console.WriteLine("=== AlwaysRecordSampler::samplingParameters end ===");
-        Console.WriteLine("AlwaysRecordSampler::samplingParameters.Tags=" + samplingParameters.Tags);
+        Console.WriteLine("test:" + samplingParameters.Name);
         if (samplingParameters.Tags is not null)
         {
             foreach (var tag in samplingParameters.Tags)

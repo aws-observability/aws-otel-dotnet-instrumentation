@@ -9,11 +9,14 @@ using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Extensions.AWS.Trace;
+using OpenTelemetry.Instrumentation.AspNetCore;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -40,6 +43,8 @@ public class Plugin
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
             { "telemetry.distro.version", Version.version + "-aws" },
         };
+
+    private Sampler? sampler;
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -151,7 +156,8 @@ public class Plugin
 
         var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
         var resource = resourceBuilder.Build();
-        Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler(resource));
+        this.sampler = SamplerUtil.GetSampler(resource);
+        Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
         builder.SetSampler(alwaysRecordSampler);
 
         return builder;
@@ -184,6 +190,54 @@ public class Plugin
 
             return true;
         };
+    }
+
+    /// <summary>
+    /// To enrich activities on net6.0 with route template
+    /// </summary>
+    /// <param name="options"><see cref="AspNetCoreTraceInstrumentationOptions"/> options to configure</param>
+    public void ConfigureTracesOptions(AspNetCoreTraceInstrumentationOptions options)
+    {
+        options.EnrichWithHttpRequest = (activity, request) =>
+        {
+            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            {
+                this.ShouldSampleParent(activity);
+            }
+        };
+    }
+
+    private void ShouldSampleParent(Activity activity)
+    {
+        if (activity.Parent != null)
+        {
+            return;
+        }
+
+        var samplingParameters = new SamplingParameters(
+            default(ActivityContext),
+            activity.TraceId,
+            activity.DisplayName,
+            activity.Kind,
+            activity.TagObjects,
+            activity.Links);
+
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+        var result = this.sampler.ShouldSample(samplingParameters);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+        Console.WriteLine("This is URLPath in new function: " + activity.GetTagItem(AttributeUrlPath));
+        Console.WriteLine("This is result: " + result.Decision.ToString());
+        if (result.Decision == SamplingDecision.RecordAndSample)
+        {
+            activity.ActivityTraceFlags |= ActivityTraceFlags.Recorded;
+            Console.WriteLine("Inside the record and sample case");
+        }
+        else
+        {
+            activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
+        }
+
+        Console.WriteLine("These are the flags: " + activity.ActivityTraceFlags);
     }
 
     private bool IsApplicationSignalsEnabled()
