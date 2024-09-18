@@ -19,7 +19,6 @@ using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
-using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -162,7 +161,21 @@ public class Plugin
         var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
         var resource = resourceBuilder.Build();
         this.sampler = SamplerUtil.GetSampler(resource);
-        Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
+
+        // If the backup sampler is enabled, there is no need to hook up the x-ray sampler into the main opentelemetry
+        // sdk logic. In this case, we hook up the alwaysOnSampler to that all the activities go through before running
+        // them against the xray sampler. Without this, the sampler will be run twice, once by the sdk and a second time
+        // after http instrumentation happens which messes up the frontend sampler graphs.
+        Sampler alwaysRecordSampler;
+        if (BackupSamplerEnabled == "true")
+        {
+            alwaysRecordSampler = AlwaysRecordSampler.Create(new ParentBasedSampler(new AlwaysOnSampler()));
+        }
+        else
+        {
+            alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
+        }
+
         builder.SetSampler(alwaysRecordSampler);
 
         return builder;
