@@ -167,7 +167,7 @@ public class Plugin
         // them against the xray sampler. Without this, the sampler will be run twice, once by the sdk and a second time
         // after http instrumentation happens which messes up the frontend sampler graphs.
         Sampler alwaysRecordSampler;
-        if (BackupSamplerEnabled == "true")
+        if (BackupSamplerEnabled == "true" && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
         {
             alwaysRecordSampler = AlwaysRecordSampler.Create(new ParentBasedSampler(new AlwaysOnSampler()));
         }
