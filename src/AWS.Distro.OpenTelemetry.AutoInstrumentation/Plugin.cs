@@ -249,6 +249,8 @@ public class Plugin
             return;
         }
 
+        // We should sample the parent span only as any trace flags set on the parent
+        // automatically propagates to all child spans (the X-Ray sampler is wrapped by ParentBasedSampler).
         if (activity.Parent != null)
         {
             return;
