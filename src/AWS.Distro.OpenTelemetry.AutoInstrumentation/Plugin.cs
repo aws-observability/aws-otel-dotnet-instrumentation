@@ -153,43 +153,50 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        if (this.IsApplicationSignalsEnabled())
-        {
-            Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-        }
-
         var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
         var resource = resourceBuilder.Build();
         this.sampler = SamplerUtil.GetSampler(resource);
+
+        if (this.IsApplicationSignalsEnabled())
+        {
+            Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
+            var alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
+            builder.SetSampler(alwaysRecordSampler);
+        }
+        else
+        {
+            builder.SetSampler(this.sampler);
+        }
 
         // If the backup sampler is enabled, there is no need to hook up the x-ray sampler into the main opentelemetry
         // sdk logic. In this case, we hook up the alwaysOnSampler to that all the activities go through before running
         // them against the xray sampler. Without this, the sampler will be run twice, once by the sdk and a second time
         // after http instrumentation happens which messes up the frontend sampler graphs.
-        Sampler alwaysRecordSampler;
         if (BackupSamplerEnabled == "true" && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
         {
-            alwaysRecordSampler = AlwaysRecordSampler.Create(new ParentBasedSampler(new AlwaysOnSampler()));
+            var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
+            if (this.IsApplicationSignalsEnabled())
+            {
+                builder.SetSampler(AlwaysRecordSampler.Create(alwaysOnSampler));
+            }
+            else
+            {
+                builder.SetSampler(alwaysOnSampler);
+            }
         }
-        else
-        {
-            alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
-        }
-
-        builder.SetSampler(alwaysRecordSampler);
 
         return builder;
     }
 
     /// <summary>
-    /// To configure Resource
-    /// TODO: Add versioning similar to Python
+    /// To configure Resource with resource detectors and <see cref="DistroAttributes"/>
+    /// Check <see cref="ResourceBuilderCustomizer"/> for more information.
     /// </summary>
     /// <param name="builder"><see cref="ResourceBuilder"/> Provider to configure</param>
     /// <returns>Returns configured builder</returns>
     public ResourceBuilder ConfigureResource(ResourceBuilder builder)
     {
-        builder.AddAttributes(DistroAttributes);
+        this.ResourceBuilderCustomizer(builder);
         return builder;
     }
 
