@@ -163,14 +163,14 @@ public class Plugin
     }
 
     /// <summary>
-    /// To configure Resource
-    /// TODO: Add versioning similar to Python
+    /// To configure Resource with resource detectors and <see cref="DistroAttributes"/>
+    /// Check <see cref="ResourceBuilderCustomizer"/> for more information.
     /// </summary>
     /// <param name="builder"><see cref="ResourceBuilder"/> Provider to configure</param>
     /// <returns>Returns configured builder</returns>
     public ResourceBuilder ConfigureResource(ResourceBuilder builder)
     {
-        builder.AddAttributes(DistroAttributes);
+        this.ResourceBuilderCustomizer(builder);
         return builder;
     }
 
