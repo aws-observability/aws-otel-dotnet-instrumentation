@@ -9,6 +9,9 @@
     <MinVerTagPrefix>Instrumentation.AWS-</MinVerTagPrefix>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Remove following two lines when push back to upstream since it is only for local build -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <!--Do not run Package Baseline Validation as this package has never released a stable version.
