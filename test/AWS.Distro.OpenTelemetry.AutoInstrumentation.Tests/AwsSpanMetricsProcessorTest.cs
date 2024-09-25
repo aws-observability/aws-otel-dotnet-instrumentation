@@ -6,6 +6,8 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using HarmonyLib;
 using Moq;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
@@ -30,6 +32,7 @@ public class AwsSpanMetricsProcessorTest : IDisposable
     private AwsSpanMetricsProcessor awsSpanMetricsProcessor;
     private Mock<AwsMetricAttributeGenerator> generator = new Mock<AwsMetricAttributeGenerator>();
     private Resource resource = Resource.Empty;
+    private MeterProvider provider = Sdk.CreateMeterProviderBuilder().Build();
     private Meter meter = new Meter("test");
     private Histogram<long> errorHistogram;
     private Histogram<long> faultHistogram;
@@ -72,7 +75,7 @@ public class AwsSpanMetricsProcessorTest : IDisposable
                     list.Add(new KeyValuePair<string, object>(instrument.Name, new KeyValuePair<double, object>(measurement, tags[0])));
                     GlobalCallbackData.CallList = list;
                 });
-        this.awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(this.errorHistogram, this.faultHistogram, this.latencyHistogram, this.generator.Object, this.resource);
+        this.awsSpanMetricsProcessor = AwsSpanMetricsProcessor.Create(this.errorHistogram, this.faultHistogram, this.latencyHistogram, this.generator.Object, this.resource, this.provider);
     }
 
     [Fact]

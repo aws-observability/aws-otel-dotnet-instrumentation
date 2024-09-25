@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
@@ -38,19 +39,22 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
 
     private IMetricAttributeGenerator generator;
     private Resource resource;
+    private MeterProvider provider;
 
     private AwsSpanMetricsProcessor(
       Histogram<long> errorHistogram,
       Histogram<long> faultHistogram,
       Histogram<double> latencyHistogram,
       IMetricAttributeGenerator generator,
-      Resource resource)
+      Resource resource,
+      MeterProvider provider)
     {
         this.errorHistogram = errorHistogram;
         this.faultHistogram = faultHistogram;
         this.latencyHistogram = latencyHistogram;
         this.generator = generator;
         this.resource = resource;
+        this.provider = provider;
     }
 
     /// <summary>
@@ -85,10 +89,23 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
         Histogram<long> faultHistogram,
         Histogram<double> latencyHistogram,
         IMetricAttributeGenerator generator,
-        Resource resource)
+        Resource resource,
+        MeterProvider provider)
     {
         return new AwsSpanMetricsProcessor(
-            errorHistogram, faultHistogram, latencyHistogram, generator, resource);
+            errorHistogram, faultHistogram, latencyHistogram, generator, resource, provider);
+    }
+
+    /// <inheritdoc/>
+    protected override bool OnForceFlush(int timeoutMilliseconds)
+    {
+        return this.provider.ForceFlush(timeoutMilliseconds);
+    }
+
+    /// <inheritdoc/>
+    protected override bool OnShutdown(int timeoutMilliseconds)
+    {
+        return this.ForceFlush(timeoutMilliseconds);
     }
 
     // The logic to record error and fault should be kept in sync with the aws-xray exporter whenever

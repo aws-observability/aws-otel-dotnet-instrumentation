@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.Metrics;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -23,24 +24,27 @@ public class AwsSpanMetricsProcessorBuilder
     // ActivitySource.Name?
     private static readonly string DefaultScopeName = "AwsSpanMetricsProcessor";
     private readonly Resource resource;
+    private readonly MeterProvider provider;
 
     // Optional builder elements
     private IMetricAttributeGenerator generator = DefaultGenerator;
     private string scopeName = DefaultScopeName;
 
-    private AwsSpanMetricsProcessorBuilder(Resource resource)
+    private AwsSpanMetricsProcessorBuilder(Resource resource, MeterProvider provider)
     {
         this.resource = resource;
+        this.provider = provider;
     }
 
     /// <summary>
     /// Configure new AwsSpanMetricsProcessorBuilder
     /// </summary>
     /// <param name="resource"><see cref="Resource"/>Resource to store</param>
+    /// <param name="provider"><see cref="MeterProvider"/>MeterProvider to store</param>
     /// <returns>New AwsSpanMetricsProcessorBuilder</returns>
-    public static AwsSpanMetricsProcessorBuilder Create(Resource resource)
+    public static AwsSpanMetricsProcessorBuilder Create(Resource resource, MeterProvider provider)
     {
-        return new AwsSpanMetricsProcessorBuilder(resource);
+        return new AwsSpanMetricsProcessorBuilder(resource, provider);
     }
 
     /// <summary>
@@ -88,7 +92,7 @@ public class AwsSpanMetricsProcessorBuilder
         Histogram<long> faultHistogram = meter.CreateHistogram<long>(Fault);
         Histogram<double> latencyHistogram = meter.CreateHistogram<double>(Latency, LatencyUnits);
         return AwsSpanMetricsProcessor.Create(
-            errorHistogram, faultHistogram, latencyHistogram, this.generator, this.resource);
+            errorHistogram, faultHistogram, latencyHistogram, this.generator, this.resource, this.provider);
     }
 
     /// <summary>
