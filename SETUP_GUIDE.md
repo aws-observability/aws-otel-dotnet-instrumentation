@@ -41,7 +41,7 @@ This guide provides step-by-step instructions for enabling Application Signals i
 
 ### Download AWS Distro of OTel .NET auto-instrumentation agent
 ```sh
-wget https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/download/v1.1.0/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+wget https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/latest/download/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
 export INSTALL_DIR=~/OpenTelemetryDistribution
 unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d $INSTALL_DIR
 ```
@@ -94,37 +94,17 @@ unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d $INSTALL_D
 * Log into the instance using RDP tools
   * Open a PowerShell session
 * Install .NET 8
-  * Install WinGet
-    * Install ```Microsoft.UI.Xaml``` library
-      ```ps
-      Invoke-WebRequest -Uri https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx -OutFile $env:TEMP\Microsoft.UI.Xaml.2.8.x64.appx
-      Add-AppxPackage $env:TEMP\Microsoft.UI.Xaml.2.8.x64.appx
-      ```
-    * Install WinGet
-      * Download assets from [WinGet CLI GitHub repo](https://github.com/microsoft/winget-cli/releases)
-        * Installation: ```Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle```
-        * License: ```76fba573f02545629706ab99170237bc_License1.xml```
-      * Install
-        ```ps
-        Add-AppxProvisionedPackage -Online -Package .\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle -LicensePath .\76fba573f02545629706ab99170237bc_License1.xml
-        ```
-  * Install .NET 8
-    * Install following [WinGet instruction](https://learn.microsoft.com/en-us/dotnet/core/install/windows)
-      ```ps
-      winget install Microsoft.DotNet.SDK.8
-      winget install Microsoft.DotNet.DesktopRuntime.8
-      winget install Microsoft.DotNet.AspNetCore.8
-      ```
-    * Verify
-      ```ps
-      winget search Microsoft.DotNet.SDK
-      ```
+  * In powershell session
+    ```ps
+    wget -O dotnet-install.ps1 https://dot.net/v1/dotnet-install.ps1
+    .\dotnet-install.ps1 -Version 8.0.302
+    ```
 * Install AWS CLI
   * Install following [AWS CLI user guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
     ```ps
     msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi
     ```
-  * Reopen PowerShell session and verify installation
+  * Reopen PowerShell session after around 30 seconds and verify installation
     ```ps
     aws --version
     ```
@@ -174,7 +154,7 @@ unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d $INSTALL_D
 
 ### Download AWS Distro of OTel .NET auto-instrumentation agent
 ```ps
-Invoke-WebRequest -Uri "https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/download/v1.1.0/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -OutFile "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+Invoke-WebRequest -Uri "https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/latest/download/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -OutFile "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
 $env:INSTALL_DIR = "C:\Users\Administrator\Downloads\OpenTelemetryDistribution"
 Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip" -DestinationPath $env:INSTALL_DIR
 ```
@@ -358,10 +338,6 @@ Expand-Archive -Path "aws-distro-opentelemetry-dotnet-instrumentation-windows.zi
               value: "0.0.0.0:8080"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://cloudwatch-agent.amazon-cloudwatch:4316"
-            - name: OTEL_DOTNET_AUTO_PLUGINS
-              value: "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"
         nodeSelector:
           kubernetes.io/os: linux
         tolerations:
