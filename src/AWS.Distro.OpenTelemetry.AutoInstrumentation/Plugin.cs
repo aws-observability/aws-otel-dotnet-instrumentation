@@ -9,10 +9,15 @@ using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Extensions.AWS.Trace;
+#if NETFRAMEWORK
+using OpenTelemetry.Instrumentation.AspNet;
+#endif
+using OpenTelemetry.Instrumentation.AspNetCore;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
@@ -34,12 +39,16 @@ public class Plugin
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
+    private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
+    private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
 
     private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
             { "telemetry.distro.version", Version.version + "-aws" },
         };
+
+    private Sampler? sampler;
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -144,36 +153,61 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
+        var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
+        var resource = resourceBuilder.Build();
+        this.sampler = SamplerUtil.GetSampler(resource);
+
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
-            var resource = resourceBuilder.Build();
-            Sampler alwaysRecordSampler = AlwaysRecordSampler.Create(SamplerUtil.GetSampler(resource));
+            var alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
             builder.SetSampler(alwaysRecordSampler);
+        }
+        else
+        {
+            builder.SetSampler(this.sampler);
+        }
+
+        // If the backup sampler is enabled, there is no need to hook up the x-ray sampler into the main opentelemetry
+        // sdk logic. In this case, we hook up the alwaysOnSampler to that all the activities go through before running
+        // them against the xray sampler. Without this, the sampler will be run twice, once by the sdk and a second time
+        // after http instrumentation happens which messes up the frontend sampler graphs.
+        if (BackupSamplerEnabled == "true" && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+        {
+            var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
+            if (this.IsApplicationSignalsEnabled())
+            {
+                builder.SetSampler(AlwaysRecordSampler.Create(alwaysOnSampler));
+            }
+            else
+            {
+                builder.SetSampler(alwaysOnSampler);
+            }
         }
 
         return builder;
     }
 
     /// <summary>
-    /// To configure Resource
-    /// TODO: Add versioning similar to Python
+    /// To configure Resource with resource detectors and <see cref="DistroAttributes"/>
+    /// Check <see cref="ResourceBuilderCustomizer"/> for more information.
     /// </summary>
     /// <param name="builder"><see cref="ResourceBuilder"/> Provider to configure</param>
     /// <returns>Returns configured builder</returns>
     public ResourceBuilder ConfigureResource(ResourceBuilder builder)
     {
-        builder.AddAttributes(DistroAttributes);
+        this.ResourceBuilderCustomizer(builder);
         return builder;
     }
 
     /// <summary>
     /// To configure HttpOptions and skip instrumentation for certain APIs
+    /// Used to call ShouldSampleParent function as well
     /// </summary>
     /// <param name="options"><see cref="HttpClientTraceInstrumentationOptions"/> options to configure</param>
     public void ConfigureTracesOptions(HttpClientTraceInstrumentationOptions options)
     {
+#if !NETFRAMEWORK
         options.FilterHttpRequestMessage = request =>
         {
             if (request.RequestUri?.AbsolutePath == "/GetSamplingRules" || request.RequestUri?.AbsolutePath == "/SamplingTargets")
@@ -183,6 +217,106 @@ public class Plugin
 
             return true;
         };
+
+        options.EnrichWithHttpRequestMessage = (activity, request) =>
+        {
+            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            {
+                this.ShouldSampleParent(activity);
+            }
+        };
+#endif
+
+#if NETFRAMEWORK
+        options.FilterHttpWebRequest = request =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/GetSamplingRules" || request.RequestUri?.AbsolutePath == "/SamplingTargets")
+            {
+                return false;
+            }
+
+            return true;
+        };
+
+        options.EnrichWithHttpWebRequest = (activity, request) =>
+        {
+            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            {
+                this.ShouldSampleParent(activity);
+            }
+        };
+#endif
+    }
+
+    /// <summary>
+    /// Used to call ShouldSampleParent function
+    /// </summary>
+    /// <param name="options"><see cref="AspNetCoreTraceInstrumentationOptions"/> options to configure</param>
+    public void ConfigureTracesOptions(AspNetCoreTraceInstrumentationOptions options)
+    {
+        options.EnrichWithHttpRequest = (activity, request) =>
+        {
+            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            {
+                this.ShouldSampleParent(activity);
+            }
+        };
+    }
+
+#if NETFRAMEWORK
+    /// <summary>
+    /// Used to call ShouldSampleParent function
+    /// </summary>
+    /// <param name="options"><see cref="AspNetTraceInstrumentationOptions"/> options to configure</param>
+    public void ConfigureTracesOptions(AspNetTraceInstrumentationOptions options)
+    {
+        options.EnrichWithHttpRequest = (activity, request) =>
+        {
+            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            {
+                this.ShouldSampleParent(activity);
+            }
+        };
+    }
+#endif
+
+    // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)
+    // are finally available from the http instrumentation libraries. The sampler hooked into the Opentelemetry SDK
+    // runs right before any activity is started so for the purposes of our X-Ray sampler, that isn't work and breaks
+    // the X-Ray functionality. Running it a second time here allows us to retain the sampler functionality.
+    private void ShouldSampleParent(Activity activity)
+    {
+        if (BackupSamplerEnabled != "true")
+        {
+            return;
+        }
+
+        // We should sample the parent span only as any trace flags set on the parent
+        // automatically propagates to all child spans (the X-Ray sampler is wrapped by ParentBasedSampler).
+        if (activity.Parent != null)
+        {
+            return;
+        }
+
+        var samplingParameters = new SamplingParameters(
+            default(ActivityContext),
+            activity.TraceId,
+            activity.DisplayName,
+            activity.Kind,
+            activity.TagObjects,
+            activity.Links);
+
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+        var result = this.sampler.ShouldSample(samplingParameters);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+        if (result.Decision == SamplingDecision.RecordAndSample)
+        {
+            activity.ActivityTraceFlags |= ActivityTraceFlags.Recorded;
+        }
+        else
+        {
+            activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
+        }
     }
 
     private bool IsApplicationSignalsEnabled()

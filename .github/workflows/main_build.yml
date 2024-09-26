@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - "release/v*"
+      - "main-build-use-remote"
 
 permissions:
   id-token: write
@@ -139,28 +140,11 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
-  dotnet-e2e-ec2-default-test:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        aws-region: [ 'us-east-1' ]
-    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-default-test.yml
+  application-signals-e2e-test:
+    name: "Application Signals E2E Test"
+    needs: [ build ]
+    uses: ./.github/workflows/application-signals-e2e-test.yml
     secrets: inherit
-    with:
-      aws-region: ${{ matrix.aws-region }}
-      caller-workflow-name: 'main-build'
-      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
-      
-  dotnet-e2e-ec2-asg-test:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        aws-region: [ 'us-east-1' ]
-    uses: ./.github/workflows/application-signals-dotnet-e2e-ec2-asg-test.yml
-    secrets: inherit
-    with:
-      aws-region: ${{ matrix.aws-region }}
-      caller-workflow-name: 'main-build'
-      staging_wheel_name: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+    permissions:
+      id-token: write
+      contents: read

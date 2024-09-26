@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
- 
+
 COPY OpenTelemetryDistribution /autoinstrumentation
+COPY THIRD-PARTY-LICENSES THIRD-PARTY-LICENSES
 
 USER ContainerAdministrator

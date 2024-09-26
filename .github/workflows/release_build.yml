@@ -32,7 +32,7 @@ jobs:
       caller-workflow-name: 'release_build_workflow'
 
   release:
-    needs: [build-and-upload]
+    needs: [build-and-upload, build-release-nuget]
     environment: Release
     runs-on: ubuntu-latest
     steps:
@@ -80,6 +80,12 @@ jobs:
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: ./installationScripts
+      
+      - name: Download nuget package
+        uses: actions/download-artifact@v3
+        with:
+          name: nuget-packages.zip
+          path: ./artifacts/nuget
 
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
@@ -304,7 +310,6 @@ jobs:
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
 
   build-release-nuget:
-    needs: [release]
     runs-on: windows-latest
 
     strategy:
@@ -350,7 +355,7 @@ jobs:
       - name: Upload nugets to this GitHub Action run as an artifact
         uses: actions/upload-artifact@v3
         with:
-          name: nuget-packages
+          name: nuget-packages.zip
           path: Deployment/nuget-packages/
 
       - name: Assume nuget role

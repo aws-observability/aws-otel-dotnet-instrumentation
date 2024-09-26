@@ -27,6 +27,11 @@ _logger.setLevel(INFO)
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
+_AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
+_AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
+_AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
+_AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source.id"
+_GEN_AI_REQUEST_MODEL: str = "gen_ai.request.model"
 
 
 # pylint: disable=too-many-public-methods
@@ -294,6 +299,132 @@ class AWSSdkTest(ContractTestBase):
     #         span_name="Kinesis.CreateStream",
     #     )
 
+    def test_bedrock_get_guardrail(self):
+        self.do_test_requests(
+            "bedrock/getguardrail/get-guardrail",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock",
+            remote_service="AWS::Bedrock",
+            remote_operation="GetGuardrail",
+            remote_resource_type="AWS::Bedrock::Guardrail",
+            remote_resource_identifier="test-guardrail",
+            request_specific_attributes={
+                _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
+            },
+            span_name="Bedrock.GetGuardrail",
+        )
+
+    def test_bedrock_runtime_invoke_model(self):
+        self.do_test_requests(
+            "bedrock/invokemodel/invoke-model",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Runtime",
+            remote_service="AWS::BedrockRuntime",
+            remote_operation="InvokeModel",
+            remote_resource_type="AWS::Bedrock::Model",
+            remote_resource_identifier="test-model",
+            request_specific_attributes={
+                _GEN_AI_REQUEST_MODEL: "test-model",
+            },
+            span_name="Bedrock Runtime.InvokeModel",
+        )
+
+    def test_bedrock_agent_runtime_invoke_agent(self):
+        self.do_test_requests(
+            "bedrock/invokeagent/invoke-agent",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Agent Runtime",
+            remote_service="AWS::Bedrock",
+            remote_operation="InvokeAgent",
+            remote_resource_type="AWS::Bedrock::Agent",
+            remote_resource_identifier="test-agent",
+            request_specific_attributes={
+                _AWS_BEDROCK_AGENT_ID: "test-agent",
+            },
+            span_name="Bedrock Agent Runtime.InvokeAgent",
+        )
+
+    def test_bedrock_agent_runtime_retrieve(self):
+        self.do_test_requests(
+            "bedrock/retrieve/retrieve",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Agent Runtime",
+            remote_service="AWS::Bedrock",
+            remote_operation="Retrieve",
+            remote_resource_type="AWS::Bedrock::KnowledgeBase",
+            remote_resource_identifier="test-knowledge-base",
+            request_specific_attributes={
+                _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
+            },
+            span_name="Bedrock Agent Runtime.Retrieve",
+        )
+
+    def test_bedrock_agent_get_agent(self):
+        self.do_test_requests(
+            "bedrock/getagent/get-agent",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Agent",
+            remote_service="AWS::Bedrock",
+            remote_operation="GetAgent",
+            remote_resource_type="AWS::Bedrock::Agent",
+            remote_resource_identifier="test-agent",
+            request_specific_attributes={
+                _AWS_BEDROCK_AGENT_ID: "test-agent",
+            },
+            span_name="Bedrock Agent.GetAgent",
+        )
+
+    def test_bedrock_agent_get_knowledge_base(self):
+        self.do_test_requests(
+            "bedrock/getknowledgebase/get-knowledge-base",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Agent",
+            remote_service="AWS::Bedrock",
+            remote_operation="GetKnowledgeBase",
+            remote_resource_type="AWS::Bedrock::KnowledgeBase",
+            remote_resource_identifier="test-knowledge-base",
+            request_specific_attributes={
+                _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
+            },
+            span_name="Bedrock Agent.GetKnowledgeBase",
+        )
+
+    def test_bedrock_agent_get_data_source(self):
+        self.do_test_requests(
+            "bedrock/getdatasource/get-data-source",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Agent",
+            remote_service="AWS::Bedrock",
+            remote_operation="GetDataSource",
+            remote_resource_type="AWS::Bedrock::DataSource",
+            remote_resource_identifier="test-data-source",
+            request_specific_attributes={
+                _AWS_BEDROCK_DATA_SOURCE_ID: "test-data-source",
+            },
+            span_name="Bedrock Agent.GetDataSource",
+        )
+
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
         target_spans: List[Span] = []
@@ -345,6 +476,9 @@ class AWSSdkTest(ContractTestBase):
         self.assertEqual(target_spans[0].name, kwargs.get("span_name"))
         self._assert_semantic_conventions_attributes(
             target_spans[0].attributes,
+            # For most cases, rpc_service is the same as the service name after "AWS::" prefix. Bedrock services are
+            # the only exception to this, so we pass the rpc_service explicitly in the test case.
+            kwargs.get("rpc_service") if "rpc_service" in kwargs else kwargs.get("remote_service").split("::")[-1],
             kwargs.get("remote_service"),
             kwargs.get("remote_operation"),
             status_code,
@@ -355,6 +489,7 @@ class AWSSdkTest(ContractTestBase):
     def _assert_semantic_conventions_attributes(
         self,
         attributes_list: List[KeyValue],
+        rpc_service: str,
         service: str,
         operation: str,
         status_code: int,
@@ -363,7 +498,7 @@ class AWSSdkTest(ContractTestBase):
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_METHOD, operation)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SYSTEM, "aws-api")
-        self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, service.split("::")[-1])
+        self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, rpc_service)
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_STATUS_CODE, status_code)
         for key, value in request_specific_attributes.items():
             if isinstance(value, str):
@@ -385,7 +520,8 @@ class AWSSdkTest(ContractTestBase):
         for resource_scope_metric in resource_scope_metrics:
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
-
+        # For bedrock test cases, extra metric is generated from internally generated response. remove it here
+        self._filter_bedrock_metrics(target_metrics)
         if (len(target_metrics) == 2):
             dependency_target_metric: Metric = target_metrics[0]
             service_target_metric: Metric = target_metrics[1]
@@ -444,3 +580,15 @@ class AWSSdkTest(ContractTestBase):
     def _assert_array_value_ddb_table_name(self, attributes_dict: Dict[str, AnyValue], key: str, expect_values: list):
         self.assertIn(key, attributes_dict)
         self.assertEqual(attributes_dict[key].string_value, expect_values[0])
+
+    def _filter_bedrock_metrics(self, target_metrics: List[Metric]):
+        bedrock_calls = {"GET /agents", "GET /guardrails", "GET /knowledgebases", "POST /agents", "POST /model", "POST /knowledgebases" }
+        for metric in target_metrics:
+            for dp in metric.exponential_histogram.data_points:
+                # remove dp generated from manual response
+                attribute_dict = self._get_attributes_dict(dp.attributes)
+                if attribute_dict['aws.local.operation'].string_value in bedrock_calls:
+                    metric.exponential_histogram.data_points.remove(dp)
+            # remove Metric if it has no data points
+            if (len(metric.exponential_histogram.data_points) == 0):
+                target_metrics.remove(metric)
