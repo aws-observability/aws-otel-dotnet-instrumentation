@@ -80,12 +80,6 @@ jobs:
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: ./installationScripts
-      
-      - name: Download nuget package
-        uses: actions/download-artifact@v3
-        with:
-          name: nuget-packages.zip
-          path: ./artifacts/nuget
 
   release-image:
     # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
