@@ -87,54 +87,6 @@ jobs:
           name: nuget-packages.zip
           path: ./artifacts/nuget
 
-      - name: Configure AWS credentials for Private S3 Bucket
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
-          aws-region: ${{ env.AWS_DEFAULT_REGION }}
-
-      - name: Upload to Private S3 Bucket
-        run: |
-          PREFIX="Release_v${{github.event.inputs.version}}"
-
-          find ./artifacts/ -name "*.zip" | while read file; do
-          base=$(basename "$file")
-          aws s3 cp "$file" "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/$base"
-          done
-          aws s3 cp ./installationScripts/aws-otel-dotnet-install.sh "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/aws-otel-dotnet-install.sh"
-          aws s3 cp ./installationScripts/AWS.Otel.DotNet.Auto.psm1 "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/AWS.Otel.DotNet.Auto.psm1"
-
-      # Publish to GitHub releases
-      - name: Create GH release
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        run: |
-          gh release create --target "$GITHUB_REF_NAME" \
-             --title "Release v${{ github.event.inputs.version }}" \
-             "v${{ github.event.inputs.version }}" \
-              --notes "Release Verions v${{ github.event.inputs.version }}"
-
-      - name: Upload artifacts to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREFIX="Release_v${{github.event.inputs.version}}_"
-
-          find ./artifacts/ -name "*.zip" | while read file; do
-          base=$(basename "$file")
-          cp "$file" "$base"
-          gh release upload "v${{ github.event.inputs.version }}" \
-            $base \
-            --clobber
-          done
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./installationScripts/aws-otel-dotnet-install.sh \
-            --clobber
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
-            --clobber
-
   release-image:
     # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
     # since deleting from Private ECR is not possible.
