@@ -12,10 +12,6 @@ on:
         required: false
         type: string
         default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
-      release-staging-repo:
-        required: false
-        type: string
-        default: ${{ secrets.RELEASE_STAIGNG_REPO }}
 
 permissions:
   id-token: write
