@@ -12,6 +12,10 @@ on:
         required: false
         type: string
         default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      release-staging-repo:
+        required: false
+        type: string
+        default: ${{ secrets.RELEASE_STAIGNG_REPO }}
 
 permissions:
   id-token: write
@@ -86,14 +90,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          docker build -t ${{ env.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
-          docker push ${{ env.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
       
       - name: Build Windows container
         if: runner.os == 'Windows'
         run: |
-          docker build -t ${{ env.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
-          docker push ${{ env.RELEASE_STAIGNG_REPO }}:staging-windows2022
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
         shell: powershell
 
   dotnet-ec2-default-test:
@@ -110,7 +114,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ secrets.release-staging-repo }}:staging-windows2022
+      adot-image-name: ${{ inputs.release-staging-repo }}:staging-windows2022
       aws-region: us-east-1
       test-cluster-name: 'eks-windows-manual'
       caller-workflow-name: 'main-build'
