@@ -149,4 +149,4 @@ jobs:
       id-token: write
       contents: read
     with:
-      
+      release-staging-repo: ${{ secrets.RELEASE_STAIGNG_REPO }}
