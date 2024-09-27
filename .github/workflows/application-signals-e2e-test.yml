@@ -40,6 +40,63 @@ jobs:
       - name: Upload main-build files to s3
         run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
 
+  upload-main-build-image:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        include:
+          - os: windows-2022
+          - os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME}}
+          aws-region: us-east-1
+          
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: ${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }},${{secrects.STAGING_ARTIFACTS_ACCOUNT}}
+        
+      - name: Download Linux x64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+          
+      - name: Download Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          path: ./artifacts/windows
+
+      - name: Unzip Windows Artifact
+        if: runner.os == 'Windows'
+        run: |
+          Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
+        shell: powershell
+
+      - name: Build Linux container
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          docker build -t ${{ env.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
+          docker push ${{ env.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
+      
+      - name: Build Windows container
+        if: runner.os == 'Windows'
+        run: |
+          docker build -t ${{ env.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
+          docker push ${{ env.RELEASE_STAIGNG_REPO }}:staging-windows2022
+        shell: powershell
+
   dotnet-ec2-default-test:
     needs: [ upload-main-build ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
@@ -48,3 +105,8 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      
+  dotnet-eks-linux-test:
+    needs: [ upload-main-build-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+    
