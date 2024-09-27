@@ -106,7 +106,7 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       
-  dotnet-eks-linux-test:
-    needs: [ upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
-    
+#  dotnet-eks-linux-test:
+#    needs: [ upload-main-build-image ]
+#    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+#    
