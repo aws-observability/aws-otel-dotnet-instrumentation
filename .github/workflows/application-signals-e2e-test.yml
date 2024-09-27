@@ -21,9 +21,6 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ inputs.aws-region }}'
   cancel-in-progress: false
 
-env:
-  RELEASE_STAIGNG_REPO: ${{ secrets.RELEASE_STAIGNG_REPO }}
-
 jobs:
   upload-main-build:
     runs-on: ubuntu-latest
@@ -111,8 +108,9 @@ jobs:
   dotnet-eks-windows-test:
     needs: [ upload-main-build-image ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+    secrets: inherit
     with:
-      adot-image-name: ${{ env.RELEASE_STAIGNG_REPO }}:staging-windows2022
+      adot-image-name: ${{ secrets.release-staging-repo }}:staging-windows2022
       aws-region: us-east-1
       test-cluster-name: 'eks-windows-manual'
       caller-workflow-name: 'main-build'
