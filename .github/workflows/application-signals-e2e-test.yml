@@ -61,7 +61,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
-          registries: ${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }},${{secrects.STAGING_ARTIFACTS_ACCOUNT}}
+          registries: ${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }},${{secrets.STAGING_ARTIFACTS_ACCOUNT}}
         
       - name: Download Linux x64 Artifact
         if: runner.os == 'Linux'
