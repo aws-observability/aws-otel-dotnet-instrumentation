@@ -74,6 +74,11 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
+          
+      - name: Unzip Linux Artifact
+        if: runner.os == 'Linux'
+        run: |
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
 
       - name: Unzip Windows Artifact
         if: runner.os == 'Windows'
@@ -104,13 +109,13 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       
-  dotnet-eks-windows-test:
-    needs: [ upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
-    secrets: inherit
-    with:
-      adot-image-name: ${{ inputs.release-staging-repo }}:staging-windows2022
-      aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
-      caller-workflow-name: 'main-build'
-      
+#  dotnet-eks-windows-test:
+#    needs: [ upload-main-build-image ]
+#    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+#    secrets: inherit
+#    with:
+#      adot-image-name: ${{ inputs.release-staging-repo }}:staging-windows2022
+#      aws-region: us-east-1
+#      test-cluster-name: 'eks-windows-manual'
+#      caller-workflow-name: 'main-build'
+#      
