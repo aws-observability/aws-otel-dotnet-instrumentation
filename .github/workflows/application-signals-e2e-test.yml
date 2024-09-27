@@ -58,9 +58,8 @@ jobs:
           
       - name: Login to Amazon private ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registries: ${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }},${{secrets.STAGING_ARTIFACTS_ACCOUNT}}
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.RELEASE_STAIGNG_REPO }}
         
       - name: Download Linux x64 Artifact
         if: runner.os == 'Linux'
