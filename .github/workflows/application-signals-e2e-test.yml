@@ -12,6 +12,14 @@ on:
         required: false
         type: string
         default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      adot-linux-image-name:
+        required: false
+        type: string
+        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-linux-amd64'
+      adot-windows-image-name:
+        required: false
+        type: string
+        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-windows-2022'
 
 permissions:
   id-token: write
@@ -24,9 +32,6 @@ concurrency:
 jobs:
   upload-main-build:
     runs-on: ubuntu-latest
-    outputs:
-      windows-staging-image: ${{ steps.imageOutput.outputs.windowsStagingImage }}
-      linux-staging-image: ${{ steps.imageOutput.outputs.linuxStagingImage }}
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -41,12 +46,6 @@ jobs:
 
       - name: Upload main-build files to s3
         run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
-        
-      - name: Set image to output
-        id: imageOutput
-        run: |
-          echo "windowsStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022" >> $GITHUB_OUTPUT
-          echo "linuxStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64" >> $GITHUB_OUTPUT
 
   upload-main-build-image:
     runs-on: ${{ matrix.os }}
@@ -123,7 +122,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ needs.upload-main-build.outputs.linux-staging-image }}
+      adot-image-name: ${{ inputs.adot-linux-image-name }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-adot-test'
       caller-workflow-name: 'main-build'
