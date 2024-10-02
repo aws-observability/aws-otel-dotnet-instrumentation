@@ -24,6 +24,9 @@ concurrency:
 jobs:
   upload-main-build:
     runs-on: ubuntu-latest
+    outputs:
+      windows-staging-image: ${{ steps.imageOutput.outputs.windowsStagingImage }}
+      linux-staging-image: ${{ steps.imageOutput.outputs.linuxStagingImage }}
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -38,13 +41,16 @@ jobs:
 
       - name: Upload main-build files to s3
         run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+        
+      - name: Set image to output
+        id: imageOutput
+        run: |
+          echo "windowsStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022" >> $GITHUB_OUTPUT
+          echo "linuxStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64" >> $GITHUB_OUTPUT
 
   upload-main-build-image:
     runs-on: ${{ matrix.os }}
     continue-on-error: true
-    outputs:
-      windows-staging-image: ${{ steps.imageOutput.outputs.windowsStagingImage }}
-      linux-staging-image: ${{ steps.imageOutput.outputs.linuxStagingImage }}
     strategy:
       matrix:
         include:
@@ -102,12 +108,6 @@ jobs:
           docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
           docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
         shell: powershell
-        
-      - name: Set image to output
-        id: imageOutput
-        run: |
-          echo "windowsStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022" >> $GITHUB_OUTPUT
-          echo "linuxStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64" >> $GITHUB_OUTPUT
 
   dotnet-ec2-default-test:
     needs: [ upload-main-build ]
@@ -119,11 +119,11 @@ jobs:
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       
   dotnet-eks-linux-test:
-    needs: [ upload-main-build-image ]
+    needs: [ upload-main-build, upload-main-build-image ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ needs.upload-main-build-image.outputs.linux-staging-image }}
+      adot-image-name: ${{ needs.upload-main-build.outputs.linux-staging-image }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-adot-test'
       caller-workflow-name: 'main-build'
