@@ -44,6 +44,7 @@ jobs:
     continue-on-error: true
     outputs:
       windows-staging-image: ${{ steps.imageOutput.outputs.windowsStagingImage }}
+      linux-staging-image: ${{ steps.imageOutput.outputs.linuxStagingImage }}
     strategy:
       matrix:
         include:
@@ -106,6 +107,7 @@ jobs:
         id: imageOutput
         run: |
           echo "windowsStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022" >> $GITHUB_OUTPUT
+          echo "linuxStagingImage=${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64" >> $GITHUB_OUTPUT
 
   dotnet-ec2-default-test:
     needs: [ upload-main-build ]
@@ -116,13 +118,13 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       
-  dotnet-eks-windows-test:
+  dotnet-eks-linux-test:
     needs: [ upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ needs.upload-main-build-image.outputs.windows-staging-image }}
+      adot-image-name: ${{ needs.upload-main-build-image.outputs.linux-staging-image }}
       aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
+      test-cluster-name: 'e2e-dotnet-adot-test'
       caller-workflow-name: 'main-build'
 
