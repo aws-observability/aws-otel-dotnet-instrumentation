@@ -127,3 +127,12 @@ jobs:
       test-cluster-name: 'e2e-dotnet-adot-test'
       caller-workflow-name: 'main-build'
 
+  dotnet-eks-windows-test:
+    needs: [ upload-main-build, upload-main-build-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+    secrets: inherit
+    with:
+      adot-image-name: ${{ inputs.adot-windows-image-name }}
+      aws-region: us-east-1
+      test-cluster-name: 'eks-windows-manual'
+      caller-workflow-name: 'main-build'
