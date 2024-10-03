@@ -12,6 +12,10 @@ on:
         required: false
         type: string
         default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      ec2-windows-image-name:
+        required: false
+        type: string
+        default: 'aws-distro-opentelemetry-dotnet-instrumentation-windows.zip'
       adot-linux-image-name:
         required: false
         type: string
@@ -43,9 +47,15 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.ec2-default-image-name }}
+      
+      - uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.ec2-windows-image-name }}
 
       - name: Upload main-build files to s3
-        run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+        run: |
+          aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+          aws s3 cp ./${{ inputs.ec2-windows-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-windows-image-name }}
 
   upload-main-build-image:
     runs-on: ${{ matrix.os }}
@@ -116,6 +126,15 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      
+  dotnet-ec2-windows-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-windows-image-name }}
       
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
