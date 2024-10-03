@@ -129,7 +129,7 @@ jobs:
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@fix-windows-typo
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
     secrets: inherit
     with:
       aws-region: us-east-1
