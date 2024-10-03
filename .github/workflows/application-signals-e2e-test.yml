@@ -19,7 +19,7 @@ on:
       adot-windows-image-name:
         required: false
         type: string
-        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-windows-2022'
+        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-windows2022'
 
 permissions:
   id-token: write
