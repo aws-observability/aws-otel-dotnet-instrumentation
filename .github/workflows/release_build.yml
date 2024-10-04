@@ -103,6 +103,7 @@ jobs:
           done
           aws s3 cp ./installationScripts/aws-otel-dotnet-install.sh "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/aws-otel-dotnet-install.sh"
           aws s3 cp ./installationScripts/AWS.Otel.DotNet.Auto.psm1 "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/AWS.Otel.DotNet.Auto.psm1"
+          aws s3 cp ./artifacts/nuget/nuget-packages.zip "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/nuget-packages.zip"
 
       # Publish to GitHub releases
       - name: Create GH release
@@ -133,6 +134,9 @@ jobs:
             --clobber
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
+            --clobber
+          gh release upload "v${{ github.event.inputs.version }}" \
+            ./artifacts/nuget/nuget-packages.zip \
             --clobber
 
   release-image:
@@ -243,6 +247,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
+          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
           cd ./arm64
           docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
