@@ -12,6 +12,18 @@ on:
         required: false
         type: string
         default: 'aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
+      ec2-windows-image-name:
+        required: false
+        type: string
+        default: 'aws-distro-opentelemetry-dotnet-instrumentation-windows.zip'
+      adot-linux-image-name:
+        required: false
+        type: string
+        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-linux-amd64'
+      adot-windows-image-name:
+        required: false
+        type: string
+        default: '637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-windows2022'
 
 permissions:
   id-token: write
@@ -20,7 +32,6 @@ permissions:
 concurrency:
   group: '${{ github.workflow }} @ ${{ inputs.aws-region }}'
   cancel-in-progress: false
-
 
 jobs:
   upload-main-build:
@@ -36,9 +47,76 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.ec2-default-image-name }}
+      
+      - uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.ec2-windows-image-name }}
 
       - name: Upload main-build files to s3
-        run: aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+        run: |
+          aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+          aws s3 cp ./${{ inputs.ec2-windows-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-windows-image-name }}
+
+  upload-main-build-image:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        include:
+          - os: windows-2022
+          - os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME}}
+          aws-region: us-east-1
+          
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.RELEASE_STAIGNG_REPO }}
+        
+      - name: Download Linux x64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+          
+      - name: Download Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v3
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          path: ./artifacts/windows
+          
+      - name: Unzip Linux Artifact
+        if: runner.os == 'Linux'
+        run: |
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+
+      - name: Unzip Windows Artifact
+        if: runner.os == 'Windows'
+        run: |
+          Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
+        shell: powershell
+
+      - name: Build Linux container
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
+      
+      - name: Build Windows container
+        if: runner.os == 'Windows'
+        run: |
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
+        shell: powershell
 
   dotnet-ec2-default-test:
     needs: [ upload-main-build ]
@@ -48,3 +126,32 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      
+  dotnet-ec2-windows-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-windows-image-name }}
+      
+  dotnet-eks-linux-test:
+    needs: [ upload-main-build, upload-main-build-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+    secrets: inherit
+    with:
+      adot-image-name: ${{ inputs.adot-linux-image-name }}
+      aws-region: us-east-1
+      test-cluster-name: 'e2e-dotnet-adot-test'
+      caller-workflow-name: 'main-build'
+
+  dotnet-eks-windows-test:
+    needs: [ upload-main-build, upload-main-build-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+    secrets: inherit
+    with:
+      adot-image-name: ${{ inputs.adot-windows-image-name }}
+      aws-region: us-east-1
+      test-cluster-name: 'eks-windows-manual'
+      caller-workflow-name: 'main-build'

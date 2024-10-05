@@ -69,11 +69,15 @@ require choosing between distributing a
 [_self-contained_ or a _framework-dependent_](https://learn.microsoft.com/en-us/dotnet/core/deploying/)
 application. Both types are compatible with automatic instrumentation.
 
+Example: `dotnet build --runtime linux-x64`. This builds the application and instrumentation for OS: Linux and Arch: x64.
+
 Use the script in the output folder of the build to launch the
 application with automatic instrumentation activated.
 
 - On Windows, use `adot-launch.cmd <application_executable>`
 - On Linux or Unix, use `adot-launch.sh <application_executable>`
+  - Call-out: before running the `adot-launch.sh` script, you will have to run `sed -i -e 's/\r$//' path/to/adot-launch.sh`
+  - You can refer to this [setup](https://github.com/aws-observability/application-signals-demo/blob/420c8cdbec61ac0b24e05e9c8b41190c0f90dd43/dotnet-petclinic-payment/PetClinic.PaymentService/ec2-setup.sh#L16-L21) as an example
 
 If you launch the application using the `dotnet` CLI, add `dotnet` after the script.
 
