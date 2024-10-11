@@ -1,8 +1,8 @@
 name: Daily scan
 
 on:
-#  schedule:
-#    - cron: '0 18 * * *' # scheduled to run at 18:00 UTC every day
+  schedule:
+    - cron: '0 18 * * *' # scheduled to run at 18:00 UTC every day
   workflow_dispatch: # be able to run the workflow on demand
 
 env:
@@ -61,8 +61,47 @@ jobs:
         run: |
           ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --out . --scan "**/*.csproj"
 
-      - name: Upload Dependency Check Report
-        uses: actions/upload-artifact@v2
+      - name: Print dependency scan results on failure
+        if: ${{ steps.dep_scan.outcome != 'success' }}
+        run: less dependency-check-report.html
+
+      - name: Perform high image scan
+        if: always()
+        id: high_scan
+        uses: ./.github/actions/image_scan
         with:
-          name: dependency-check-report
-          path: dependency-check-report.html
+          image-ref: "public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.3.2"
+          severity: 'CRITICAL,HIGH'
+
+      - name: Perform low image scan
+        if: always()
+        id: low_scan
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.3.2"
+          severity: 'MEDIUM,LOW,UNKNOWN'
+
+      - name: Configure AWS Credentials for emitting metrics
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.MONITORING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Publish high scan status
+        if: always()
+        run: |
+          value="${{ steps.high_scan.outcome == 'success' && '1.0' || '0.0' }}"
+          aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+            --metric-name Success \
+            --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=daily_scan_high \
+            --value $value
+
+      - name: Publish low scan status
+        if: always()
+        run: |
+          value="${{ steps.low_scan.outcome == 'success' && steps.dep_scan.outcome == 'success' && '1.0' || '0.0'}}"
+          aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+            --metric-name Success \
+            --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=daily_scan_low \
+            --value $value
