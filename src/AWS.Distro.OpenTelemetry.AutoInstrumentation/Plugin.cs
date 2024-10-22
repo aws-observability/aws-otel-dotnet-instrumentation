@@ -42,6 +42,21 @@ public class Plugin
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
 
+    private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
+    private static readonly string? AwsLambdaFunctionName = System.Environment.GetEnvironmentVariable(AwsLambdaFunctionNameConfig);
+
+    private static readonly string AwsXrayDaemonAddressConfig = "AWS_XRAY_DAEMON_ADDRESS";
+    private static readonly string? AwsXrayDaemonAddress = System.Environment.GetEnvironmentVariable(AwsXrayDaemonAddressConfig);
+
+    private static readonly string OtelExporterOtlpTracesEndpointConfig = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT";
+    private static readonly string? OtelExporterOtlpTracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
+
+    private static readonly string OtelExporterOtlpEndpointConfig = "OTEL_EXPORTER_OTLP_ENDPOINT";
+    private static readonly string? OtelExporterOtlpEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpEndpointConfig);
+
+    private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
+    private static readonly string FormatOtelUnSampledTracesBinaryPrefix = "T1U";
+
     private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
@@ -81,48 +96,60 @@ public class Plugin
 
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
-            string? intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
-            int exportInterval = DefaultMetricExportInterval;
-            try
+            // We want to be adding the exporter as the last processor in the traceProvider since processors
+            // are executed in the order they were added to the provider.
+            if (this.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
             {
-                int parsedExportInterval = Convert.ToInt32(intervalConfigString);
-                exportInterval = parsedExportInterval != 0 ? parsedExportInterval : DefaultMetricExportInterval;
-            }
-            catch (Exception)
-            {
-                Logger.Log(LogLevel.Trace, "Could not convert OTEL_METRIC_EXPORT_INTERVAL to integer. Using default value 60000.");
+                Resource processResource = tracerProvider.GetResource();
+                tracerProvider.AddProcessor(new BatchActivityExportProcessor(new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix)));
             }
 
-            if (exportInterval.CompareTo(DefaultMetricExportInterval) > 0)
+            // Disable Application Metrics for Lambda environment
+            if (!this.IsLambdaEnvironment())
             {
-                exportInterval = DefaultMetricExportInterval;
-                Logger.Log(LogLevel.Information, "AWS Application Signals metrics export interval capped to {0}", exportInterval);
+                string? intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
+                int exportInterval = DefaultMetricExportInterval;
+                try
+                {
+                    int parsedExportInterval = Convert.ToInt32(intervalConfigString);
+                    exportInterval = parsedExportInterval != 0 ? parsedExportInterval : DefaultMetricExportInterval;
+                }
+                catch (Exception)
+                {
+                    Logger.Log(LogLevel.Trace, "Could not convert OTEL_METRIC_EXPORT_INTERVAL to integer. Using default value 60000.");
+                }
+
+                if (exportInterval.CompareTo(DefaultMetricExportInterval) > 0)
+                {
+                    exportInterval = DefaultMetricExportInterval;
+                    Logger.Log(LogLevel.Information, "AWS Application Signals metrics export interval capped to {0}", exportInterval);
+                }
+
+                // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/README.md#enable-metric-exporter
+                // for setting the temporatityPref.
+                var metricReader = new PeriodicExportingMetricReader(this.ApplicationSignalsExporterProvider(), exportInterval)
+                {
+                    TemporalityPreference = MetricReaderTemporalityPreference.Delta,
+                };
+
+                MeterProvider provider = Sdk.CreateMeterProviderBuilder()
+                .AddReader(metricReader)
+                .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder))
+                .AddMeter("AwsSpanMetricsProcessor")
+                .AddView(instrument =>
+                {
+                    // we currently only listen and meter Histograms and for that,
+                    // we use Base2ExponentialBucketHistogramConfiguration
+                    return instrument.GetType().GetGenericTypeDefinition() == typeof(Histogram<>)
+                                ? new Base2ExponentialBucketHistogramConfiguration()
+                                : null;
+                })
+                .Build();
+
+                Resource resource = provider.GetResource();
+                BaseProcessor<Activity> spanMetricsProcessor = AwsSpanMetricsProcessorBuilder.Create(resource, provider).Build();
+                tracerProvider.AddProcessor(spanMetricsProcessor);
             }
-
-            // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/README.md#enable-metric-exporter
-            // for setting the temporatityPref.
-            var metricReader = new PeriodicExportingMetricReader(this.ApplicationSignalsExporterProvider(), exportInterval)
-            {
-                TemporalityPreference = MetricReaderTemporalityPreference.Delta,
-            };
-
-            MeterProvider provider = Sdk.CreateMeterProviderBuilder()
-            .AddReader(metricReader)
-            .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder))
-            .AddMeter("AwsSpanMetricsProcessor")
-            .AddView(instrument =>
-            {
-                // we currently only listen and meter Histograms and for that,
-                // we use Base2ExponentialBucketHistogramConfiguration
-                return instrument.GetType().GetGenericTypeDefinition() == typeof(Histogram<>)
-                        ? new Base2ExponentialBucketHistogramConfiguration()
-                        : null;
-            })
-            .Build();
-
-            Resource resource = provider.GetResource();
-            BaseProcessor<Activity> spanMetricsProcessor = AwsSpanMetricsProcessorBuilder.Create(resource, provider).Build();
-            tracerProvider.AddProcessor(spanMetricsProcessor);
         }
     }
 
@@ -331,7 +358,9 @@ public class Plugin
         // ResourceDetectors are enabled by default. Adding config to be able to disable during local testing
         var resourceDetectorsEnabled = System.Environment.GetEnvironmentVariable(ResourceDetectorEnableConfig) ?? "true";
 
-        if (resourceDetectorsEnabled != "true")
+        // Resource detectors are disabled if the environment variable is explicitly set to false or if the
+        // application is in a lambda environment
+        if (resourceDetectorsEnabled != "true" || this.IsLambdaEnvironment())
         {
             return builder;
         }
@@ -380,5 +409,17 @@ public class Plugin
           LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
 
         return new OtlpMetricExporter(options);
+    }
+
+    private bool IsLambdaEnvironment()
+    {
+        // detect if running in AWS Lambda environment
+        return AwsLambdaFunctionName != null;
+    }
+
+    private bool HasCustomTracesEndpoint()
+    {
+        // detect if running in AWS Lambda environment
+        return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 }
