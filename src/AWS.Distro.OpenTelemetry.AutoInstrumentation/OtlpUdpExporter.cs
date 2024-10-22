@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using OpenTelemetry;
 using OpenTelemetry.Proto.Collector.Trace.V1;
@@ -19,6 +20,9 @@ using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 /// </summary>
 public class OtlpUdpExporter : BaseExporter<Activity>
 {
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILogger Logger = Factory.CreateLogger<OtlpUdpExporter>();
+
     private UdpExporter udpExporter;
     private string signalPrefix;
     private Resource processResource;
@@ -53,7 +57,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error exporting spans: {ex.Message}");
+            Logger.LogError($"Error exporting spans: {ex.Message}");
             return ExportResult.Failure;
         }
     }
@@ -68,7 +72,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error shutting down exporter: {ex.Message}");
+            Logger.LogError($"Error shutting down exporter: {ex.Message}");
             return false;
         }
     }
@@ -82,6 +86,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (resourceExtensionsType == null)
         {
+            Logger.LogTrace("ResourceExtensions Type was not found");
             return null;
         }
 
@@ -94,6 +99,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (toOtlpResourceMethod == null)
         {
+            Logger.LogTrace("ResourceExtensions.ToOtlpResource Method was not found");
             return null;
         }
 
@@ -101,6 +107,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (otlpResource == null)
         {
+            Logger.LogTrace("OtlpResource object cannot be converted from OpenTelemetry.Resources");
             return null;
         }
 
@@ -116,15 +123,16 @@ public class OtlpUdpExporter : BaseExporter<Activity>
             string? otlpResourceJson = otlpResource.ToString();
             if (otlpResourceJson == null)
             {
+                Logger.LogTrace("OtlpResource object cannot be converted to JSON");
                 return null;
             }
 
             var otlpResourceConverted = JsonConvert.DeserializeObject<OtlpResource.Resource>(otlpResourceJson);
             return otlpResourceConverted;
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Console.WriteLine(e);
+            Logger.LogError($"Error converting OtlpResource to/from JSON: {ex.Message}");
             return null;
         }
     }
@@ -138,6 +146,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (sdkLimitOptionsType == null)
         {
+            Logger.LogTrace("SdkLimitOptions Type was not found");
             return null;
         }
 
@@ -159,6 +168,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (sdkLimitOptionsType == null)
         {
+            Logger.LogTrace("SdkLimitOptions Type was not found");
             return null;
         }
 
@@ -174,6 +184,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
 
         if (sdkLimitOptions == null)
         {
+            Logger.LogTrace("SdkLimitOptions Object was not found/created properly using the default parameterless constructor");
             return null;
         }
 
@@ -214,14 +225,18 @@ public class OtlpUdpExporter : BaseExporter<Activity>
                     var otlpSpanConverted = JsonConvert.DeserializeObject<Span>(otlpSpanJson, settings);
                     scopeSpans.Spans.Add(otlpSpanConverted);
                 }
-                catch (Exception e)
+                catch (Exception ex)
                 {
-                    Console.WriteLine(e);
+                    Logger.LogError($"Error converting OtlpSpan to/from JSON: {ex.Message}");
                 }
             }
 
             resourceSpans.ScopeSpans.Add(scopeSpans);
             request.ResourceSpans.Add(resourceSpans);
+        }
+        else
+        {
+            Logger.LogTrace("ActivityExtensions.ToOtlpSpan method is not found");
         }
 
         return request.ToByteArray();
@@ -233,6 +248,9 @@ internal class UdpExporter
     internal const string DefaultEndpoint = "127.0.0.1:2000";
     internal const string ProtocolHeader = "{\"format\":\"json\",\"version\":1}\n";
     internal const string DefaultFormatOtelTracesBinaryPrefix = "T1S";
+
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILogger Logger = Factory.CreateLogger<UdpExporter>();
 
     private string endpoint;
     private string host;
@@ -263,7 +281,7 @@ internal class UdpExporter
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error sending UDP data: {ex.Message}");
+            Logger.LogError($"Error sending UDP data: {ex.Message}");
             throw;
         }
     }

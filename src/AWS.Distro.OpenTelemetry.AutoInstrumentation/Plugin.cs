@@ -55,7 +55,6 @@ public class Plugin
     private static readonly string? OtelExporterOtlpEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpEndpointConfig);
 
     private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
-    private static readonly string FormatOtelUnSampledTracesBinaryPrefix = "T1U";
 
     private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
         {
