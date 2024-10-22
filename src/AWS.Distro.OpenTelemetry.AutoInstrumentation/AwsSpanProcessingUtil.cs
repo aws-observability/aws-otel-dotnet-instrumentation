@@ -58,8 +58,8 @@ internal sealed class AwsSpanProcessingUtil
 
     internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
-    private static readonly string RouteDataParsingEnabledConfig = "ROUTE_DATA_PARSING_ENABLED";
-    private static readonly string RouteDataParsingEnabled = System.Environment.GetEnvironmentVariable(RouteDataParsingEnabledConfig) ?? "false";
+    private static readonly string HttpRouteDataParsingEnabledConfig = "HTTP_ROUTE_DATA_PARSING_ENABLED";
+    private static readonly string HttpRouteDataParsingEnabled = System.Environment.GetEnvironmentVariable(HttpRouteDataParsingEnabledConfig) ?? "false";
 
     internal static List<string> GetDialectKeywords()
     {
@@ -108,7 +108,7 @@ internal sealed class AwsSpanProcessingUtil
 
         // workaround for now so that both Server and Consumer spans have same operation
         // TODO: Update this and other languages so that all of them set the operation during propagation.
-        else if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && RouteDataParsingEnabled == "false"))
+        else if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
         {
             operation = GenerateIngressOperation(span);
         }
