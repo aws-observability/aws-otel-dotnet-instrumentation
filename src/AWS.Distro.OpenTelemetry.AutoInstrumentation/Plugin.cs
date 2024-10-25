@@ -13,6 +13,7 @@ using OpenTelemetry.Extensions.AWS.Trace;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using OpenTelemetry.Instrumentation.AspNetCore;
+using OpenTelemetry.Instrumentation.AWSLambda;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
@@ -100,7 +101,9 @@ public class Plugin
             if (this.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
             {
                 Resource processResource = tracerProvider.GetResource();
+                Console.WriteLine("Adding UDP Exporter with this address: " + AwsXrayDaemonAddress);
                 tracerProvider.AddProcessor(new BatchActivityExportProcessor(new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix)));
+                Console.WriteLine("Added UDP Exporter with this address: " + AwsXrayDaemonAddress);
             }
 
             // Disable Application Metrics for Lambda environment
@@ -169,6 +172,7 @@ public class Plugin
 
         // My custom logic here
         builder.AddAWSInstrumentation();
+        builder.AddAWSLambdaConfigurations();
         return builder;
     }
 
