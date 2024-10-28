@@ -17,7 +17,7 @@ RUN mkdir -p /var/log/opentelemetry/dotnet
 
 ENV CORECLR_ENABLE_PROFILING=1
 ENV CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
-ENV CORECLR_PROFILER_PATH=${INSTALL_DIR}/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
+ENV CORECLR_PROFILER_PATH=${INSTALL_DIR}/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so
 ENV DOTNET_ADDITIONAL_DEPS=${INSTALL_DIR}/AdditionalDeps
 ENV DOTNET_SHARED_STORE=${INSTALL_DIR}/store
 ENV DOTNET_STARTUP_HOOKS=${INSTALL_DIR}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll

@@ -70,6 +70,10 @@ case "$ENABLE_PROFILING" in
     ;;
 esac
 
+if [ ! -z "${AWS_LAMBDA_FUNCTION_NAME}" ]; then
+  OTEL_DOTNET_AUTO_HOME="/opt"
+fi
+
 # set defaults
 test -z "$OTEL_DOTNET_AUTO_HOME" && OTEL_DOTNET_AUTO_HOME="$HOME/.otel-dotnet-auto"
 
@@ -173,13 +177,57 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
 
   # AWS OTEL DOTNET 
   export OTEL_DOTNET_AUTO_PLUGINS="AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"
-  export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-  export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316"
-  export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics"
-  export OTEL_METRICS_EXPORTER="none"
-  export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
-  export OTEL_TRACES_SAMPLER="xray"
-  export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000"
+
+  # If this is true, that means we are in a lambda env. In this case, setup the environment for lambda.
+  if [ ! -z "${AWS_LAMBDA_FUNCTION_NAME}" ]; then
+
+    export OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER="$_HANDLER"
+    export _HANDLER="LambdaWrapper::LambdaWrapper.Function::FunctionHandler"
+
+    echo "$DOTNET_SHARED_STORE"
+
+    if [ -z "${OTEL_EXPORTER_OTLP_PROTOCOL}" ]; then
+      export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+    fi
+
+    if [ -z "${OTEL_SERVICE_NAME}" ]; then
+      export OTEL_SERVICE_NAME=$AWS_LAMBDA_FUNCTION_NAME;
+    fi
+    
+    export LAMBDA_RESOURCE_ATTRIBUTES="cloud.region=$AWS_REGION,cloud.provider=aws,faas.name=$AWS_LAMBDA_FUNCTION_NAME,faas.version=$AWS_LAMBDA_FUNCTION_VERSION,faas.instance=$AWS_LAMBDA_LOG_STREAM_NAME,aws.log.group.names=$AWS_LAMBDA_LOG_GROUP_NAME";
+
+    if [ -z "${OTEL_AWS_APPLICATION_SIGNALS_ENABLED}" ]; then
+      export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true";
+    fi
+
+    if [ -z "${OTEL_METRICS_EXPORTER}" ]; then
+      export OTEL_METRICS_EXPORTER="none";
+    fi
+
+    if [ -z "${OTEL_RESOURCE_ATTRIBUTES}" ]; then
+      export OTEL_RESOURCE_ATTRIBUTES=$LAMBDA_RESOURCE_ATTRIBUTES;
+    else
+      export OTEL_RESOURCE_ATTRIBUTES="$LAMBDA_RESOURCE_ATTRIBUTES,$OTEL_RESOURCE_ATTRIBUTES";
+    fi
+
+    if [ -z "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}" ] && [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT}" ]; then
+      export OTEL_TRACES_EXPORTER="none";
+    fi
+
+    # need to disable all instrumentations except netcore, aws sdk and lambda.
+
+  else
+    export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+    export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316"
+    export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics"
+    export OTEL_METRICS_EXPORTER="none"
+    export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
+    export OTEL_TRACES_SAMPLER="xray"
+    export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000"
+  fi
+
 fi
+
+/var/lang/bin/dotnet exec --depsfile /opt/SimpleLambdaFunction/SimpleLambdaFunction.deps.json --runtimeconfig /opt/SimpleLambdaFunction/SimpleLambdaFunction.runtimeconfig.json /var/runtime/Amazon.Lambda.RuntimeSupport.dll SimpleLambdaFunction::SimpleLambdaFunction.Function::FunctionHandler
 
 exec "$@"

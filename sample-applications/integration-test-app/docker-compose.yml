@@ -1,34 +1,58 @@
 version: "3.7"
 services:
-
-  cwagent:
-    image: amazon/cloudwatch-agent:latest
+  awscollector:
+    image: amazon/aws-otel-collector
+    command: ["--config=/otel-config.yaml"]
     volumes:
-      - ./amazon-cloudwatch-agent.json:/opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json # agent config
-      - ./aws:/root/.aws # required for authentication
+      - ./collector.yaml:/otel-config.yaml
     environment:
-      - AWS_REGION=us-west-2
+      - AWS_REGION=us-east-1
+
+
+
+
+
+
     ports:
-      - '4316:4316'
-      - '4317:4317'
-      - '2000:2000'
+     - '4316:4316'
+     - '13133:13133'
+
+  xray-daemon:
+    image: xray-daemon
+    container_name: xray-daemon
+    ports:
+      - "2000:2000/udp"  # Expose UDP port 2000
+    environment:
+      - AWS_REGION=us-east-2  # Environment variable
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+
+    stdin_open: true  # Equivalent to --attach STDOUT in docker run
+    command: ["-o"]   # Run the xray-daemon with the -o flag
 
   app:
     image: aspnetapp:latest
     environment: 
       - AWS_REGION=us-west-2
+
       - INSTANCE_ID
       - LISTEN_ADDRESS=0.0.0.0:8080
       - OTEL_RESOURCE_ATTRIBUTES=service.name=aws-otel-integ-test
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cwagent:4316 # TODO: workaround for trace exporter endpoint
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://cwagent:4316/v1/traces
-      - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://cwagent:4316/v1/metrics
+      - AWS_XRAY_DAEMON_ADDRESS=0.0.0.0:2000
+      - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://awscollector:4316/v1/metrics
       - ASPNETCORE_URLS=http://+:8080
       - OTEL_METRICS_EXPORTER=none
+      - OTEL_TRACES_EXPORTER=none
       - OTEL_AWS_APPLICATION_SIGNALS_ENABLED=true
-      - OTEL_TRACES_SAMPLER=xray
-      - OTEL_TRACES_SAMPLER_ARG=endpoint=http://cwagent:2000,polling_interval=1
+      - OTEL_TRACES_SAMPLER=always_on
+      - OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED=true
+      - RESOURCE_DETECTORS_ENABLED=false
+      - OTEL_BSP_SCHEDULE_DELAY=30000
+      - ROUTE_DATA_PARSING_ENABLED=true
+      - AWS_LAMBDA_FUNCTION_NAME=test
     ports:
       - '8080:8080'     
     volumes:
       - ~/.aws:/root/.aws:ro
+      - ./logs:/var/log/opentelemetry/dotnet
