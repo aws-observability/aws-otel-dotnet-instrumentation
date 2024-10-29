@@ -298,6 +298,8 @@ public class Plugin
     {
         options.EnrichWithHttpRequest = (activity, request) =>
         {
+            activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(request.HttpContext));
+            
             if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
             {
                 this.ShouldSampleParent(activity);

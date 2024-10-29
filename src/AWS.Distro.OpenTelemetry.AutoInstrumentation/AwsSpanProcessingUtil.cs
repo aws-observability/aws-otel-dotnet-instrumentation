@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Reflection;
+#if NETFRAMEWORK
+using System.Web;
+#endif
 using Newtonsoft.Json.Linq;
 using OpenTelemetry;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
@@ -106,6 +110,25 @@ internal sealed class AwsSpanProcessingUtil
             operation = InternalOperation;
         }
 
+#if NETFRAMEWORK
+        // Access the HttpContext object to get the route data.
+        else if (span.GetCustomProperty("HttpContextWeakRef") is WeakReference<HttpContext> httpContextWeakRef &&
+            httpContextWeakRef.TryGetTarget(out var httpContext))
+        {
+            string? routePattern = GetHttpRouteData(httpContext);
+
+            if (!string.IsNullOrEmpty(routePattern))
+            {
+                string? httpMethod = (string?)span.GetTagItem(AttributeHttpRequestMethod);
+                operation = httpMethod + " " + routePattern;
+            }
+            else
+            {
+                operation = GenerateIngressOperation(span);
+            }
+        }
+#endif
+
         // workaround for now so that both Server and Consumer spans have same operation
         // TODO: Update this and other languages so that all of them set the operation during propagation.
         else if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
@@ -115,6 +138,40 @@ internal sealed class AwsSpanProcessingUtil
 
         return operation;
     }
+
+#if NETFRAMEWORK
+    // Uses reflection to the get the HttpRequestRouteHelper.GetRouteTemplate to get the 
+    // route template from NETFRAMEWORK applications.
+    // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AspNet/Implementation/HttpRequestRouteHelper.cs#L12
+    internal static string? GetHttpRouteData(HttpContext httpContext)
+    {
+        Type? httpRouteHelper = Type.GetType("OpenTelemetry.Instrumentation.AspNet.Implementation.HttpRequestRouteHelper, OpenTelemetry.Instrumentation.AspNet");
+
+        if (httpRouteHelper == null)
+        {
+            Console.WriteLine("HttpRequestRouteHelper Type was not found");
+            return null;
+        }
+
+        // Create an instance of HttpRequestRouteHelper using the default parameterless constructor
+        object? httpRouteHelperInstance = Activator.CreateInstance(httpRouteHelper);
+
+        MethodInfo getRouteTemplateMethod = httpRouteHelperInstance.GetMethod(
+            "GetRouteTemplate",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            types: new Type[] { typeof(HttpRequest) },
+            modifiers: null);
+
+        if (getRouteTemplateMethod == null)
+        {
+            Console.WriteLine("getRouteTemplateMethod was not found");
+            return null;
+        }
+
+        return (string)getRouteTemplateMethod.Invoke(httpRouteHelperInstance, new object[] { httpContext.Request });
+    }
+#endif
 
     internal static string? GetEgressOperation(Activity span)
     {
