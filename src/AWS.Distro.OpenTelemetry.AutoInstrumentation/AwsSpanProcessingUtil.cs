@@ -156,7 +156,7 @@ internal sealed class AwsSpanProcessingUtil
         // Create an instance of HttpRequestRouteHelper using the default parameterless constructor
         object? httpRouteHelperInstance = Activator.CreateInstance(httpRouteHelper);
 
-        MethodInfo getRouteTemplateMethod = httpRouteHelperInstance.GetMethod(
+        MethodInfo getRouteTemplateMethod = httpRouteHelper.GetMethod(
             "GetRouteTemplate",
             BindingFlags.Instance | BindingFlags.NonPublic,
             binder: null,

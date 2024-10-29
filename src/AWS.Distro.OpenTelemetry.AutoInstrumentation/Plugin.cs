@@ -10,6 +10,7 @@ using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Extensions.AWS.Trace;
 #if NETFRAMEWORK
+using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using OpenTelemetry.Instrumentation.AspNetCore;
@@ -298,7 +299,21 @@ public class Plugin
     {
         options.EnrichWithHttpRequest = (activity, request) =>
         {
-            activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(request.HttpContext));
+            HttpContext currentContext = HttpContext.Current;
+
+            if (currentContext == null)
+            {
+                Type requestType = typeof(HttpRequest);
+
+                PropertyInfo contextProperty = requestType.GetProperty("Context", BindingFlags.Instance | BindingFlags.NonPublic);
+
+                if (contextProperty != null)
+                {
+                    currentContext = contextProperty.GetValue(request) as HttpContext;
+                }
+            }
+            
+            activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(currentContext));
             
             if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
             {
