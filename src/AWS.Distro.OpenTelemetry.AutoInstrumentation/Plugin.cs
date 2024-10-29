@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Reflection;
 using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
