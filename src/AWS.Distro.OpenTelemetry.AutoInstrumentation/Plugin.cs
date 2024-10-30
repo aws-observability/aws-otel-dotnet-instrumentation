@@ -270,7 +270,6 @@ public class Plugin
 
         options.EnrichWithHttpWebRequest = (activity, request) =>
         {
-
             if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
             {
                 this.ShouldSampleParent(activity);
