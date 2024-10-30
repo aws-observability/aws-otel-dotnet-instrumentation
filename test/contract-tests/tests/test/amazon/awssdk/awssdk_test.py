@@ -582,7 +582,15 @@ class AWSSdkTest(ContractTestBase):
         self.assertEqual(attributes_dict[key].string_value, expect_values[0])
 
     def _filter_bedrock_metrics(self, target_metrics: List[Metric]):
-        bedrock_calls = {"GET /agents", "GET /guardrails", "GET /knowledgebases", "POST /agents", "POST /model", "POST /knowledgebases" }
+        bedrock_calls = {
+            "GET agents/test-agent",
+            "GET guardrails/test-guardrail",
+            "GET knowledgebases/test-knowledge-base",
+            "GET knowledgebases/test-knowledge-base/datasources/test-data-source",
+            "POST agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text",
+            "POST model/test-model/invoke",
+            "POST knowledgebases/test-knowledge-base/retrieve"
+        }
         for metric in target_metrics:
             for dp in metric.exponential_histogram.data_points:
                 # remove dp generated from manual response
