@@ -451,4 +451,118 @@ internal class AWSLlmModelProcessor
             Console.WriteLine("Exception: " + ex.Message);
         }
     }
+
+    private static void ProcessCommandModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("p", out var topP))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("temperature", out var temperature))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessCommandModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        Console.WriteLine("asjdha,sdjuhalsu");
+        try
+        {
+            if (jsonBody.TryGetValue("generations", out var generationsArray))
+            {
+                var generations = generationsArray[0];
+                if (generations.TryGetProperty("finish_reason", out var finishReasons))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                }
+            }
+
+            // prompt_tokens and completion_tokens not provided in Command response body.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessMistralModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("top_p", out var topP))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("temperature", out var temperature))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessMistralModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("outputs", out var outputsArray))
+            {
+                var output = outputsArray[0];
+                if (output.TryGetProperty("stop_reason", out var finishReasons))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                }
+            }
+
+            // prompt_tokens and completion_tokens not provided in Mistral response body.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessStabilityModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("artifacts", out var artifactsArray))
+            {
+                var artifacts = artifactsArray[0];
+                if (artifacts.TryGetProperty("finishReason", out var finishReasons))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                }
+            }
+
+            // prompt_tokens and completion_tokens not provided in Stability response body.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
 }
