@@ -268,6 +268,7 @@ public class Plugin
 
         options.EnrichWithHttpWebRequest = (activity, request) =>
         {
+
             if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
             {
                 this.ShouldSampleParent(activity);
@@ -310,12 +311,15 @@ public class Plugin
 
                 if (contextProperty != null)
                 {
-                    currentContext = contextProperty.GetValue(request) as HttpContext;
+                    currentContext = (HttpContext)contextProperty.GetValue(request);
                 }
             }
-            
-            activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(currentContext));
-            
+
+            if (currentContext != null)
+            {
+                activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(currentContext));
+            }
+
             if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
             {
                 this.ShouldSampleParent(activity);
