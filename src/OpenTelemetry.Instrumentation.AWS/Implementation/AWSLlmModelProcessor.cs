@@ -46,8 +46,6 @@ internal class AWSLlmModelProcessor
                         case "mistral.mistral":
                             ProcessMistralModelRequestAttributes(activity, jsonObject);
                             break;
-
-                        // Stability AI model requests do not contain any GenAI specific attributes.
                     }
                 }
                 catch (Exception ex)
@@ -96,9 +94,6 @@ internal class AWSLlmModelProcessor
                             break;
                         case "mistral.mistral":
                             ProcessMistralModelResponseAttributes(activity, jsonObject);
-                            break;
-                        case "stability.stable":
-                            ProcessStabilityModelResponseAttributes(activity, jsonObject);
                             break;
                     }
                 }
@@ -345,27 +340,6 @@ internal class AWSLlmModelProcessor
             }
 
             // prompt_tokens and completion_tokens not provided in Mistral response body.
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessStabilityModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("artifacts", out var artifactsArray))
-            {
-                var artifacts = artifactsArray[0];
-                if (artifacts.TryGetProperty("finishReason", out var finishReasons))
-                {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-                }
-            }
-
-            // prompt_tokens and completion_tokens not provided in Stability response body.
         }
         catch (Exception ex)
         {
