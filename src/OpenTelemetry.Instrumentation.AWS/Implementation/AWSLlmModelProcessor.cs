@@ -431,14 +431,14 @@ internal class AWSLlmModelProcessor
     {
         try
         {
-            if (jsonBody.TryGetValue("prompt_token_count", out var promptTokens))
+            if (jsonBody.TryGetValue("prompt_token_count", out var inputTokens))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, promptTokens.GetInt32());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
             }
 
-            if (jsonBody.TryGetValue("generation_token_count", out var completionTokens))
+            if (jsonBody.TryGetValue("generation_token_count", out var outputTokens))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, completionTokens.GetInt32());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
             }
 
             if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
@@ -529,13 +529,13 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("usage", out var usage))
             {
-                if (usage.TryGetProperty("prompt_tokens", out var promptTokens))
+                if (usage.TryGetProperty("prompt_tokens", out var inputTokens))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, promptTokens.GetInt32());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
                 }
-                if (usage.TryGetProperty("completion_tokens", out var completionTokens))
+                if (usage.TryGetProperty("completion_tokens", out var outputTokens))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, completionTokens.GetInt32());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
                 }
             }
             if (jsonBody.TryGetValue("choices", out var choices))
