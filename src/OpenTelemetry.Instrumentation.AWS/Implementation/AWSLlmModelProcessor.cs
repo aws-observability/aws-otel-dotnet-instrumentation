@@ -144,7 +144,7 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("inputTextTokenCount", out var promptTokens))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiPromptTokens, promptTokens.GetInt32());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, promptTokens.GetInt32());
             }
 
             if (jsonBody.TryGetValue("results", out var resultsArray))
@@ -152,12 +152,12 @@ internal class AWSLlmModelProcessor
                 var results = resultsArray[0];
                 if (results.TryGetProperty("tokenCount", out var completionTokens))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiCompletionTokens, completionTokens.GetInt32());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, completionTokens.GetInt32());
                 }
 
                 if (results.TryGetProperty("completionReason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
             }
         }
@@ -198,7 +198,7 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
             }
 
             // prompt_tokens and completion_tokens not provided in Claude response body.
@@ -240,17 +240,17 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("prompt_token_count", out var promptTokens))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiPromptTokens, promptTokens.GetInt32());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, promptTokens.GetInt32());
             }
 
             if (jsonBody.TryGetValue("generation_token_count", out var completionTokens))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiCompletionTokens, completionTokens.GetInt32());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, completionTokens.GetInt32());
             }
 
             if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
             }
         }
         catch (Exception ex)
@@ -294,7 +294,7 @@ internal class AWSLlmModelProcessor
                 var generations = generationsArray[0];
                 if (generations.TryGetProperty("finish_reason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
             }
 
@@ -340,7 +340,7 @@ internal class AWSLlmModelProcessor
                 var output = outputsArray[0];
                 if (output.TryGetProperty("stop_reason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
             }
 
@@ -361,7 +361,7 @@ internal class AWSLlmModelProcessor
                 var artifacts = artifactsArray[0];
                 if (artifacts.TryGetProperty("finishReason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, finishReasons.GetString());
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
             }
 
