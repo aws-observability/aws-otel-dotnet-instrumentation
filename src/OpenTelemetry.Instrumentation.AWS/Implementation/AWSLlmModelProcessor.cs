@@ -43,6 +43,9 @@ internal class AWSLlmModelProcessor
                         case "cohere.command":
                             ProcessCommandModelRequestAttributes(activity, jsonObject);
                             break;
+                        case "ai21.jamba":
+                            ProcessJambaModelRequestAttributes(activity, jsonObject);
+                            break;
                         case "mistral.mistral":
                             ProcessMistralModelRequestAttributes(activity, jsonObject);
                             break;
@@ -91,6 +94,9 @@ internal class AWSLlmModelProcessor
                             break;
                         case "cohere.command":
                             ProcessCommandModelResponseAttributes(activity, jsonObject);
+                            break;
+                        case "ai21.jamba":
+                            ProcessJambaModelResponseAttributes(activity, jsonObject);
                             break;
                         case "mistral.mistral":
                             ProcessMistralModelResponseAttributes(activity, jsonObject);
@@ -281,7 +287,6 @@ internal class AWSLlmModelProcessor
 
     private static void ProcessCommandModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
     {
-        Console.WriteLine("asjdha,sdjuhalsu");
         try
         {
             if (jsonBody.TryGetValue("generations", out var generationsArray))
@@ -294,6 +299,60 @@ internal class AWSLlmModelProcessor
             }
 
             // prompt_tokens and completion_tokens not provided in Command response body.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessJambaModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("top_p", out var topP))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("temperature", out var temperature))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+            }
+
+            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessJambaModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    {
+        try
+        {
+            if (jsonBody.TryGetValue("usage", out var usage))
+            {
+                if (usage.TryGetProperty("prompt_tokens", out var promptTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, promptTokens.GetInt32());
+                }
+                if (usage.TryGetProperty("completion_tokens", out var completionTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, completionTokens.GetInt32());
+                }
+            }
+            if (jsonBody.TryGetValue("choices", out var choices))
+            {
+                if (choices[0].TryGetProperty("finish_reason", out var finishReasons))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                }
+            }
         }
         catch (Exception ex)
         {
