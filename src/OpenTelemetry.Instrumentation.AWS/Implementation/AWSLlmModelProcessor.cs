@@ -544,25 +544,4 @@ internal class AWSLlmModelProcessor
             Console.WriteLine("Exception: " + ex.Message);
         }
     }
-
-    private static void ProcessStabilityModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("artifacts", out var artifactsArray))
-            {
-                var artifacts = artifactsArray[0];
-                if (artifacts.TryGetProperty("finishReason", out var finishReasons))
-                {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-                }
-            }
-
-            // prompt_tokens and completion_tokens not provided in Stability response body.
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
 }
