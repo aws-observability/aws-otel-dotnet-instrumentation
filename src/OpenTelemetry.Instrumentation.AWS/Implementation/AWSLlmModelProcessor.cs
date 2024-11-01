@@ -61,9 +61,11 @@ internal class AWSLlmModelProcessor
 
     internal static void ProcessResponseModelAttributes(Activity activity, AmazonWebServiceResponse response, string model)
     {
-        // currently, the .NET SDK does not expose "X-Amzn-Bedrock-*" HTTP headers in the response metadata,
-        // as per https://github.com/aws/aws-sdk-net/issues/3171. Unless the Bedrock team decides to change the
-        // public interface of the APIs, we can only extract Bedrock attributes that exist in the response body.
+        // Currently, the .NET SDK does not expose "X-Amzn-Bedrock-*" HTTP headers in the response metadata, as per
+        // https://github.com/aws/aws-sdk-net/issues/3171. As a result, we can only extract attributes given what is in
+        // the response body. For the Claude, Command, and Mistral models, the input and output tokens are not provided
+        // in the response body, so we approximate their values by dividing the input and output lengths by 6, based on
+        // the Bedrock documentation here: https://docs.aws.amazon.com/bedrock/latest/userguide/model-customization-prepare.html
 
         var responseBodyProperty = response.GetType().GetProperty("Body");
         if (responseBodyProperty != null)
@@ -186,6 +188,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Claude response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -202,7 +210,11 @@ internal class AWSLlmModelProcessor
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
             }
 
-            // prompt_tokens and completion_tokens not provided in Claude response body.
+            // output tokens not provided in Claude response body, so we estimate the value based on output length
+            if (jsonBody.TryGetValue("completion", out var output))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -278,6 +290,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Command response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -291,14 +309,18 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("generations", out var generationsArray))
             {
-                var generations = generationsArray[0];
-                if (generations.TryGetProperty("finish_reason", out var finishReasons))
+                var generation = generationsArray[0];
+                if (generation.TryGetProperty("finish_reason", out var finishReasons))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
-            }
 
-            // prompt_tokens and completion_tokens not provided in Command response body.
+                // completion tokens not provided in Command response body, so we estimate the value based on output length
+                if (generation.TryGetProperty("text", out var output))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -378,6 +400,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Mistral response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -396,9 +424,13 @@ internal class AWSLlmModelProcessor
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
-            }
 
-            // prompt_tokens and completion_tokens not provided in Mistral response body.
+                // output tokens not provided in Mistral response body, so we estimate the value based on output length
+                if (output.TryGetProperty("text", out var text))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) text.GetString().Length / 6));
+                }
+            }
         }
         catch (Exception ex)
         {
