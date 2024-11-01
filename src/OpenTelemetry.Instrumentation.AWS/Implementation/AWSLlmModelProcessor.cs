@@ -378,6 +378,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Claude response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -394,7 +400,11 @@ internal class AWSLlmModelProcessor
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
             }
 
-            // prompt_tokens and completion_tokens not provided in Claude response body.
+            // output tokens not provided in Claude response body, so we estimate the value based on output length
+            if (jsonBody.TryGetValue("completion", out var output))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -470,6 +480,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Command response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -483,14 +499,18 @@ internal class AWSLlmModelProcessor
         {
             if (jsonBody.TryGetValue("generations", out var generationsArray))
             {
-                var generations = generationsArray[0];
-                if (generations.TryGetProperty("finish_reason", out var finishReasons))
+                var generation = generationsArray[0];
+                if (generation.TryGetProperty("finish_reason", out var finishReasons))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
-            }
 
-            // prompt_tokens and completion_tokens not provided in Command response body.
+                // completion tokens not provided in Command response body, so we estimate the value based on output length
+                if (generation.TryGetProperty("text", out var output))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -570,6 +590,12 @@ internal class AWSLlmModelProcessor
             {
                 activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
             }
+
+            // input tokens not provided in Mistral response body, so we estimate the value based on input length
+            if (jsonBody.TryGetValue("prompt", out var input))
+            {
+                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+            }
         }
         catch (Exception ex)
         {
@@ -588,9 +614,13 @@ internal class AWSLlmModelProcessor
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
-            }
 
-            // prompt_tokens and completion_tokens not provided in Mistral response body.
+                // output tokens not provided in Mistral response body, so we estimate the value based on output length
+                if (output.TryGetProperty("text", out var text))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) text.GetString().Length / 6));
+                }
+            }
         }
         catch (Exception ex)
         {
