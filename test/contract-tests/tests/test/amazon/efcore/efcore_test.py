@@ -43,15 +43,15 @@ class EfCoreTest(ContractTestBase):
             0,
             0,
             request_method="GET",
-            local_operation="GET /blogs"
+            local_operation="GET /blogs/{id}"
         )
 
     def test_delete_success(self) -> None:
         self.do_test_requests(
-            "/blogs/1", "DELETE", 200, 0, 0, request_method="DELETE", local_operation="DELETE /blogs"
+            "/blogs/1", "DELETE", 200, 0, 0, request_method="DELETE", local_operation="DELETE /blogs/{id}"
         )
     def test_error(self) -> None:
-        self.do_test_requests("/blogs/100", "GET", 404, 1, 0, request_method="GET", local_operation="GET /blogs")
+        self.do_test_requests("/blogs/100", "GET", 404, 1, 0, request_method="GET", local_operation="GET /blogs/{id}")
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:

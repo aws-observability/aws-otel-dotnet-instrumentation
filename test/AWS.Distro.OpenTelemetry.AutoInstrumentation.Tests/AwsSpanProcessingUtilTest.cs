@@ -9,6 +9,12 @@ using static OpenTelemetry.Trace.TraceSemanticConventions;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using Moq;
 using Xunit;
 
 public class AwsSpanProcessingUtilTest
@@ -108,6 +114,87 @@ public class AwsSpanProcessingUtilTest
         spanDataMock.Start();
         string actualOperation = AwsSpanProcessingUtil.GetIngressOperation(spanDataMock);
         Assert.Equal(validMethod + " " + validTarget, actualOperation);
+    }
+
+#if !NETFRAMEWORK
+    [Fact]
+    public void TestGetIngressOperationInvalidNameWithHttpContextPresentAndRouteDataAvailable()
+    {
+        var routeTemplate = "/test/{id}";
+        string invalidName = string.Empty;
+        string validTarget = "/";
+        string validMethod = "GET";
+
+        // Arrange
+        var contextMock = new Mock<HttpContext>();
+        var featuresMock = new Mock<IFeatureCollection>();
+        var exceptionHandlerFeatureMock = new Mock<IExceptionHandlerPathFeature>();
+
+        // Set up the RoutePattern
+        var routePattern = RoutePatternFactory.Parse(routeTemplate);
+        var routeEndpoint = new RouteEndpoint(
+            requestDelegate: (context) => Task.CompletedTask,
+            routePattern: routePattern,
+            order: 0,
+            metadata: new EndpointMetadataCollection(),
+            displayName: "RouteTemplateTest");
+
+        // Configure the exception handler feature to return the route endpoint
+        exceptionHandlerFeatureMock.Setup(f => f.Endpoint).Returns(routeEndpoint);
+
+        // Set up the Features collection
+        featuresMock.Setup(f => f.Get<IExceptionHandlerPathFeature>()).Returns(exceptionHandlerFeatureMock.Object);
+        contextMock.Setup(c => c.Features).Returns(featuresMock.Object);
+
+        // Act
+        var context = contextMock.Object;
+
+        Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
+        if (spanDataMock != null)
+        {
+            spanDataMock.DisplayName = invalidName;
+            spanDataMock.SetTag(AttributeHttpRequestMethod, validMethod);
+            spanDataMock.SetTag(AttributeUrlPath, validTarget);
+            spanDataMock.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(context));
+            spanDataMock.Start();
+
+            string actualOperation = GetIngressOperation(spanDataMock);
+            Assert.Equal(validMethod + " " + routeTemplate, actualOperation);
+        }
+    }
+#endif
+
+    [Fact]
+    public void TestGetIngressOperationInvalidNameWithHttpContextPresentAndRouteDataNotAvailable()
+    {
+        string invalidName = string.Empty;
+        string validTarget = "/test";
+        string validMethod = "GET";
+
+        var contextMock = new Mock<HttpContext>();
+        var featuresMock = new Mock<IFeatureCollection>();
+        var exceptionHandlerFeatureMock = new Mock<IExceptionHandlerPathFeature>();
+
+        RouteEndpoint? routeEndpoint = null;
+
+        exceptionHandlerFeatureMock.Setup(f => f.Endpoint).Returns(routeEndpoint);
+
+        featuresMock.Setup(f => f.Get<IExceptionHandlerPathFeature>()).Returns(exceptionHandlerFeatureMock.Object);
+        contextMock.Setup(c => c.Features).Returns(featuresMock.Object);
+        var context = contextMock.Object;
+
+        Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
+        if (spanDataMock != null)
+        {
+            spanDataMock.DisplayName = invalidName;
+            spanDataMock.SetTag(AttributeHttpRequestMethod, validMethod);
+            spanDataMock.SetTag(AttributeUrlPath, validTarget);
+            spanDataMock.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(context));
+            spanDataMock.Start();
+
+            string actualOperation = GetIngressOperation(spanDataMock);
+            Assert.Equal(validMethod + " " + validTarget, actualOperation);
+        }
     }
 
     [Fact]
