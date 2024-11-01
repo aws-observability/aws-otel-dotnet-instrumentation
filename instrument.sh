@@ -182,7 +182,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
   if [ ! -z "${AWS_LAMBDA_FUNCTION_NAME}" ]; then
 
     export OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER="$_HANDLER"
-    export _HANDLER="LambdaWrapper::LambdaWrapper.Function::FunctionHandler"
+    export _HANDLER="AWS.Distro.OpenTelemetry.AutoInstrumentation::AWS.Distro.OpenTelemetry.AutoInstrumentation.LambdaWrapper::TracingFunctionHandler"
 
     echo "$DOTNET_SHARED_STORE"
 
@@ -228,6 +228,4 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
 
 fi
 
-/var/lang/bin/dotnet exec --depsfile /opt/SimpleLambdaFunction/SimpleLambdaFunction.deps.json --runtimeconfig /opt/SimpleLambdaFunction/SimpleLambdaFunction.runtimeconfig.json /var/runtime/Amazon.Lambda.RuntimeSupport.dll SimpleLambdaFunction::SimpleLambdaFunction.Function::FunctionHandler
-
-exec "$@"
+exec "${@//$OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER/$_HANDLER}"

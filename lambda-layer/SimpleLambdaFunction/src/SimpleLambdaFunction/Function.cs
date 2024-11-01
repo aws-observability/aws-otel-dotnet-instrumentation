@@ -1,6 +1,7 @@
 using Amazon.Lambda.Core;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.S3;
+using System.Reflection;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -24,6 +25,7 @@ public class Function
         Console.WriteLine("This is the executing assembly fullName: " + typeof(Function).FullName);
         Console.WriteLine("This lambda task root: " + Environment.GetEnvironmentVariable("LAMBDA_TASK_ROOT"));
         Console.WriteLine("This is the runtime dir: " + Environment.GetEnvironmentVariable("LAMBDA_RUNTIME_DIR"));
+        CallForceFlush();
         //PrintCurrentDirectoryContents();
         PrintOptDirectoryContent();
         context.Logger.LogLine("Making HTTP call to https://aws.amazon.com/");
@@ -43,6 +45,29 @@ public class Function
             Body = $"Hello lambda - found {bucketCount} buckets. X-Ray Trace ID: {traceId}",
             Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
         };
+    }
+
+    public static void CallForceFlush()
+    {
+        Type? instrumentationType = Type.GetType("OpenTelemetry.AutoInstrumentation.Instrumentation, OpenTelemetry.AutoInstrumentation");
+
+        if (instrumentationType == null)
+        {
+            Console.WriteLine("instrumentationType Type was not found");
+            return;
+        }
+
+        FieldInfo? tracerProviderField = instrumentationType.GetField("_tracerProvider", BindingFlags.Static | BindingFlags.NonPublic);
+
+        if (tracerProviderField == null)
+        {
+            Console.WriteLine("Field '_tracerProvider' not found in Instrumentation class.");
+        }
+
+        // Get the value of _tracerProvider
+        object? tracerProviderValue = tracerProviderField?.GetValue(null); // Pass null for static fields
+
+        Console.WriteLine(tracerProviderValue?.GetType());
     }
 
     public static void PrintCurrentDirectoryContents()
