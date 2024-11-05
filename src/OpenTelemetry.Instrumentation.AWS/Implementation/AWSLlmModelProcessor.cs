@@ -360,153 +360,42 @@ internal class AWSLlmModelProcessor
         }
     }
 
-    private static void ProcessClaudeModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    private static void ProcessClaudeModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
     {
         try
         {
-            if (jsonBody.TryGetValue("top_p", out var topP))
+            if (isRequest)
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
-            }
+                if (jsonBody.TryGetValue("top_p", out var topP))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("temperature", out var temperature))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
-            }
+                if (jsonBody.TryGetValue("temperature", out var temperature))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("max_tokens_to_sample", out var maxTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
-            }
+                if (jsonBody.TryGetValue("max_tokens_to_sample", out var maxTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                }
 
-            // input tokens not provided in Claude response body, so we estimate the value based on input length
-            if (jsonBody.TryGetValue("prompt", out var input))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                // input tokens not provided in Claude response body, so we estimate the value based on input length
+                if (jsonBody.TryGetValue("prompt", out var input))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessClaudeModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
+            else
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-            }
-
-            // output tokens not provided in Claude response body, so we estimate the value based on output length
-            if (jsonBody.TryGetValue("completion", out var output))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessLlamaModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("top_p", out var topP))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
-            }
-
-            if (jsonBody.TryGetValue("temperature", out var temperature))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
-            }
-
-            if (jsonBody.TryGetValue("max_gen_len", out var maxTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessLlamaModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("prompt_token_count", out var inputTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
-            }
-
-            if (jsonBody.TryGetValue("generation_token_count", out var outputTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
-            }
-
-            if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessCommandModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("p", out var topP))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
-            }
-
-            if (jsonBody.TryGetValue("temperature", out var temperature))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
-            }
-
-            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
-            }
-
-            // input tokens not provided in Command response body, so we estimate the value based on input length
-            if (jsonBody.TryGetValue("prompt", out var input))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessCommandModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("generations", out var generationsArray))
-            {
-                var generation = generationsArray[0];
-                if (generation.TryGetProperty("finish_reason", out var finishReasons))
+                if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
 
-                // completion tokens not provided in Command response body, so we estimate the value based on output length
-                if (generation.TryGetProperty("text", out var output))
+                // output tokens not provided in Claude response body, so we estimate the value based on output length
+                if (jsonBody.TryGetValue("completion", out var output))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
                 }
@@ -518,49 +407,40 @@ internal class AWSLlmModelProcessor
         }
     }
 
-    private static void ProcessJambaModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    private static void ProcessLlamaModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
     {
         try
         {
-            if (jsonBody.TryGetValue("top_p", out var topP))
+            if (isRequest)
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
-            }
+                if (jsonBody.TryGetValue("top_p", out var topP))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("temperature", out var temperature))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
-            }
+                if (jsonBody.TryGetValue("temperature", out var temperature))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                if (jsonBody.TryGetValue("max_gen_len", out var maxTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Exception: " + ex.Message);
-        }
-    }
-
-    private static void ProcessJambaModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
-    {
-        try
-        {
-            if (jsonBody.TryGetValue("usage", out var usage))
+            else
             {
-                if (usage.TryGetProperty("prompt_tokens", out var inputTokens))
+                if (jsonBody.TryGetValue("prompt_token_count", out var inputTokens))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
                 }
-                if (usage.TryGetProperty("completion_tokens", out var outputTokens))
+
+                if (jsonBody.TryGetValue("generation_token_count", out var outputTokens))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
                 }
-            }
-            if (jsonBody.TryGetValue("choices", out var choices))
-            {
-                if (choices[0].TryGetProperty("finish_reason", out var finishReasons))
+
+                if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
                 }
@@ -572,29 +452,49 @@ internal class AWSLlmModelProcessor
         }
     }
 
-    private static void ProcessMistralModelRequestAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    private static void ProcessCommandModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
     {
         try
         {
-            if (jsonBody.TryGetValue("top_p", out var topP))
+            if (isRequest)
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
-            }
+                if (jsonBody.TryGetValue("p", out var topP))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("temperature", out var temperature))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
-            }
+                if (jsonBody.TryGetValue("temperature", out var temperature))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                }
 
-            if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
-            {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
-            }
+                if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                }
 
-            // input tokens not provided in Mistral response body, so we estimate the value based on input length
-            if (jsonBody.TryGetValue("prompt", out var input))
+                // input tokens not provided in Command response body, so we estimate the value based on input length
+                if (jsonBody.TryGetValue("prompt", out var input))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                }
+            }
+            else
             {
-                activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                if (jsonBody.TryGetValue("generations", out var generationsArray))
+                {
+                    var generation = generationsArray[0];
+                    if (generation.TryGetProperty("finish_reason", out var finishReasons))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    }
+
+                    // completion tokens not provided in Command response body, so we estimate the value based on output length
+                    if (generation.TryGetProperty("text", out var output))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -603,22 +503,97 @@ internal class AWSLlmModelProcessor
         }
     }
 
-    private static void ProcessMistralModelResponseAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody)
+    private static void ProcessJambaModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
     {
         try
         {
-            if (jsonBody.TryGetValue("outputs", out var outputsArray))
+            if (isRequest)
             {
-                var output = outputsArray[0];
-                if (output.TryGetProperty("stop_reason", out var finishReasons))
+                if (jsonBody.TryGetValue("top_p", out var topP))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
                 }
 
-                // output tokens not provided in Mistral response body, so we estimate the value based on output length
-                if (output.TryGetProperty("text", out var text))
+                if (jsonBody.TryGetValue("temperature", out var temperature))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) text.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                }
+
+                if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                }
+            }
+            else
+            {
+                if (jsonBody.TryGetValue("usage", out var usage))
+                {
+                    if (usage.TryGetProperty("prompt_tokens", out var inputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
+                    }
+                    if (usage.TryGetProperty("completion_tokens", out var outputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
+                    }
+                }
+                if (jsonBody.TryGetValue("choices", out var choices))
+                {
+                    if (choices[0].TryGetProperty("finish_reason", out var finishReasons))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
+        }
+    }
+
+    private static void ProcessMistralModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
+    {
+        try
+        {
+            if (isRequest)
+            {
+                if (jsonBody.TryGetValue("top_p", out var topP))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+                }
+
+                if (jsonBody.TryGetValue("temperature", out var temperature))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                }
+
+                if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                }
+
+                // input tokens not provided in Mistral response body, so we estimate the value based on input length
+                if (jsonBody.TryGetValue("prompt", out var input))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                }
+            }
+            else
+            {
+                if (jsonBody.TryGetValue("outputs", out var outputsArray))
+                {
+                    var output = outputsArray[0];
+                    if (output.TryGetProperty("stop_reason", out var finishReasons))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    }
+
+                    // output tokens not provided in Mistral response body, so we estimate the value based on output length
+                    if (output.TryGetProperty("text", out var text))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) text.GetString().Length / 6));
+                    }
                 }
             }
         }
