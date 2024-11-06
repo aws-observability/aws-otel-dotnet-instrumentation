@@ -233,26 +233,22 @@ internal class AWSLlmModelProcessor
                 }
 
                 // input tokens not provided in Command response body, so we estimate the value based on input length
-                if (jsonBody.TryGetValue("prompt", out var input))
+                if (jsonBody.TryGetValue("message", out var input))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
                 }
             }
             else
             {
-                if (jsonBody.TryGetValue("generations", out var generationsArray))
+                if (jsonBody.TryGetValue("finish_reason", out var finishReasons))
                 {
-                    var generation = generationsArray[0];
-                    if (generation.TryGetProperty("finish_reason", out var finishReasons))
-                    {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-                    }
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                }
 
-                    // completion tokens not provided in Command response body, so we estimate the value based on output length
-                    if (generation.TryGetProperty("text", out var output))
-                    {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
-                    }
+                // completion tokens not provided in Command response body, so we estimate the value based on output length
+                if (jsonBody.TryGetValue("text", out var output))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
                 }
             }
         }
