@@ -323,9 +323,9 @@ class AWSSdkTest(ContractTestBase):
             span_name="Bedrock.GetGuardrail",
         )
 
-    def test_bedrock_runtime_invoke_model(self):
+    def test_bedrock_runtime_invoke_model_titan(self):
         self.do_test_requests(
-            "bedrock/invokemodel/invoke-model",
+            "bedrock/invokemodel/invoke-model-titan",
             "GET",
             200,
             0,
@@ -342,6 +342,30 @@ class AWSSdkTest(ContractTestBase):
                 _GEN_AI_REQUEST_MAX_TOKENS: 123,
                 _GEN_AI_USAGE_INPUT_TOKENS: 456,
                 _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
+                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
+            },
+            span_name="Bedrock Runtime.InvokeModel",
+        )
+    
+    def test_bedrock_runtime_invoke_model_claude(self):
+        self.do_test_requests(
+            "bedrock/invokemodel/invoke-model-claude",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Runtime",
+            remote_service="AWS::BedrockRuntime",
+            remote_operation="InvokeModel",
+            remote_resource_type="AWS::Bedrock::Model",
+            remote_resource_identifier="anthropic.claude-v2:1",
+            request_specific_attributes={
+                _GEN_AI_REQUEST_MODEL: "anthropic.claude-v2:1",
+                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
+                _GEN_AI_REQUEST_TOP_P: 0.456,
+                _GEN_AI_REQUEST_MAX_TOKENS: 123,
+                _GEN_AI_USAGE_INPUT_TOKENS: 12,
+                _GEN_AI_USAGE_OUTPUT_TOKENS: 10,
                 _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
             },
             span_name="Bedrock Runtime.InvokeModel",
@@ -612,6 +636,7 @@ class AWSSdkTest(ContractTestBase):
             "GET knowledgebases/test-knowledge-base/datasources/test-data-source",
             "POST agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text",
             "POST model/amazon.titan-text-express-v1/invoke",
+            "POST model/anthropic.claude-v2:1/invoke",
             "POST knowledgebases/test-knowledge-base/retrieve"
         }
         for metric in target_metrics:
