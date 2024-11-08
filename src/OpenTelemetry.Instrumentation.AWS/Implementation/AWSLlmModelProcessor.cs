@@ -384,7 +384,7 @@ internal class AWSLlmModelProcessor
                 // input tokens not provided in Claude response body, so we estimate the value based on input length
                 if (jsonBody.TryGetValue("prompt", out var input))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
                 }
             }
             else
@@ -397,7 +397,7 @@ internal class AWSLlmModelProcessor
                 // output tokens not provided in Claude response body, so we estimate the value based on output length
                 if (jsonBody.TryGetValue("completion", out var output))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) output.GetString().Length / 6)));
                 }
             }
         }
@@ -476,7 +476,7 @@ internal class AWSLlmModelProcessor
                 // input tokens not provided in Command response body, so we estimate the value based on input length
                 if (jsonBody.TryGetValue("message", out var input))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
                 }
             }
             else
@@ -489,7 +489,7 @@ internal class AWSLlmModelProcessor
                 // completion tokens not provided in Command response body, so we estimate the value based on output length
                 if (jsonBody.TryGetValue("text", out var output))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) output.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) output.GetString().Length / 6)));
                 }
             }
         }
@@ -572,7 +572,7 @@ internal class AWSLlmModelProcessor
                 // input tokens not provided in Mistral response body, so we estimate the value based on input length
                 if (jsonBody.TryGetValue("prompt", out var input))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Math.Ceiling((double) input.GetString().Length / 6));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
                 }
             }
             else
@@ -588,7 +588,7 @@ internal class AWSLlmModelProcessor
                     // output tokens not provided in Mistral response body, so we estimate the value based on output length
                     if (output.TryGetProperty("text", out var text))
                     {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Math.Ceiling((double) text.GetString().Length / 6));
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) text.GetString().Length / 6)));
                     }
                 }
             }
