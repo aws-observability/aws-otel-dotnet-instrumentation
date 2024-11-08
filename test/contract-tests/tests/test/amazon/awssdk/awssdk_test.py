@@ -370,6 +370,54 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
+    
+    def test_bedrock_runtime_invoke_model_llama(self):
+        self.do_test_requests(
+            "bedrock/invokemodel/invoke-model-llama",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Runtime",
+            remote_service="AWS::BedrockRuntime",
+            remote_operation="InvokeModel",
+            remote_resource_type="AWS::Bedrock::Model",
+            remote_resource_identifier="meta.llama3-8b-instruct-v1:0",
+            request_specific_attributes={
+                _GEN_AI_REQUEST_MODEL: "meta.llama3-8b-instruct-v1:0",
+                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
+                _GEN_AI_REQUEST_TOP_P: 0.456,
+                _GEN_AI_REQUEST_MAX_TOKENS: 123,
+                _GEN_AI_USAGE_INPUT_TOKENS: 456,
+                _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
+                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
+            },
+            span_name="Bedrock Runtime.InvokeModel",
+        )
+    
+    def test_bedrock_runtime_invoke_model_command(self):
+        self.do_test_requests(
+            "bedrock/invokemodel/invoke-model-command",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Bedrock Runtime",
+            remote_service="AWS::BedrockRuntime",
+            remote_operation="InvokeModel",
+            remote_resource_type="AWS::Bedrock::Model",
+            remote_resource_identifier="cohere.command-r-v1:0",
+            request_specific_attributes={
+                _GEN_AI_REQUEST_MODEL: "cohere.command-r-v1:0",
+                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
+                _GEN_AI_REQUEST_TOP_P: 0.456,
+                _GEN_AI_REQUEST_MAX_TOKENS: 123,
+                _GEN_AI_USAGE_INPUT_TOKENS: 12,
+                _GEN_AI_USAGE_OUTPUT_TOKENS: 10,
+                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
+            },
+            span_name="Bedrock Runtime.InvokeModel",
+        )
 
     def test_bedrock_agent_runtime_invoke_agent(self):
         self.do_test_requests(
@@ -637,6 +685,8 @@ class AWSSdkTest(ContractTestBase):
             "POST agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text",
             "POST model/amazon.titan-text-express-v1/invoke",
             "POST model/anthropic.claude-v2:1/invoke",
+            "POST model/meta.llama3-8b-instruct-v1:0/invoke",
+            "POST model/cohere.command-r-v1:0/invoke",
             "POST knowledgebases/test-knowledge-base/retrieve"
         }
         for metric in target_metrics:

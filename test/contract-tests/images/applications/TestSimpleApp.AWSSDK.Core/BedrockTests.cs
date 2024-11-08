@@ -104,6 +104,62 @@ public class BedrockTests(
         };
     }
 
+    public void InvokeModelMetaLlama()
+    {
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
+        {
+            ModelId = "meta.llama3-8b-instruct-v1:0",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                prompt = "sample input text",
+                temperature = 0.123,
+                top_p = 0.456,
+                max_gen_len = 123,
+            }))),
+            ContentType = "application/json",
+        });
+        return;
+    }
+
+    public object InvokeModelMetaLlamaResponse()
+    {
+        return new
+        {
+            generation = "sample output text",
+            prompt_token_count = 456,
+            generation_token_count = 789,
+            stop_reason = "finish_reason",
+        };
+    }
+
+    public void InvokeModelCohereCommand()
+    {
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
+        {
+            ModelId = "cohere.command-r-v1:0",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                // prompt is 72 chars long, input_tokens should be estimated as ceil(72/6) = 12
+                message = "sample input text sample input text sample input text sample input text ",
+                temperature = 0.123,
+                p = 0.456,
+                max_tokens = 123,
+            }))),
+            ContentType = "application/json",
+        });
+        return;
+    }
+
+    public object InvokeModelCohereCommandResponse()
+    {
+        return new
+        {
+            // response is 56 chars long, output_tokens should be estimated as ceil(56/6) = 10
+            text = "sample output text sample output text sample output text",
+            finish_reason = "finish_reason",
+        };
+    }
+
     public Task<GetAgentResponse> GetAgent()
     {
         return bedrockAgent.GetAgentAsync(new GetAgentRequest

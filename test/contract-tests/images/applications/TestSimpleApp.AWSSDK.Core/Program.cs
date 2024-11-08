@@ -128,8 +128,17 @@ app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedro
 app.MapGet("bedrock/invokemodel/invoke-model-titan", (BedrockTests bedrock) => bedrock.InvokeModelAmazonTitan())
     .WithName("invoke-model-titan")
     .WithOpenApi();
+
 app.MapGet("bedrock/invokemodel/invoke-model-claude", (BedrockTests bedrock) => bedrock.InvokeModelAnthropicClaude())
     .WithName("invoke-model-claude")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-llama", (BedrockTests bedrock) => bedrock.InvokeModelMetaLlama())
+    .WithName("invoke-model-llama")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-command", (BedrockTests bedrock) => bedrock.InvokeModelCohereCommand())
+    .WithName("invoke-model-command")
     .WithOpenApi();
 
 app.MapGet("bedrock/getagent/get-agent", (BedrockTests bedrock) => bedrock.GetAgent())
@@ -157,6 +166,8 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
 app.MapPost("model/amazon.titan-text-express-v1/invoke", (BedrockTests bedrock) => bedrock.InvokeModelAmazonTitanResponse());
 app.MapPost("model/anthropic.claude-v2:1/invoke", (BedrockTests bedrock) => bedrock.InvokeModelAnthropicClaudeResponse());
+app.MapPost("model/meta.llama3-8b-instruct-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelMetaLlamaResponse());
+app.MapPost("model/cohere.command-r-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelCohereCommandResponse());
 app.MapGet("agents/test-agent", (BedrockTests bedrock) => bedrock.GetAgentResponse());
 app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedrock.GetKnowledgeBaseResponse());
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
