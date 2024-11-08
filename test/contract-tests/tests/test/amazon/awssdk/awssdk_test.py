@@ -32,6 +32,12 @@ _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
 _AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source.id"
 _GEN_AI_REQUEST_MODEL: str = "gen_ai.request.model"
+_GEN_AI_REQUEST_TOP_P: str = "gen_ai.request.top_p"
+_GEN_AI_REQUEST_TEMPERATURE: str = "gen_ai.request.temperature"
+_GEN_AI_REQUEST_MAX_TOKENS: str = "gen_ai.request.max_tokens"
+_GEN_AI_USAGE_INPUT_TOKENS: str = "gen_ai.usage.input_tokens"
+_GEN_AI_USAGE_OUTPUT_TOKENS: str = "gen_ai.usage.output_tokens"
+_GEN_AI_RESPONSE_FINISH_REASONS: str = "gen_ai.response.finish_reasons"
 
 
 # pylint: disable=too-many-public-methods
@@ -328,9 +334,15 @@ class AWSSdkTest(ContractTestBase):
             remote_service="AWS::BedrockRuntime",
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
-            remote_resource_identifier="test-model",
+            remote_resource_identifier="amazon.titan-text-express-v1",
             request_specific_attributes={
-                _GEN_AI_REQUEST_MODEL: "test-model",
+                _GEN_AI_REQUEST_MODEL: "amazon.titan-text-express-v1",
+                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
+                _GEN_AI_REQUEST_TOP_P: 0.456,
+                _GEN_AI_REQUEST_MAX_TOKENS: 123,
+                _GEN_AI_USAGE_INPUT_TOKENS: 456,
+                _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
+                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
@@ -505,6 +517,11 @@ class AWSSdkTest(ContractTestBase):
                 self._assert_str_attribute(attributes_dict, key, value)
             elif isinstance(value, int):
                 self._assert_int_attribute(attributes_dict, key, value)
+            elif isinstance(value, float):
+                self._assert_float_attribute(attributes_dict, key, value)
+            # value is a list: gen_ai.response.finish_reasons or aws.table_name
+            elif key == _GEN_AI_RESPONSE_FINISH_REASONS:
+                self._assert_invoke_model_finish_reasons(attributes_dict, key, value)
             else:
                 self._assert_array_value_ddb_table_name(attributes_dict, key, value)
 
@@ -580,6 +597,12 @@ class AWSSdkTest(ContractTestBase):
     def _assert_array_value_ddb_table_name(self, attributes_dict: Dict[str, AnyValue], key: str, expect_values: list):
         self.assertIn(key, attributes_dict)
         self.assertEqual(attributes_dict[key].string_value, expect_values[0])
+    
+    def _assert_invoke_model_finish_reasons(self, attributes_dict: Dict[str, AnyValue], key: str, expect_values: list):
+        self.assertIn(key, attributes_dict)
+        self.assertEqual(len(attributes_dict[key].array_value.values), len(expect_values))
+        for i, value in enumerate(expect_values):
+            self.assertEqual(attributes_dict[key].array_value.values[i].string_value, value)
 
     def _filter_bedrock_metrics(self, target_metrics: List[Metric]):
         bedrock_calls = {
@@ -588,7 +611,7 @@ class AWSSdkTest(ContractTestBase):
             "GET knowledgebases/test-knowledge-base",
             "GET knowledgebases/test-knowledge-base/datasources/test-data-source",
             "POST agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text",
-            "POST model/test-model/invoke",
+            "POST model/amazon.titan-text-express-v1/invoke",
             "POST knowledgebases/test-knowledge-base/retrieve"
         }
         for metric in target_metrics:

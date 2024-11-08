@@ -152,7 +152,7 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
 // Reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,
 // we write our own responses with the necessary data to mimic the expected behavior of the Bedrock services.
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
-app.MapPost("model/test-model/invoke", (BedrockTests bedrock) => bedrock.InvokeModelResponse());
+app.MapPost("model/amazon.titan-text-express-v1/invoke", (BedrockTests bedrock) => bedrock.InvokeModelResponse());
 app.MapGet("agents/test-agent", (BedrockTests bedrock) => bedrock.GetAgentResponse());
 app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedrock.GetKnowledgeBaseResponse());
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -42,14 +43,37 @@ public class BedrockTests(
     {
         bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
         {
-            ModelId = "test-model",
+            ModelId = "amazon.titan-text-express-v1",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                inputText = "sample input text",
+                textGenerationConfig = new
+                {
+                    temperature = 0.123,
+                    topP = 0.456,
+                    maxTokenCount = 123,
+                },
+            }))),
+            ContentType = "application/json",
         });
         return;
     }
 
-    public void InvokeModelResponse()
+    public object InvokeModelResponse()
     {
-        return;
+        return new
+        {
+            inputTextTokenCount = 456,
+            results = new object[]
+            {
+                new
+                {
+                    outputText = "\nsample output text\n",
+                    tokenCount = 789,
+                    completionReason = "finish_reason"
+                },
+            },
+        };
     }
 
     public Task<GetAgentResponse> GetAgent()
