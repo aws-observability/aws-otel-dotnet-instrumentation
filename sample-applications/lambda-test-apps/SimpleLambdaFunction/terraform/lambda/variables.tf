@@ -1,13 +1,13 @@
 variable "sdk_layer_name" {
   type        = string
   description = "Name of published SDK layer"
-  default     = "aws-opentelemetry-distro-python"
+  default     = "aws-distro-opentelemetry-dotnet-instrumentation"
 }
 
 variable "function_name" {
   type        = string
   description = "Name of sample app function / API gateway"
-  default     = "aws-opentelemetry-distro-python"
+  default     = "SimpleLambdaFunction"
 }
 
 variable "architecture" {
@@ -19,7 +19,7 @@ variable "architecture" {
 variable "runtime" {
   type        = string
   description = "Python runtime version used for sample Lambda Function"
-  default     = "python3.12"
+  default     = "dotnet8"
 }
 
 variable "tracing_mode" {

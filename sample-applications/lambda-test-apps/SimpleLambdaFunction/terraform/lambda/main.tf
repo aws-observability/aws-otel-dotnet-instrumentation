@@ -1,13 +1,13 @@
 locals {
-  architecture = var.architecture == "x86_64" ? "amd64" : "arm64"
+  architecture = var.architecture == "x86_64" ? "x64" : "arm64"
 }
 
 resource "aws_lambda_layer_version" "sdk_layer" {
   layer_name          = var.sdk_layer_name
-  filename            = "${path.module}/../../src/build/aws-opentelemetry-python-layer.zip"
-  compatible_runtimes = ["python3.10", "python3.11", "python3.12"]
+  filename            = "${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip"
+  compatible_runtimes = ["dotnet8"]
   license_info        = "Apache-2.0"
-  source_code_hash    = filebase64sha256("${path.module}/../../src/build/aws-opentelemetry-python-layer.zip")
+  source_code_hash    = filebase64sha256("${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip")
 }
 
 module "test-function" {
@@ -15,11 +15,11 @@ module "test-function" {
 
   architectures = compact([var.architecture])
   function_name = var.function_name
-  handler       = "lambda_function.lambda_handler"
+  handler       = "${var.function_name}::${var.function_name}.Function::FunctionHandler"
   runtime       = var.runtime
 
   create_package         = false
-  local_existing_package = "${path.module}/../../sample-apps/build/function.zip"
+  local_existing_package = "${path.module}/../../src/SimpleLambdaFunction/bin/Release/net8.0/SimpleLambdaFunction.zip"
 
   memory_size = 512
   timeout     = 30
@@ -27,7 +27,7 @@ module "test-function" {
   layers = compact([aws_lambda_layer_version.sdk_layer.arn])
 
   environment_variables = {
-    AWS_LAMBDA_EXEC_WRAPPER = "/opt/otel-instrument"
+    AWS_LAMBDA_EXEC_WRAPPER = "/opt/instrument.sh"
   }
 
   tracing_mode = var.tracing_mode

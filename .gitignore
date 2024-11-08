@@ -468,3 +468,8 @@ lychee/out.md
 
 # Python cache
 *.pytest_cache
+
+# Terraform files
+.terraform*
+terraform.tfstate
+terraform.tfstate.backup

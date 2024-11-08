@@ -12,7 +12,6 @@ using OpenTelemetry;
 using OpenTelemetry.Proto.Collector.Trace.V1;
 using OpenTelemetry.Proto.Trace.V1;
 using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
 /// <summary>
@@ -241,7 +240,6 @@ public class OtlpUdpExporter : BaseExporter<Activity>
             Logger.LogTrace("ActivityExtensions.ToOtlpSpan method is not found");
         }
 
-        Console.WriteLine(request);
         return request.ToByteArray();
     }
 }

@@ -4,8 +4,8 @@ This package provides support for **Application Signals** in AWS Lambda environm
 
 ## Features
 
-- Supports Application Signals, including traces and metrics, for AWS Lambda Python Runtimes.
-- Automates the deployment process, including the creation of the Application Python Lambda Layer and a sample Lambda function.
+- Supports Application Signals, including traces and metrics, for AWS Lambda .NET Runtimes.
+- Automates the deployment process, including the creation of the Application .NET Lambda Layer and a sample Lambda function.
 
 ## Prerequisites
 
@@ -31,26 +31,19 @@ This will prompt you to enter your `AWS Access Key ID`, `AWS Secret Access Key`,
 First, clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/yourusername/your-repo.git
+git clone https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git
 ```
 
 ### 2. Run the Build Script
 
-Navigate to the `lambda-layer` folder and run the `build.sh` script. This will create the Application Python Lambda Layer and a Lambda sample app in your AWS account:
+Navigate to the `lambda-test-apps` folder and run the `build-and-deploy.sh` script. This will create the Application .NET Lambda Layer and a Lambda sample app in your AWS account:
 
 ```bash
-cd lambda-layer
-./build.sh
+cd sample-applications/lambda-test-apps/
+./build-and-deploy.sh
 ```
 
 ## Lambda Sample App
 
 Once the script has successfully run, you will see the deployed Lambda sample app in your AWS account. You can trigger the 
 Lambda function and view the traces and metrics through the AWS CloudWatch Console.
-
-## Configuration
-
-By default the layer enable botocore and aws-lambda instrumentation libraries only for better Lambda cold start performance. To 
-enable all opentelemetry python 
-supported libraries you can set environment variable `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=none`. Refer to details in 
-[OpenTelemetry Python Disabling Specific Instrumentations](Disabling Specific Instrumentations)
