@@ -31,6 +31,7 @@ _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
 _AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source.id"
+_GEN_AI_SYSTEM: str = "gen_ai.system"
 _GEN_AI_REQUEST_MODEL: str = "gen_ai.request.model"
 _GEN_AI_REQUEST_TOP_P: str = "gen_ai.request.top_p"
 _GEN_AI_REQUEST_TEMPERATURE: str = "gen_ai.request.temperature"
@@ -109,7 +110,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutBucket",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
             span_name="S3.PutBucket",
@@ -126,7 +127,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutObject",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
             span_name="S3.PutObject",
@@ -143,7 +144,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DeleteObject",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
             span_name="S3.DeleteObject",
@@ -160,7 +161,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateTable",
             remote_resource_type="AWS::DynamoDB::Table",
             remote_resource_identifier="test_table",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
             },
@@ -178,7 +179,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutItem",
             remote_resource_type="AWS::DynamoDB::Table",
             remote_resource_identifier="test_table",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
             },
@@ -196,7 +197,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateQueue",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_SQS_QUEUE_NAME: "test_queue",
             },
             span_name="SQS.CreateQueue",
@@ -213,7 +214,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="SendMessage",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             },
             span_name="SQS.SendMessage",
@@ -230,7 +231,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="ReceiveMessage",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             },
             span_name="SQS.ReceiveMessage",
@@ -247,7 +248,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateStream",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream",
             },
             span_name="Kinesis.CreateStream",
@@ -264,7 +265,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutRecord",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream",
             },
             span_name="Kinesis.PutRecord",
@@ -281,7 +282,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DeleteStream",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream_error",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream_error",
             },
             span_name="Kinesis.DeleteStream",
@@ -299,7 +300,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="CreateStream",
     #         remote_resource_type="AWS::Kinesis::Stream",
     #         remote_resource_identifier="test_stream",
-    #         request_specific_attributes={
+    #         request_response_specific_attributes={
     #             _AWS_KINESIS_STREAM_NAME: "test_stream",
     #         },
     #         span_name="Kinesis.CreateStream",
@@ -317,7 +318,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
             },
             span_name="Bedrock.GetGuardrail",
@@ -335,7 +336,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="amazon.titan-text-express-v1",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "amazon.titan-text-express-v1",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -359,7 +361,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="anthropic.claude-v2:1",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "anthropic.claude-v2:1",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -383,7 +386,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="meta.llama3-8b-instruct-v1:0",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "meta.llama3-8b-instruct-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -407,7 +411,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="cohere.command-r-v1:0",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "cohere.command-r-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -431,7 +436,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="ai21.jamba-1-5-large-v1:0",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "ai21.jamba-1-5-large-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -455,7 +461,8 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="mistral.mistral-7b-instruct-v0:2",
-            request_specific_attributes={
+            request_response_specific_attributes={
+                _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "mistral.mistral-7b-instruct-v0:2",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -479,7 +486,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeAgent",
             remote_resource_type="AWS::Bedrock::Agent",
             remote_resource_identifier="test-agent",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_AGENT_ID: "test-agent",
             },
             span_name="Bedrock Agent Runtime.InvokeAgent",
@@ -497,7 +504,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Retrieve",
             remote_resource_type="AWS::Bedrock::KnowledgeBase",
             remote_resource_identifier="test-knowledge-base",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
             },
             span_name="Bedrock Agent Runtime.Retrieve",
@@ -515,7 +522,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetAgent",
             remote_resource_type="AWS::Bedrock::Agent",
             remote_resource_identifier="test-agent",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_AGENT_ID: "test-agent",
             },
             span_name="Bedrock Agent.GetAgent",
@@ -533,7 +540,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetKnowledgeBase",
             remote_resource_type="AWS::Bedrock::KnowledgeBase",
             remote_resource_identifier="test-knowledge-base",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
             },
             span_name="Bedrock Agent.GetKnowledgeBase",
@@ -551,7 +558,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetDataSource",
             remote_resource_type="AWS::Bedrock::DataSource",
             remote_resource_identifier="test-data-source",
-            request_specific_attributes={
+            request_response_specific_attributes={
                 _AWS_BEDROCK_DATA_SOURCE_ID: "test-data-source",
             },
             span_name="Bedrock Agent.GetDataSource",
@@ -614,7 +621,7 @@ class AWSSdkTest(ContractTestBase):
             kwargs.get("remote_service"),
             kwargs.get("remote_operation"),
             status_code,
-            kwargs.get("request_specific_attributes", {}),
+            kwargs.get("request_response_specific_attributes", {}),
         )
 
     # pylint: disable=unidiomatic-typecheck
@@ -625,14 +632,14 @@ class AWSSdkTest(ContractTestBase):
         service: str,
         operation: str,
         status_code: int,
-        request_specific_attributes: dict,
+        request_response_specific_attributes: dict,
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_METHOD, operation)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SYSTEM, "aws-api")
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, rpc_service)
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_STATUS_CODE, status_code)
-        for key, value in request_specific_attributes.items():
+        for key, value in request_response_specific_attributes.items():
             if isinstance(value, str):
                 self._assert_str_attribute(attributes_dict, key, value)
             elif isinstance(value, int):
