@@ -160,6 +160,83 @@ public class BedrockTests(
         };
     }
 
+    public void InvokeModelAi21Jamba()
+    {
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
+        {
+            ModelId = "ai21.jamba-1-5-large-v1:0",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "USER",
+                        content = "sample input text",
+                    },
+                },
+                temperature = 0.123,
+                top_p = 0.456,
+                max_tokens = 123,
+            }))),
+            ContentType = "application/json",
+        });
+        return;
+    }
+
+    public object InvokeModelAi21JambaResponse()
+    {
+        return new
+        {
+            choices = new object[]
+            {
+                new
+                {
+                    finish_reason = "finish_reason",
+                },
+            },
+            usage = new
+            {
+                prompt_tokens = 456,
+                completion_tokens = 789,
+            },
+        };
+    }
+
+    public void InvokeModelMistralAi()
+    {
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
+        {
+            ModelId = "mistral.mistral-7b-instruct-v0:2",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                // prompt is 72 chars long, input_tokens should be estimated as ceil(72/6) = 12
+                prompt = "sample input text sample input text sample input text sample input text ",
+                temperature = 0.123,
+                top_p = 0.456,
+                max_tokens = 123,
+            }))),
+            ContentType = "application/json",
+        });
+        return;
+    }
+
+    public object InvokeModelMistralAiResponse()
+    {
+        return new
+        {
+            outputs = new object[]
+            {
+                new
+                {
+                    // response is 56 chars long, output_tokens should be estimated as ceil(56/6) = 10
+                    text = "sample output text sample output text sample output text",
+                    stop_reason = "finish_reason",
+                },
+            },
+        };
+    }
+
     public Task<GetAgentResponse> GetAgent()
     {
         return bedrockAgent.GetAgentAsync(new GetAgentRequest
