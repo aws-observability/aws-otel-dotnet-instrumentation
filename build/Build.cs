@@ -12,7 +12,7 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 internal partial class Build : NukeBuild
 {
-    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.8.0";
+    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.7.0";
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
     [Solution("AWS.Distro.OpenTelemetry.AutoInstrumentation.sln")]
@@ -84,13 +84,14 @@ internal partial class Build : NukeBuild
             case PlatformFamily.Windows:
                 fileName = "opentelemetry-dotnet-instrumentation-windows.zip";
                 break;
-            case PlatformFamily.OSX:
             case PlatformFamily.Linux:
                 var architecture = RuntimeInformation.ProcessArchitecture;
                 string architectureSuffix;
                 switch (architecture)
                 {
                     case Architecture.Arm64:
+                        architectureSuffix = "arm64";
+                        break;
                     case Architecture.X64:
                         architectureSuffix = "x64";
                         break;
@@ -101,6 +102,9 @@ internal partial class Build : NukeBuild
                 fileName = Environment.GetEnvironmentVariable("IsAlpine") == "true"
                     ? $"opentelemetry-dotnet-instrumentation-linux-musl-{architectureSuffix}.zip"
                     : $"opentelemetry-dotnet-instrumentation-linux-glibc-{architectureSuffix}.zip";
+                break;
+            case PlatformFamily.OSX:
+                fileName = "opentelemetry-dotnet-instrumentation-macos.zip";
                 break;
             case PlatformFamily.Unknown:
                 throw new NotSupportedException();
