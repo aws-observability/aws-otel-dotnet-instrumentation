@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -20,7 +21,7 @@ using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 /// </summary>
 public class OtlpUdpExporter : BaseExporter<Activity>
 {
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpUdpExporter>();
 
     private UdpExporter udpExporter;
@@ -44,7 +45,6 @@ public class OtlpUdpExporter : BaseExporter<Activity>
     /// <inheritdoc/>
     public override ExportResult Export(in Batch<Activity> batch)
     {
-        Console.WriteLine("Going to export! size = " + batch.Count);
         byte[]? serializedData = this.SerializeSpans(batch);
         if (serializedData == null)
         {
@@ -250,7 +250,7 @@ internal class UdpExporter
     internal const string ProtocolHeader = "{\"format\":\"json\",\"version\":1}\n";
     internal const string DefaultFormatOtelTracesBinaryPrefix = "T1S";
 
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<UdpExporter>();
 
     private string endpoint;

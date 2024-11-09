@@ -105,7 +105,6 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     /// <inheritdoc/>
     protected override bool OnShutdown(int timeoutMilliseconds)
     {
-        Console.WriteLine("Going to shutdown the metric processor");
         return this.ForceFlush(timeoutMilliseconds);
     }
 

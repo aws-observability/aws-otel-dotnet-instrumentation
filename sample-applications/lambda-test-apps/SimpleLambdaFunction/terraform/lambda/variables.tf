@@ -18,7 +18,7 @@ variable "architecture" {
 
 variable "runtime" {
   type        = string
-  description = "Python runtime version used for sample Lambda Function"
+  description = ".NET runtime version used for sample Lambda Function"
   default     = "dotnet8"
 }
 
