@@ -14,6 +14,7 @@ Before you begin, make sure you have installed and configured the following tool
 - [Docker](https://www.docker.com/get-started)
 - [Terraform](https://www.terraform.io/downloads)
 - [AWS CLI](https://aws.amazon.com/cli/) (to configure AWS credentials)
+- [.NET Lambda Tools](https://docs.aws.amazon.com/lambda/latest/dg/csharp-package-cli.html) (to build and publish lambda function)
 
 ### Configure AWS Credentials
 
