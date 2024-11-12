@@ -13,12 +13,12 @@ using OpenTelemetry.Extensions.AWS.Trace;
 #if !NETFRAMEWORK
 using Microsoft.AspNetCore.Http;
 using OpenTelemetry.Instrumentation.AspNetCore;
+using OpenTelemetry.Instrumentation.AWSLambda;
 #else
 using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
-using OpenTelemetry.Instrumentation.AWSLambda;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
@@ -175,7 +175,9 @@ public class Plugin
 
         // My custom logic here
         builder.AddAWSInstrumentation();
+#if !NETFRAMEWORK
         builder.AddAWSLambdaConfigurations();
+#endif
         return builder;
     }
 
