@@ -25,6 +25,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSOperationName = "aws.operation";
     internal static readonly string AttributeAWSRegion = "aws.region";
     internal static readonly string AttributeAWSRequestId = "aws.requestId";
+    internal static readonly string AttributeAWSTraceFlagSampled = "aws.trace.flag.sampled";
 
     // The below semantic names were copied over from various sources.
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/4c6474259ccb08a41eb45ea6424243d4d2c707db/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs
