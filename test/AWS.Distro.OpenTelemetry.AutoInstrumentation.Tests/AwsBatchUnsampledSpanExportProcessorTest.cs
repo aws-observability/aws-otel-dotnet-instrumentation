@@ -19,7 +19,7 @@ public class AwsBatchUnsampledSpanExportProcessorTest
     /// and that AttributeAWSTraceFlagSampled is not set at all.
     /// </summary>
     [Fact]
-    public void CheckThatSampledActivityIsProcessed()
+    public void CheckThatSampledActivityIsNotProcessed()
     {
         var exporter = new Mock<BaseExporter<Activity>>();
         using var processor = new AwsBatchUnsampledSpanExportProcessor(
@@ -41,14 +41,14 @@ public class AwsBatchUnsampledSpanExportProcessorTest
         var processedCount = processedCountInfo?.GetValue(processor);
         if (processedCount != null)
         {
-            Assert.Equal(1, (long)processedCount);
+            Assert.Equal(0, (long)processedCount);
         }
 
         PropertyInfo? receivedCountInfo = typeof(BatchExportProcessor<Activity>).GetProperty("ReceivedCount", BindingFlags.NonPublic | BindingFlags.Instance);
         var receivedCount = receivedCountInfo?.GetValue(processor);
         if (receivedCount != null)
         {
-            Assert.Equal(1, (long)receivedCount);
+            Assert.Equal(0, (long)receivedCount);
         }
 
         PropertyInfo? droppedCountInfo = typeof(BatchExportProcessor<Activity>).GetProperty("DroppedCount", BindingFlags.NonPublic | BindingFlags.Instance);

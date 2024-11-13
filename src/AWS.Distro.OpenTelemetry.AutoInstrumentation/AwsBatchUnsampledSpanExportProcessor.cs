@@ -9,7 +9,7 @@ using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 /// AwsBatchUnsampledSpanExportProcessor class that functions similar to BatchActivityExportProcessor
 /// having the same input parameters and the same default values. However, the difference is that
 /// BatchActivityExportProcessor only exports sampled (or recorded) activities while AwsBatchUnsampledSpanExportProcessor
-/// sets the AttributeAWSTraceFlagSampled to false if activity is not sampled but exports both sampled and and unsampled data.
+/// sets the AttributeAWSTraceFlagSampled to false if activity is not sampled and only exports unsampled activities.
 /// </summary>
 internal class AwsBatchUnsampledSpanExportProcessor : BatchExportProcessor<Activity>
 {
@@ -37,11 +37,9 @@ internal class AwsBatchUnsampledSpanExportProcessor : BatchExportProcessor<Activ
         if (!data.Recorded)
         {
             data.SetTag(AttributeAWSTraceFlagSampled, "false");
-        }
 
-        // simply put, we only need to call the export function and it will do everything for us
-        // We don't need to check on sampled or not because the original implementation only calls
-        // export on sampled data but this one will call it on everything.
-        this.OnExport(data);
+            // Only exporting unsampled traces as this is the purpose of this processor.
+            this.OnExport(data);
+        }
     }
 }
