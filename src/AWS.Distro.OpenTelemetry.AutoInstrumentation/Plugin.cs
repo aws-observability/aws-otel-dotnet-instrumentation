@@ -60,6 +60,8 @@ public class Plugin
 
     private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
 
+    private static readonly int LambdaSpanExportBatchSize = 10;
+
     private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
         {
             { "telemetry.distro.name", "aws-otel-dotnet-instrumentation" },
@@ -104,7 +106,10 @@ public class Plugin
             if (this.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
             {
                 Resource processResource = tracerProvider.GetResource();
-                tracerProvider.AddProcessor(new BatchActivityExportProcessor(new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix)));
+
+                var spanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+
+                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: spanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
             }
 
             // Disable Application Metrics for Lambda environment
