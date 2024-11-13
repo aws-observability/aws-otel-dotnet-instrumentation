@@ -5,6 +5,12 @@ using System.Diagnostics;
 using OpenTelemetry;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
+/// <summary>
+/// AwsBatchUnsampledSpanExportProcessor class that functions similar to BatchActivityExportProcessor
+/// having the same input parameters and the same default values. However, the difference is that
+/// BatchActivityExportProcessor only exports sampled (or recorded) activities while AwsBatchUnsampledSpanExportProcessor
+/// sets the AttributeAWSTraceFlagSampled to false if activity is not sampled and only exports unsampled activities.
+/// </summary>
 internal class AwsBatchUnsampledSpanExportProcessor : BatchExportProcessor<Activity>
 {
     /// <summary>
@@ -21,23 +27,19 @@ internal class AwsBatchUnsampledSpanExportProcessor : BatchExportProcessor<Activ
     }
 
     /// <inheritdoc />
-    /// TODO: There is an OTEL discussion to add BeforeEnd to allow us to write to spans. Below is a hack and goes
-    /// against the otel specs (not to edit span in OnEnd) but is required for the time being.
-    /// Add BeforeEnd to have a callback where the span is still writeable open-telemetry/opentelemetry-specification#1089
-    /// https://github.com/open-telemetry/opentelemetry-specification/issues/1089
-    /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
     public override void OnEnd(Activity data)
     {
-        // q: looks like on start just adds attribute to activity. Why not add it on end?
-        // ans: main answer is because its out of spec to edit an activity on end.
+        // TODO: There is an OTEL discussion to add BeforeEnd to allow us to write to spans. Below is a hack and goes
+        // against the otel specs (not to edit span in OnEnd) but is required for the time being.
+        // Add BeforeEnd to have a callback where the span is still writeable open-telemetry/opentelemetry-specification#1089
+        // https://github.com/open-telemetry/opentelemetry-specification/issues/1089
+        // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
         if (!data.Recorded)
         {
             data.SetTag(AttributeAWSTraceFlagSampled, "false");
-        }
 
-        // simply put, we only need to call the export function and it will do everything for us
-        // We don't need to check on sampled or not because the original implementation only calls
-        // export on sampled data but this one will call it on everything.
-        this.OnExport(data);
+            // Only exporting unsampled traces as this is the purpose of this processor.
+            this.OnExport(data);
+        }
     }
 }

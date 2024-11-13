@@ -61,6 +61,7 @@ public class Plugin
     private static readonly string? OtelExporterOtlpEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpEndpointConfig);
 
     private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
+    private static readonly string FormatOtelUnSampledTracesBinaryPrefix = "T1U";
 
     private static readonly int LambdaSpanExportBatchSize = 10;
 
@@ -109,9 +110,13 @@ public class Plugin
             {
                 Resource processResource = tracerProvider.GetResource();
 
-                var spanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+                // UDP exporter for sampled spans
+                var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
 
-                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: spanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+                // UDP exporter for unsampled spans
+                var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
             }
 
             // Disable Application Metrics for Lambda environment
