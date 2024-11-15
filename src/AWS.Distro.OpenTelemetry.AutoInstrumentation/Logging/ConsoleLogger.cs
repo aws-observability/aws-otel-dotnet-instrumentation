@@ -6,19 +6,19 @@ using Microsoft.Extensions.Logging;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 
 /// <summary>
-/// ApplicationSignalsLogger class
+/// ConsoleLogger class
 /// </summary>
-public class ApplicationSignalsLogger : ILogger
+public class ConsoleLogger : ILogger
 {
     private readonly string categoryName;
     private readonly LogLevel minLogLevel;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ApplicationSignalsLogger"/> class.
+    /// Initializes a new instance of the <see cref="ConsoleLogger"/> class.
     /// </summary>
     /// <param name="categoryName">The class that is writing the log</param>
     /// <param name="minLogLevel">The log level from the log statement</param>
-    public ApplicationSignalsLogger(string categoryName, LogLevel minLogLevel)
+    public ConsoleLogger(string categoryName, LogLevel minLogLevel)
     {
         this.categoryName = categoryName;
         this.minLogLevel = minLogLevel;

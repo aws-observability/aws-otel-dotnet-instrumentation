@@ -214,7 +214,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_TRACES_EXPORTER="none";
     fi
 
-    # need to disable all instrumentations except netcore, aws sdk and lambda.
+    # TODO: need to disable all instrumentations except aws sdk and lambda.
 
   else
     export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
@@ -228,4 +228,10 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
 
 fi
 
-exec "${@//$OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER/$_HANDLER}"
+# in a lambda env, we need to change the handler in the exec command to the lambda wrapper
+# else, we pass the execution back to the main caller unchanged.
+if [ ! -z "${AWS_LAMBDA_FUNCTION_NAME}" ]; then
+  exec "${@//$OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER/$_HANDLER}"
+else
+  exec "$@"
+fi

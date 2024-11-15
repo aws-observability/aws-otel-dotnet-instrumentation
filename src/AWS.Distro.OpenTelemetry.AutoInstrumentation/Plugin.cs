@@ -38,7 +38,7 @@ public class Plugin
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";

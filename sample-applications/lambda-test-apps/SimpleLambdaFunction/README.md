@@ -40,7 +40,7 @@ git clone https://github.com/aws-observability/aws-otel-dotnet-instrumentation.g
 Navigate to the `lambda-test-apps` folder and run the `build-and-deploy.sh` script. This will create the Application .NET Lambda Layer and a Lambda sample app in your AWS account:
 
 ```bash
-cd sample-applications/lambda-test-apps/
+cd sample-applications/lambda-test-apps/SimpleLambdaFunction/
 ./build-and-deploy.sh
 ```
 

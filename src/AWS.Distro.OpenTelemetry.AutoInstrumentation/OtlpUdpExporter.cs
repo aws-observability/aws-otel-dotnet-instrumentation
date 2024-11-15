@@ -21,7 +21,7 @@ using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 /// </summary>
 public class OtlpUdpExporter : BaseExporter<Activity>
 {
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpUdpExporter>();
 
     private UdpExporter udpExporter;
@@ -250,7 +250,7 @@ internal class UdpExporter
     internal const string ProtocolHeader = "{\"format\":\"json\",\"version\":1}\n";
     internal const string DefaultFormatOtelTracesBinaryPrefix = "T1S";
 
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<UdpExporter>();
 
     private string endpoint;

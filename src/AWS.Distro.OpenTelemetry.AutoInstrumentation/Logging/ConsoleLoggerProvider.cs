@@ -6,16 +6,16 @@ using Microsoft.Extensions.Logging;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 
 /// <summary>
-/// ApplicationSignalsLoggerProvider class
+/// ConsoleLoggerProvider class
 /// </summary>
-public class ApplicationSignalsLoggerProvider : ILoggerProvider
+public class ConsoleLoggerProvider : ILoggerProvider
 {
     private readonly LogLevel minLogLevel;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ApplicationSignalsLoggerProvider"/> class.
+    /// Initializes a new instance of the <see cref="ConsoleLoggerProvider"/> class.
     /// </summary>
-    public ApplicationSignalsLoggerProvider()
+    public ConsoleLoggerProvider()
     {
         // Read the log level from the environment variable
         string logLevelEnv = Environment.GetEnvironmentVariable("APPLICATION_SIGNALS_LOG_LEVEL") ?? "Information";
@@ -29,7 +29,7 @@ public class ApplicationSignalsLoggerProvider : ILoggerProvider
     /// <inheritdoc/>
     public ILogger CreateLogger(string categoryName)
     {
-        return new ApplicationSignalsLogger(categoryName, this.minLogLevel);
+        return new ConsoleLogger(categoryName, this.minLogLevel);
     }
 
     /// <inheritdoc/>

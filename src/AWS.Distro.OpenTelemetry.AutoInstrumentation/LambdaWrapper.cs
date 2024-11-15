@@ -28,15 +28,14 @@ public class LambdaWrapper
 
         if (instrumentationType == null)
         {
-            Console.WriteLine("instrumentationType Type was not found");
-            return;
+            throw new Exception("instrumentationType Type was not found. Cannot load the tracer provider!");
         }
 
         FieldInfo? tracerProviderField = instrumentationType.GetField("_tracerProvider", BindingFlags.Static | BindingFlags.NonPublic);
 
         if (tracerProviderField == null)
         {
-            Console.WriteLine("Field '_tracerProvider' not found in Instrumentation class.");
+            throw new Exception("Field '_tracerProvider' not found in Instrumentation class. Cannot load the tracer provider!");
         }
 
         object? tracerProviderValue = tracerProviderField?.GetValue(null);
@@ -44,6 +43,10 @@ public class LambdaWrapper
         if (tracerProviderValue != null)
         {
             TracerProvider = (TracerProvider)tracerProviderValue;
+        }
+        else
+        {
+            throw new Exception("tracerProviderValue was null. Cannot load the tracer provider!");
         }
     }
 

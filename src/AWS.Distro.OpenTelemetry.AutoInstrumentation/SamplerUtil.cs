@@ -24,7 +24,7 @@ public class SamplerUtil
     /// </summary>
     public static readonly string OtelTracesSamplerArg = "OTEL_TRACES_SAMPLER_ARG";
 
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ApplicationSignalsLoggerProvider()));
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<SamplerUtil>();
 
     // These default values are based on values from the python implementation:
