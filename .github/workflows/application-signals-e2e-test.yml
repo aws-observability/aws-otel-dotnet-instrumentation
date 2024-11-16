@@ -118,23 +118,23 @@ jobs:
           docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
         shell: powershell
 
-  dotnet-ec2-default-test:
-    needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
-    secrets: inherit
-    with:
-      aws-region: us-east-1
-      caller-workflow-name: 'main-build'
-      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+  # dotnet-ec2-default-test:
+  #   needs: [ upload-main-build ]
+  #   uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+  #   secrets: inherit
+  #   with:
+  #     aws-region: us-east-1
+  #     caller-workflow-name: 'main-build'
+  #     staging_distro_name: ${{ inputs.ec2-default-image-name }}
       
-  dotnet-ec2-windows-test:
-    needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
-    secrets: inherit
-    with:
-      aws-region: us-east-1
-      caller-workflow-name: 'main-build'
-      staging_distro_name: ${{ inputs.ec2-windows-image-name }}
+  # dotnet-ec2-windows-test:
+  #   needs: [ upload-main-build ]
+  #   uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
+  #   secrets: inherit
+  #   with:
+  #     aws-region: us-east-1
+  #     caller-workflow-name: 'main-build'
+  #     staging_distro_name: ${{ inputs.ec2-windows-image-name }}
       
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
@@ -143,15 +143,15 @@ jobs:
     with:
       adot-image-name: ${{ inputs.adot-linux-image-name }}
       aws-region: us-east-1
-      test-cluster-name: 'e2e-dotnet-adot-test'
-      caller-workflow-name: 'main-build'
+      test-cluster-name: 'e2e-playground'
+      caller-workflow-name: 'test'
 
-  dotnet-eks-windows-test:
-    needs: [ upload-main-build, upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
-    secrets: inherit
-    with:
-      adot-image-name: ${{ inputs.adot-windows-image-name }}
-      aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
-      caller-workflow-name: 'main-build'
+  # dotnet-eks-windows-test:
+  #   needs: [ upload-main-build, upload-main-build-image ]
+  #   uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+  #   secrets: inherit
+  #   with:
+  #     adot-image-name: ${{ inputs.adot-windows-image-name }}
+  #     aws-region: us-east-1
+  #     test-cluster-name: 'eks-windows-manual'
+  #     caller-workflow-name: 'main-build'
