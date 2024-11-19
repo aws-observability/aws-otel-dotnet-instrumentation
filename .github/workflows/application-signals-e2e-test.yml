@@ -138,7 +138,7 @@ jobs:
       
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@dotnet-version-jeelmm 
     secrets: inherit
     with:
       adot-image-name: ${{ inputs.adot-linux-image-name }}
