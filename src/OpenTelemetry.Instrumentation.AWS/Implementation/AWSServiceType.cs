@@ -7,6 +7,7 @@ internal class AWSServiceType
 {
     internal const string DynamoDbService = "DynamoDB";
     internal const string SecretsManagerService = "Secrets Manager";
+    internal const string StepFunctionsService = "SFN";
     internal const string SQSService = "SQS";
     internal const string SNSService = "SNS";
     internal const string S3Service = "S3";

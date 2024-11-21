@@ -17,6 +17,8 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
     public const string AttributeAWSSecretsManagerSecretArn = "aws.secretsmanager.secret.arn";
     public const string AttributeAWSSnsTopicArn = "aws.sns.topic.arn";
+    public const string AttributeAWSStepFunctionsActivityArn = "aws.stepfunctions.activity.arn";
+    public const string AttributeAWSStepFunctionsStateMachineArn = "aws.stepfunctions.state_machine.arn";
 
     // AWS Bedrock service attributes not yet defined in semantic conventions
     public const string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";

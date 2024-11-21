@@ -46,6 +46,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedSecretsManagerServiceName = "AWS::SecretsManager";
     private static readonly string NormalizedSNSServiceName = "AWS::SNS";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string NormalizedStepFunctionsName = "AWS::StepFunctions";
     private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
     private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DbConnectionResourceType = "DB::Connection";
@@ -370,6 +371,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
+                case "SFN":
+                    return NormalizedStepFunctionsName;
                 case "Bedrock":
                 case "Bedrock Agent":
                 case "Bedrock Agent Runtime":
@@ -430,6 +433,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+            }
+            else if (IsKeyPresent(span, AttributeAWSStepFunctionsActivityArn))
+            {
+                remoteResourceType = NormalizedStepFunctionsName + "::Activity";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn));
+            }
+            else if (IsKeyPresent(span, AttributeAWSStepFunctionsStateMachineArn))
+            {
+                remoteResourceType = NormalizedStepFunctionsName + "::StateMachine";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
             {
