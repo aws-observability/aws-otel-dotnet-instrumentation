@@ -43,6 +43,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedDynamoDBServiceName = "AWS::DynamoDB";
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
+    private static readonly string NormalizedSecretsManagerServiceName = "AWS::SecretsManager";
+    private static readonly string NormalizedSNSServiceName = "AWS::SNS";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
     private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
     private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
@@ -361,6 +363,10 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "Amazon S3": // AWS SDK v1
                 case "S3": // AWS SDK v2
                     return NormalizedS3ServiceName;
+                case "Secrets Manager":
+                    return NormalizedSecretsManagerServiceName;
+                case "SNS":
+                    return NormalizedSNSServiceName;
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
@@ -402,6 +408,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedS3ServiceName + "::Bucket";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSS3Bucket));
+            }
+            else if (IsKeyPresent(span, AttributeAWSSecretsManagerSecretArn))
+            {
+                remoteResourceType = NormalizedSecretsManagerServiceName + "::Secret";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn));
+            }
+            else if (IsKeyPresent(span, AttributeAWSSNSTopicArn))
+            {
+                remoteResourceType = NormalizedSNSServiceName + "::Topic";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
             {
