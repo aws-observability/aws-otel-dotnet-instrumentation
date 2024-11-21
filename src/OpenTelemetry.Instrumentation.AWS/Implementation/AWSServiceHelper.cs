@@ -35,7 +35,7 @@ internal class AWSServiceHelper
         { "QueueName", AWSSemanticConventions.AttributeAWSSQSQueueName },
         { "BucketName", AWSSemanticConventions.AttributeAWSS3BucketName },
         { "StreamName", AWSSemanticConventions.AttributeAWSKinesisStreamName },
-        { "TopicArn", AWSSemanticConventions.AttributeAWSSnsTopicArn },
+        { "TopicArn", AWSSemanticConventions.AttributeAWSSNSTopicArn },
         { "ARN", AWSSemanticConventions.AttributeAWSSecretsManagerSecretArn },
         { "ActivityArn", AWSSemanticConventions.AttributeAWSStepFunctionsActivityArn },
         { "StateMachineArn", AWSSemanticConventions.AttributeAWSStepFunctionsStateMachineArn },

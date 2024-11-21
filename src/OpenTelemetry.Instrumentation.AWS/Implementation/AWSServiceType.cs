@@ -6,12 +6,12 @@ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
 internal class AWSServiceType
 {
     internal const string DynamoDbService = "DynamoDB";
-    internal const string SecretsManagerService = "Secrets Manager";
-    internal const string StepFunctionsService = "SFN";
     internal const string SQSService = "SQS";
     internal const string SNSService = "SNS";
     internal const string S3Service = "S3";
     internal const string KinesisService = "Kinesis";
+    internal const string SecretsManagerService = "Secrets Manager";
+    internal const string StepFunctionsService = "SFN";
     internal const string BedrockService = "Bedrock";
     internal const string BedrockRuntimeService = "Bedrock Runtime";
     internal const string BedrockAgentService = "Bedrock Agent";
@@ -31,6 +31,12 @@ internal class AWSServiceType
 
     internal static bool IsKinesisService(string service)
         => KinesisService.Equals(service, StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsSecretsManagerService(string service)
+        => SecretsManagerService.Equals(service, StringComparison.OrdinalIgnoreCase);
+    
+    internal static bool IsStepFunctionsService(string service)
+        => StepFunctionsService.Equals(service, StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsBedrockService(string service)
         => BedrockService.Equals(service, StringComparison.OrdinalIgnoreCase);
