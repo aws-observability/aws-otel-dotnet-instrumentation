@@ -3,6 +3,8 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Reflection;
+using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
@@ -13,6 +15,8 @@ using Microsoft.AspNetCore.Http;
 using OpenTelemetry.Instrumentation.AspNetCore;
 using OpenTelemetry.Instrumentation.AWSLambda;
 #else
+using System.Web;
+using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using OpenTelemetry.Instrumentation.Http;
