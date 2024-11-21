@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -35,7 +36,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     public static readonly string AttributeServerSocketPort = "server.socket.port";
     public static readonly string AttributeDBUser = "db.user";
 
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
 
     // Normalized remote service names for supported AWS services

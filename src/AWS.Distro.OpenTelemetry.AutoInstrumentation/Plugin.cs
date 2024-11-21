@@ -13,10 +13,12 @@ using OpenTelemetry.Extensions.AWS.Trace;
 #if !NETFRAMEWORK
 using Microsoft.AspNetCore.Http;
 using OpenTelemetry.Instrumentation.AspNetCore;
+using OpenTelemetry.Instrumentation.AWSLambda;
 #else
 using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;
@@ -36,7 +38,7 @@ public class Plugin
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
@@ -59,6 +61,9 @@ public class Plugin
     private static readonly string? OtelExporterOtlpEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpEndpointConfig);
 
     private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
+    private static readonly string FormatOtelUnSampledTracesBinaryPrefix = "T1U";
+
+    private static readonly int LambdaSpanExportBatchSize = 10;
 
     private static readonly Dictionary<string, object> DistroAttributes = new Dictionary<string, object>
         {
@@ -104,7 +109,14 @@ public class Plugin
             if (this.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
             {
                 Resource processResource = tracerProvider.GetResource();
-                tracerProvider.AddProcessor(new BatchActivityExportProcessor(new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix)));
+
+                // UDP exporter for sampled spans
+                var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+
+                // UDP exporter for unsampled spans
+                var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
             }
 
             // Disable Application Metrics for Lambda environment
@@ -173,6 +185,9 @@ public class Plugin
 
         // My custom logic here
         builder.AddAWSInstrumentation();
+#if !NETFRAMEWORK
+        builder.AddAWSLambdaConfigurations();
+#endif
         return builder;
     }
 

@@ -107,15 +107,24 @@ internal sealed class AwsSpanProcessingUtil
     // null, UnknownOperation or http.method value.
     internal static string GetIngressOperation(Activity span)
     {
-        string operation = span.DisplayName;
-
         if (ShouldUseInternalOperation(span))
         {
-            operation = InternalOperation;
+            return InternalOperation;
+        }
+        else if (span.GetCustomProperty("HttpContextWeakRef") != null)
+        {
+            return GetRouteTemplate(span);
         }
 
+        return RouteFallback(span);
+    }
+
+    internal static string GetRouteTemplate(Activity span)
+    {
+        string operation = span.DisplayName;
+
         // Access the HttpContext object to get the route data.
-        else if (span.GetCustomProperty("HttpContextWeakRef") is WeakReference<HttpContext> httpContextWeakRef &&
+        if (span.GetCustomProperty("HttpContextWeakRef") is WeakReference<HttpContext> httpContextWeakRef &&
             httpContextWeakRef.TryGetTarget(out var httpContext))
         {
 #if !NETFRAMEWORK
@@ -135,11 +144,22 @@ internal sealed class AwsSpanProcessingUtil
             {
                 operation = GenerateIngressOperation(span);
             }
+
+            return operation;
         }
+        else
+        {
+            return RouteFallback(span);
+        }
+    }
+
+    internal static string RouteFallback(Activity span)
+    {
+        string operation = span.DisplayName;
 
         // workaround for now so that both Server and Consumer spans have same operation
         // TODO: Update this and other languages so that all of them set the operation during propagation.
-        else if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
+        if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
         {
             operation = GenerateIngressOperation(span);
         }
