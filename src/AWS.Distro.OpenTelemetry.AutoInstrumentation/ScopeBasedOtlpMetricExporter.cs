@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -16,7 +17,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public class ScopeBasedOtlpMetricExporter : OtlpMetricExporter
 {
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<ScopeBasedOtlpMetricExporter>();
 
     private readonly HashSet<string> registeredScopedNames;
