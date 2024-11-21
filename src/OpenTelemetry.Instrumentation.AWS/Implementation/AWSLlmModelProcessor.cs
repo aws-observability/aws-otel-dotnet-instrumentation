@@ -10,7 +10,7 @@ namespace OpenTelemetry.Instrumentation.AWS.Implementation;
 
 internal class AWSLlmModelProcessor
 {
-    internal static void ProcessGenAiAttributes<T>(Activity activity, T message, string model, bool isRequest)
+    internal static void ProcessGenAiAttributes<T>(Activity activity, T message, string modelName, bool isRequest)
     {
         // message can be either a request or a response. isRequest is used by the model-specific methods to determine
         // whether to extract the request or response attributes.
@@ -37,26 +37,29 @@ internal class AWSLlmModelProcessor
                     }
 
                     // extract model specific attributes based on model name
-                    switch (model)
+                    if (modelName.Contains("amazon.titan"))
                     {
-                        case "amazon.titan":
-                            ProcessTitanModelAttributes(activity, jsonObject, isRequest);
-                            break;
-                        case "anthropic.claude":
-                            ProcessClaudeModelAttributes(activity, jsonObject, isRequest);
-                            break;
-                        case "meta.llama3":
-                            ProcessLlamaModelAttributes(activity, jsonObject, isRequest);
-                            break;
-                        case "cohere.command":
-                            ProcessCommandModelAttributes(activity, jsonObject, isRequest);
-                            break;
-                        case "ai21.jamba":
-                            ProcessJambaModelAttributes(activity, jsonObject, isRequest);
-                            break;
-                        case "mistral.mistral":
-                            ProcessMistralModelAttributes(activity, jsonObject, isRequest);
-                            break;
+                        ProcessTitanModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("anthropic.claude"))
+                    {
+                        ProcessClaudeModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("meta.llama3"))
+                    {
+                        ProcessLlamaModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("cohere.command"))
+                    {
+                        ProcessCommandModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("ai21.jamba"))
+                    {
+                        ProcessJambaModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("mistral.mistral"))
+                    {
+                        ProcessMistralModelAttributes(activity, jsonObject, isRequest);
                     }
                 }
                 catch (Exception ex)
@@ -135,28 +138,27 @@ internal class AWSLlmModelProcessor
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
                 }
 
-                if (jsonBody.TryGetValue("max_tokens_to_sample", out var maxTokens))
+                if (jsonBody.TryGetValue("max_tokens", out var maxTokens))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
-                }
-
-                // input tokens not provided in Claude response body, so we estimate the value based on input length
-                if (jsonBody.TryGetValue("prompt", out var input))
-                {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
                 }
             }
             else
             {
+                if (jsonBody.TryGetValue("usage", out var usage))
+                {
+                    if (usage.TryGetProperty("input_tokens", out var inputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
+                    }
+                    if (usage.TryGetProperty("output_tokens", out var outputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
+                    }
+                }
                 if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
                 {
                     activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
-                }
-
-                // output tokens not provided in Claude response body, so we estimate the value based on output length
-                if (jsonBody.TryGetValue("completion", out var output))
-                {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) output.GetString().Length / 6)));
                 }
             }
         }

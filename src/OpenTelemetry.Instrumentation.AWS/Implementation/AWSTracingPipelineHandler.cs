@@ -168,8 +168,7 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                                 var modelString = model.ToString();
                                 if (modelString != null)
                                 {
-                                    var modelName = modelString.Split('-')[0];
-                                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, request, modelName, true);
+                                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, request, modelString, true);
                                 }
                             }
                         }
@@ -252,8 +251,7 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                 var modelString = model.ToString();
                 if (modelString != null)
                 {
-                    var modelName = modelString.Split('-')[0];
-                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, responseContext.Response, modelName, false);
+                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, responseContext.Response, modelString, false);
                 }
             }
         }

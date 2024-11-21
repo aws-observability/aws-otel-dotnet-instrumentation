@@ -83,14 +83,27 @@ public class BedrockTests(
     {
         bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
         {
-            ModelId = "anthropic.claude-v2:1",
+            ModelId = "us.anthropic.claude-3-5-haiku-20241022-v1:0",
             Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
             {
-                // prompt is 72 chars long, input_tokens should be estimated as ceil(72/6) = 12
-                prompt = "sample input text sample input text sample input text sample input text ",
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new
+                            {
+                                type = "text",
+                                text = "sample input text",
+                            }
+                        }
+                    },
+                },
                 temperature = 0.123,
                 top_p = 0.456,
-                max_tokens_to_sample = 123,
+                max_tokens = 123,
             }))),
             ContentType = "application/json",
         });
@@ -101,8 +114,11 @@ public class BedrockTests(
     {
         return new
         {
-            // response is 56 chars long, output_tokens should be estimated as ceil(56/6) = 10
-            completion = "sample output text sample output text sample output text",
+            usage = new
+            {
+                input_tokens = 456,
+                output_tokens = 789,
+            },
             stop_reason = "finish_reason",
         };
     }
