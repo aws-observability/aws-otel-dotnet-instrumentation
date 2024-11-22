@@ -21,7 +21,7 @@ internal class AWSLlmModelProcessor
         // in the response body, so we approximate their values by dividing the input and output lengths by 6, based on
         // the Bedrock documentation here: https://docs.aws.amazon.com/bedrock/latest/userguide/model-customization-prepare.html
 
-        var messageBodyProperty = message.GetType().GetProperty("Body");
+        var messageBodyProperty = message?.GetType()?.GetProperty("Body");
         if (messageBodyProperty != null)
         {
             var body = messageBodyProperty.GetValue(message) as MemoryStream;
@@ -111,7 +111,7 @@ internal class AWSLlmModelProcessor
 
                     if (results.TryGetProperty("completionReason", out var finishReasons))
                     {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                     }
                 }
             }
@@ -158,7 +158,7 @@ internal class AWSLlmModelProcessor
                 }
                 if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                 }
             }
         }
@@ -203,7 +203,7 @@ internal class AWSLlmModelProcessor
 
                 if (jsonBody.TryGetValue("stop_reason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                 }
             }
         }
@@ -237,20 +237,20 @@ internal class AWSLlmModelProcessor
                 // input tokens not provided in Command response body, so we estimate the value based on input length
                 if (jsonBody.TryGetValue("message", out var input))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) (input.GetString()?.Length ?? 0) / 6)));
                 }
             }
             else
             {
                 if (jsonBody.TryGetValue("finish_reason", out var finishReasons))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                 }
 
                 // completion tokens not provided in Command response body, so we estimate the value based on output length
                 if (jsonBody.TryGetValue("text", out var output))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) output.GetString().Length / 6)));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) (output.GetString()?.Length ?? 0) / 6)));
                 }
             }
         }
@@ -298,7 +298,7 @@ internal class AWSLlmModelProcessor
                 {
                     if (choices[0].TryGetProperty("finish_reason", out var finishReasons))
                     {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                     }
                 }
             }
@@ -333,7 +333,7 @@ internal class AWSLlmModelProcessor
                 // input tokens not provided in Mistral response body, so we estimate the value based on input length
                 if (jsonBody.TryGetValue("prompt", out var input))
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) input.GetString().Length / 6)));
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, Convert.ToInt32(Math.Ceiling((double) (input.GetString()?.Length ?? 0) / 6)));
                 }
             }
             else
@@ -343,13 +343,13 @@ internal class AWSLlmModelProcessor
                     var output = outputsArray[0];
                     if (output.TryGetProperty("stop_reason", out var finishReasons))
                     {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() });
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
                     }
 
                     // output tokens not provided in Mistral response body, so we estimate the value based on output length
                     if (output.TryGetProperty("text", out var text))
                     {
-                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) text.GetString().Length / 6)));
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, Convert.ToInt32(Math.Ceiling((double) (text.GetString()?.Length ?? 0) / 6)));
                     }
                 }
             }
