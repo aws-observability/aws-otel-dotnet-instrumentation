@@ -15,6 +15,7 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSSQSQueueName = "aws.sqs.queue_name";
     public const string AttributeAWSS3BucketName = "aws.s3.bucket";
     public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
+    public const string AttributeAWSLambdaResourceMappingId = "aws.lambda.resource_mapping.id";
     public const string AttributeAWSSecretsManagerSecretArn = "aws.secretsmanager.secret.arn";
     public const string AttributeAWSSNSTopicArn = "aws.sns.topic.arn";
     public const string AttributeAWSStepFunctionsActivityArn = "aws.stepfunctions.activity.arn";
