@@ -48,6 +48,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSDynamoTableName = "aws.table_name";
     internal static readonly string AttributeAWSSQSQueueUrl = "aws.queue_url";
 
+    internal static readonly string AttributeAWSLambdaResourceMappingId = "aws.lambda.resource_mapping.id";
     internal static readonly string AttributeAWSS3Bucket = "aws.s3.bucket";
     internal static readonly string AttributeAWSSecretsManagerSecretArn = "aws.secretsmanager.secret.arn";
     internal static readonly string AttributeAWSSNSTopicArn = "aws.sns.topic.arn";

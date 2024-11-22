@@ -42,6 +42,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Normalized remote service names for supported AWS services
     private static readonly string NormalizedDynamoDBServiceName = "AWS::DynamoDB";
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
+    private static readonly string NormalizedLambdaServiceName = "AWS::Lambda";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
     private static readonly string NormalizedSecretsManagerServiceName = "AWS::SecretsManager";
     private static readonly string NormalizedSNSServiceName = "AWS::SNS";
@@ -361,6 +362,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonKinesis": // AWS SDK v1
                 case "Kinesis": // AWS SDK v2
                     return NormalizedKinesisServiceName;
+                case "Lambda":
+                    return NormalizedLambdaServiceName;
                 case "Amazon S3": // AWS SDK v1
                 case "S3": // AWS SDK v2
                     return NormalizedS3ServiceName;
@@ -406,6 +409,11 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedKinesisServiceName + "::Stream";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSKinesisStreamName));
+            }
+            else if (IsKeyPresent(span, AttributeAWSLambdaResourceMappingId))
+            {
+                remoteResourceType = NormalizedLambdaServiceName + "::EventSourceMapping";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaResourceMappingId));
             }
             else if (IsKeyPresent(span, AttributeAWSS3Bucket))
             {

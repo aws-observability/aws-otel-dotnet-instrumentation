@@ -10,6 +10,7 @@ internal class AWSServiceType
     internal const string SNSService = "SNS";
     internal const string S3Service = "S3";
     internal const string KinesisService = "Kinesis";
+    internal const string LambdaService = "Lambda";
     internal const string SecretsManagerService = "Secrets Manager";
     internal const string StepFunctionsService = "SFN";
     internal const string BedrockService = "Bedrock";
@@ -28,6 +29,9 @@ internal class AWSServiceType
 
     internal static bool IsS3Service(string service)
         => S3Service.Equals(service, StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsLambdaService(string service)
+        => LambdaService.Equals(service, StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsKinesisService(string service)
         => KinesisService.Equals(service, StringComparison.OrdinalIgnoreCase);
