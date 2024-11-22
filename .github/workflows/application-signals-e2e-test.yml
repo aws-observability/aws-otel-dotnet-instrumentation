@@ -59,6 +59,8 @@ jobs:
 
   upload-main-build-image:
     runs-on: ${{ matrix.os }}
+    outputs: 
+      short_sha: ${{ steps.short_sha.outputs.SHORT_SHA }}
     continue-on-error: true
     strategy:
       matrix:
@@ -67,7 +69,13 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        
+      - name: Get Short SHA
+        id: short_sha
+        run: |
+          shortsha="$(git rev-parse --short HEAD)"
+          echo "SHORT_SHA=$shortsha" >> $GITHUB_OUTPUT
+        shell: bash
+  
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -108,14 +116,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
-          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.linux .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }}
       
       - name: Build Windows container
         if: runner.os == 'Windows'
         run: |
-          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
-          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.windows2022 .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }}
         shell: powershell
 
   dotnet-ec2-default-test:
@@ -141,7 +149,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ inputs.adot-linux-image-name }}
+      adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-adot-test'
       caller-workflow-name: 'main-build'
@@ -151,7 +159,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
     secrets: inherit
     with:
-      adot-image-name: ${{ inputs.adot-windows-image-name }}
+      adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'eks-windows-manual'
       caller-workflow-name: 'main-build'
