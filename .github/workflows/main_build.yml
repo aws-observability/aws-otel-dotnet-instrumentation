@@ -9,7 +9,7 @@ on:
     branches:
       - main
       - "release/v*"
-      - "dotnet-version-jeelmm"
+      - "dotnet-version-jeel2"
 
 permissions:
   id-token: write
