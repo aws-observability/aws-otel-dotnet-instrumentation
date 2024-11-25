@@ -5,6 +5,7 @@ using Amazon.BedrockRuntime;
 using Amazon.DynamoDBv2;
 using Amazon.Kinesis;
 using Amazon.S3;
+using Amazon.SimpleNotificationService;
 using Amazon.SQS;
 using TestSimpleApp.AWSSDK.Core;
 
@@ -20,6 +21,7 @@ builder.Services
     .AddSingleton<IAmazonS3>(provider => new AmazonS3Client(new AmazonS3Config { ServiceURL = "http://localstack:4566", ForcePathStyle = true }))
     .AddSingleton<IAmazonSQS>(provider => new AmazonSQSClient(new AmazonSQSConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonKinesis>(provider => new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddSingleton<IAmazonSimpleNotificationService>(provider => new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
     // Bedrock services are not supported by localstack, so we mock the API responses on the aws-application-signals-tests-testsimpleapp server.
     .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localhost:8080" }))
     .AddSingleton<IAmazonBedrockRuntime>(provider => new AmazonBedrockRuntimeClient(new AmazonBedrockRuntimeConfig { ServiceURL = "http://localhost:8080" }))
@@ -30,15 +32,18 @@ builder.Services
     .AddKeyedSingleton<IAmazonS3>("fault-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>(true)))
     .AddKeyedSingleton<IAmazonSQS>("fault-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>(true)))
     .AddKeyedSingleton<IAmazonKinesis>("fault-kinesis", new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSimpleNotificationService>("fault-sns", new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
     //error client
     .AddKeyedSingleton<IAmazonDynamoDB>("error-ddb", new AmazonDynamoDBClient(AmazonClientConfigHelper.CreateConfig<AmazonDynamoDBConfig>()))
     .AddKeyedSingleton<IAmazonS3>("error-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>()))
     .AddKeyedSingleton<IAmazonSQS>("error-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>()))
     .AddKeyedSingleton<IAmazonKinesis>("error-kinesis", new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSimpleNotificationService>("error-sns", new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<S3Tests>()
     .AddSingleton<DynamoDBTests>()
     .AddSingleton<SQSTests>()
     .AddSingleton<KinesisTests>()
+    .AddSingleton<SNSTests>()
     .AddSingleton<BedrockTests>();
 
 var app = builder.Build();
@@ -120,6 +125,14 @@ app.MapGet("kinesis/deletestream/my-stream", (KinesisTests kinesis) => kinesis.D
 
 app.MapGet("kinesis/fault", (KinesisTests kinesis) => kinesis.Fault()).WithName("kinesis-fault").WithOpenApi();
 app.MapGet("kinesis/error", (KinesisTests kinesis) => kinesis.Error()).WithName("kinesis-error").WithOpenApi();
+
+app.MapGet("sns/createtopic/some-topic", (SNSTests sns) => sns.CreateTopic())
+    .WithName("create-topic")
+    .WithOpenApi();
+
+app.MapGet("sns/publish/some-topic", (SNSTests sns) => sns.Publish())
+    .WithName("publish")
+    .WithOpenApi();
 
 app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrail())
     .WithName("get-guardrail")
