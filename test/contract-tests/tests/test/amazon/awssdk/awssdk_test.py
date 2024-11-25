@@ -25,6 +25,7 @@ from opentelemetry.semconv.trace import SpanAttributes
 _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
 
+_AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
@@ -84,7 +85,7 @@ class AWSSdkTest(ContractTestBase):
         cls._local_stack: LocalStackContainer = (
             LocalStackContainer(image="localstack/localstack:3.0.2")
             .with_name("localstack")
-            .with_services("s3", "sqs", "dynamodb", "kinesis")
+            .with_services("s3", "sns", "sqs", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
@@ -318,6 +319,36 @@ class AWSSdkTest(ContractTestBase):
     #         },
     #         span_name="Kinesis.CreateStream",
     #     )
+
+    def test_sns_create_topic(self):
+        self.do_test_requests(
+            "sns/createtopic/some-topic",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::SNS",
+            remote_operation="CreateTopic",
+            request_response_specific_attributes={},
+            span_name="SNS.CreateTopic"
+        )
+
+    def test_sns_publish(self):
+        self.do_test_requests(
+            "sns/publish/some-topic",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::SNS",
+            remote_operation="Publish",
+            remote_resource_type="AWS::SNS::Topic",
+            remote_resource_identifier="arn:aws:sns:us-east-1:000000000000:test-topic",
+            request_response_specific_attributes={
+                _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic",
+            },
+            span_name="SNS.Publish",
+        )
 
     def test_bedrock_get_guardrail(self):
         self.do_test_requests(
