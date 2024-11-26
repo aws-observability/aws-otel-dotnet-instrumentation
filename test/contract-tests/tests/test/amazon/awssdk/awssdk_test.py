@@ -25,10 +25,11 @@ from opentelemetry.semconv.trace import SpanAttributes
 _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
 
-_AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
+_AWS_SECRETSMANAGER_SECRET_ARN: str = "aws.secretsmanager.secret.arn"
+_AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
 _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
@@ -85,7 +86,7 @@ class AWSSdkTest(ContractTestBase):
         cls._local_stack: LocalStackContainer = (
             LocalStackContainer(image="localstack/localstack:3.0.2")
             .with_name("localstack")
-            .with_services("s3", "sns", "sqs", "dynamodb", "kinesis")
+            .with_services("s3", "secretsmanager", "sns", "sqs", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
@@ -319,6 +320,42 @@ class AWSSdkTest(ContractTestBase):
     #         },
     #         span_name="Kinesis.CreateStream",
     #     )
+
+    def test_secretsmanager_create_secret(self):
+        self.do_test_requests(
+            "secretsmanager/createsecret/some-secret",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="CreateSecret",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            },
+            span_name="Secrets Manager.CreateSecret",
+        )
+    
+    def test_secretsmanager_get_secret_value(self):
+        self.do_test_requests(
+            "secretsmanager/getsecretvalue/some-secret",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="GetSecretValue",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            },
+            span_name="Secrets Manager.GetSecretValue",
+        )
 
     def test_sns_create_topic(self):
         self.do_test_requests(

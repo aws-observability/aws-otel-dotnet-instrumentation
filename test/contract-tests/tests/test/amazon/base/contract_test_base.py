@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 import time
+import re
 from logging import INFO, Logger, getLogger
 from typing import Dict, List
 from unittest import TestCase
@@ -162,11 +163,27 @@ class ContractTestBase(TestCase):
             attributes_dict[key] = value
         return attributes_dict
 
+    def _is_regex(self, value: str) -> bool:
+        try:
+            re.compile(value)
+            return True
+        except re.error:
+            return False
+
     def _assert_str_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: str):
         self.assertIn(key, attributes_dict)
         actual_value: AnyValue = attributes_dict[key]
         self.assertIsNotNone(actual_value)
-        self.assertEqual(expected_value, actual_value.string_value)
+        if self._is_regex(expected_value):
+            self.assertRegex(actual_value.string_value, expected_value)
+        else:
+            self.assertEqual(expected_value, actual_value.string_value)
+
+    def _assert_regex_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: str):
+        self.assertIn(key, attributes_dict)
+        actual_value: AnyValue = attributes_dict[key]
+        self.assertIsNotNone(actual_value)
+        self.assertRegex(actual_value.string_value, expected_value)
 
     def _assert_int_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: int) -> None:
         self.assertIn(key, attributes_dict)
