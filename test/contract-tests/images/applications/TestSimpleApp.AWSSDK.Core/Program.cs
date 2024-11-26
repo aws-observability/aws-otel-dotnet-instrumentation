@@ -139,6 +139,9 @@ app.MapGet("secretsmanager/getsecretvalue/some-secret", (SecretsManagerTests sec
     .WithName("get-secret-value")
     .WithOpenApi();
 
+app.MapGet("secretsmanager/fault", (SecretsManagerTests secretsManager) => secretsManager.Fault()).WithName("secretsmanager-fault").WithOpenApi();
+app.MapGet("secretsmanager/error", (SecretsManagerTests secretsManager) => secretsManager.Error()).WithName("secretsmanager-error").WithOpenApi();
+
 app.MapGet("sns/createtopic/some-topic", (SNSTests sns) => sns.CreateTopic())
     .WithName("create-topic")
     .WithOpenApi();
@@ -146,6 +149,9 @@ app.MapGet("sns/createtopic/some-topic", (SNSTests sns) => sns.CreateTopic())
 app.MapGet("sns/publish/some-topic", (SNSTests sns) => sns.Publish())
     .WithName("publish")
     .WithOpenApi();
+
+app.MapGet("sns/fault", (SNSTests sns) => sns.Fault()).WithName("sns-fault").WithOpenApi();
+app.MapGet("sns/error", (SNSTests sns) => sns.Error()).WithName("sns-error").WithOpenApi();
 
 app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrail())
     .WithName("get-guardrail")

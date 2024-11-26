@@ -356,6 +356,43 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Secrets Manager.GetSecretValue",
         )
+    
+    def test_secretsmanager_error(self):
+        self.do_test_requests(
+            "secretsmanager/error",
+            "GET",
+            400,
+            1,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="DescribeSecret",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+            },
+            span_name="Secrets Manager.DescribeSecret",
+        )
+    
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_secretsmanager_fault(self):
+    #     self.do_test_requests(
+    #         "secretsmanager/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         rpc_service="Secrets Manager",
+    #         remote_service="AWS::SecretsManager",
+    #         remote_operation="CreateSecret",
+    #         remote_resource_type="AWS::SecretsManager::Secret",
+    #         remote_resource_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+    #         request_response_specific_attributes={
+    #             _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+    #         },
+    #         span_name="Secrets Manager.CreateSecret",
+    #     )
 
     def test_sns_create_topic(self):
         self.do_test_requests(
@@ -386,6 +423,37 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="SNS.Publish",
         )
+    
+    def test_sns_error(self):
+        self.do_test_requests(
+            "sns/error",
+            "GET",
+            400,
+            1,
+            0,
+            remote_service="AWS::SNS",
+            remote_operation="Publish",
+            remote_resource_type="AWS::SNS::Topic",
+            remote_resource_identifier="arn:aws:sns:us-east-1:000000000000:test-topic-error",
+            request_response_specific_attributes={
+                _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic-error",
+            },
+            span_name="SNS.Publish",
+        )
+
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_sns_fault(self):
+    #     self.do_test_requests(
+    #         "sns/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         remote_service="AWS::SNS",
+    #         remote_operation="CreateTopic",
+    #         request_response_specific_attributes={},
+    #         span_name="SNS.CreateTopic"
+    #     )
 
     def test_bedrock_get_guardrail(self):
         self.do_test_requests(
