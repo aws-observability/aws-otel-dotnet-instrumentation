@@ -164,6 +164,20 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                             }
                         }
 
+                        // for secrets manager, only extract SecretId from request if it is a secret ARN.
+                        if (AWSServiceType.IsSecretsManagerService(service) && parameter == "SecretId")
+                        {
+                            var secretId = property.GetValue(request);
+                            if (secretId != null)
+                            {
+                                var secretIdString = secretId.ToString();
+                                if (secretIdString != null && !secretIdString.StartsWith("arn:aws:secretsmanager:"))
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+
                         if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
                         {
                             activity.SetTag(attribute, property.GetValue(request));

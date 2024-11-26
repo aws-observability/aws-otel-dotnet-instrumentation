@@ -28,6 +28,6 @@ public class SecretsManagerTests(
 
     protected override Task CreateError(CancellationToken cancellationToken)
     {
-        return errorSecretsManager.DeleteSecretAsync(new DeleteSecretRequest { SecretId = "arn:aws:us-east-1:000000000000:test-secret-error" });
+        return errorSecretsManager.DescribeSecretAsync(new DescribeSecretRequest { SecretId = "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error" });
     }
 }

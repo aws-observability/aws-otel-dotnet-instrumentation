@@ -26,6 +26,6 @@ public class SNSTests(
 
     protected override Task CreateError(CancellationToken cancellationToken)
     {
-        return errorSns.DeleteTopicAsync(new DeleteTopicRequest { TopicArn = "arn:aws:sns:us-east-1:000000000000:test-topic-error" });
+        return errorSns.PublishAsync(new PublishRequest { TopicArn = "arn:aws:sns:us-east-1:000000000000:test-topic-error" });
     }
 }
