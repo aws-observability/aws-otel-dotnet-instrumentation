@@ -10,6 +10,7 @@ from typing_extensions import override
 from amazon.base.contract_test_base import NETWORK_NAME, ContractTestBase
 from amazon.utils.application_signals_constants import (
     AWS_LOCAL_SERVICE,
+    AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER,
     AWS_REMOTE_OPERATION,
     AWS_REMOTE_RESOURCE_IDENTIFIER,
     AWS_REMOTE_RESOURCE_TYPE,
@@ -110,6 +111,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutBucket",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
+            cloudformation_primary_identifier="test-bucket-name",
             request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
@@ -127,6 +129,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutObject",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
+            cloudformation_primary_identifier="test-bucket-name",
             request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
@@ -144,6 +147,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DeleteObject",
             remote_resource_type="AWS::S3::Bucket",
             remote_resource_identifier="test-bucket-name",
+            cloudformation_primary_identifier="test-bucket-name",
             request_response_specific_attributes={
                 SpanAttributes.AWS_S3_BUCKET: "test-bucket-name",
             },
@@ -161,6 +165,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateTable",
             remote_resource_type="AWS::DynamoDB::Table",
             remote_resource_identifier="test_table",
+            cloudformation_primary_identifier="test_table",
             request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
@@ -179,6 +184,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutItem",
             remote_resource_type="AWS::DynamoDB::Table",
             remote_resource_identifier="test_table",
+            cloudformation_primary_identifier="test_table",
             request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
@@ -197,8 +203,10 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateQueue",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
+            cloudformation_primary_identifier="http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/test_queue",
             request_response_specific_attributes={
                 _AWS_SQS_QUEUE_NAME: "test_queue",
+                _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/test_queue",
             },
             span_name="SQS.CreateQueue",
         )
@@ -214,6 +222,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="SendMessage",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
+            cloudformation_primary_identifier="http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             request_response_specific_attributes={
                 _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             },
@@ -231,6 +240,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="ReceiveMessage",
             remote_resource_type="AWS::SQS::Queue",
             remote_resource_identifier="test_queue",
+            cloudformation_primary_identifier="http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             request_response_specific_attributes={
                 _AWS_SQS_QUEUE_URL: "http://sqs.us-east-1.localstack:4566/000000000000/test_queue",
             },
@@ -248,6 +258,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateStream",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream",
+            cloudformation_primary_identifier="test_stream",
             request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream",
             },
@@ -265,6 +276,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="PutRecord",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream",
+            cloudformation_primary_identifier="test_stream",
             request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream",
             },
@@ -282,6 +294,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DeleteStream",
             remote_resource_type="AWS::Kinesis::Stream",
             remote_resource_identifier="test_stream_error",
+            cloudformation_primary_identifier="test_stream_error",
             request_response_specific_attributes={
                 _AWS_KINESIS_STREAM_NAME: "test_stream_error",
             },
@@ -318,6 +331,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
+            cloudformation_primiary_identifier="test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
             },
@@ -336,6 +350,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="amazon.titan-text-express-v1",
+            cloudformation_primary_identifier="amazon.titan-text-express-v1",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "amazon.titan-text-express-v1",
@@ -361,6 +376,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="us.anthropic.claude-3-5-haiku-20241022-v1:0",
+            cloudformation_primary_identifier="us.anthropic.claude-3-5-haiku-20241022-v1:0",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "us.anthropic.claude-3-5-haiku-20241022-v1:0",
@@ -386,6 +402,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="meta.llama3-8b-instruct-v1:0",
+            cloudformation_primary_identifier="meta.llama3-8b-instruct-v1:0",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "meta.llama3-8b-instruct-v1:0",
@@ -411,6 +428,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="cohere.command-r-v1:0",
+            cloudformation_primary_identifier="cohere.command-r-v1:0",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "cohere.command-r-v1:0",
@@ -436,6 +454,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="ai21.jamba-1-5-large-v1:0",
+            cloudformation_primary_identifier="ai21.jamba-1-5-large-v1:0",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "ai21.jamba-1-5-large-v1:0",
@@ -461,6 +480,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeModel",
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="mistral.mistral-7b-instruct-v0:2",
+            cloudformation_primary_identifier="mistral.mistral-7b-instruct-v0:2",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "mistral.mistral-7b-instruct-v0:2",
@@ -486,6 +506,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="InvokeAgent",
             remote_resource_type="AWS::Bedrock::Agent",
             remote_resource_identifier="test-agent",
+            cloudformation_primary_identifier="test-agent",
             request_response_specific_attributes={
                 _AWS_BEDROCK_AGENT_ID: "test-agent",
             },
@@ -504,6 +525,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Retrieve",
             remote_resource_type="AWS::Bedrock::KnowledgeBase",
             remote_resource_identifier="test-knowledge-base",
+            cloudformation_primary_identifier="test-knowledge-base",
             request_response_specific_attributes={
                 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
             },
@@ -522,6 +544,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetAgent",
             remote_resource_type="AWS::Bedrock::Agent",
             remote_resource_identifier="test-agent",
+            cloudformation_primary_identifier="test-agent",
             request_response_specific_attributes={
                 _AWS_BEDROCK_AGENT_ID: "test-agent",
             },
@@ -540,6 +563,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetKnowledgeBase",
             remote_resource_type="AWS::Bedrock::KnowledgeBase",
             remote_resource_identifier="test-knowledge-base",
+            cloudformation_primary_identifier="test-knowledge-base",
             request_response_specific_attributes={
                 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base",
             },
@@ -558,8 +582,10 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetDataSource",
             remote_resource_type="AWS::Bedrock::DataSource",
             remote_resource_identifier="test-data-source",
+            cloudformation_primary_identifier="test-knowledge-base|test-data-source",
             request_response_specific_attributes={
                 _AWS_BEDROCK_DATA_SOURCE_ID: "test-data-source",
+                _AWS_BEDROCK_KNOWLEDGE_BASE_ID: "test-knowledge-base"
             },
             span_name="Bedrock Agent.GetDataSource",
         )
@@ -580,6 +606,7 @@ class AWSSdkTest(ContractTestBase):
             "CLIENT",
             kwargs.get("remote_resource_type", "None"),
             kwargs.get("remote_resource_identifier", "None"),
+            kwargs.get("cloudformation_primary_identifier", "None")
         )
 
     def _assert_aws_attributes(
@@ -590,6 +617,7 @@ class AWSSdkTest(ContractTestBase):
         span_kind: str,
         remote_resource_type: str,
         remote_resource_identifier: str,
+        cloudformation_primary_identifier: str
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
@@ -599,6 +627,8 @@ class AWSSdkTest(ContractTestBase):
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_TYPE, remote_resource_type)
         if remote_resource_identifier != "None":
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_IDENTIFIER, remote_resource_identifier)
+        if cloudformation_primary_identifier != "None":
+            self._assert_str_attribute(attributes_dict, AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER, cloudformation_primary_identifier)
         self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, span_kind)
 
     @override
