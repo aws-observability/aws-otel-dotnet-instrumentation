@@ -916,6 +916,66 @@ public class AwsMetricAttributesGeneratorTest
 
         attributesCombination = new Dictionary<string, object>
         {
+            { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_^^id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id");
