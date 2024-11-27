@@ -225,6 +225,8 @@ async Task PrepareAWSServer(IServiceProvider services)
     // Create a state machine and activity for the Step Functions tests
     await stepfunctionsTests.CreateStateMachine("test-state-machine");
     await stepfunctionsTests.CreateActivity("test-activity");
+
+    // TODO: create resources for Lambda event source mapping test
 }
 
 // Reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,

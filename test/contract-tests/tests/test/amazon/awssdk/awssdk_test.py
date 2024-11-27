@@ -792,6 +792,8 @@ class AWSSdkTest(ContractTestBase):
             span_name="Bedrock Agent.GetDataSource",
         )
 
+    # TODO: add contract test for Lambda event source mapping resource
+
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:
         target_spans: List[Span] = []
