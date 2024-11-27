@@ -30,6 +30,8 @@ _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
 _AWS_SECRETSMANAGER_SECRET_ARN: str = "aws.secretsmanager.secret.arn"
 _AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
+_AWS_STEPFUNCTIONS_ACTIVITY_ARN: str = "aws.stepfunctions.activity.arn"
+_AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: str = "aws.stepfunctions.state_machine.arn"
 _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
@@ -84,10 +86,11 @@ class AWSSdkTest(ContractTestBase):
             )
         }
         cls._local_stack: LocalStackContainer = (
-            LocalStackContainer(image="localstack/localstack:3.0.2")
+            LocalStackContainer(image="localstack/localstack:4.0.0")
             .with_name("localstack")
-            .with_services("s3", "secretsmanager", "sns", "sqs", "dynamodb", "kinesis")
+            .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
+            # .with_env("PROVIDER_OVERRIDE_STEPFUNCTIONS", "legacy")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
         cls._local_stack.start()
@@ -453,6 +456,101 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="CreateTopic",
     #         request_response_specific_attributes={},
     #         span_name="SNS.CreateTopic"
+    #     )
+
+    def test_stepfunctions_create_state_machine(self):
+        self.do_test_requests(
+            "stepfunctions/createstatemachine/some-state-machine",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="CreateStateMachine",
+            span_name="SFN.CreateStateMachine",
+        )
+    
+    def test_stepfunctions_describe_state_machine(self):
+        self.do_test_requests(
+            "stepfunctions/describestatemachine/some-state-machine",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeStateMachine",
+            remote_resource_type="AWS::StepFunctions::StateMachine",
+            remote_resource_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
+            },
+            span_name="SFN.DescribeStateMachine",
+        )
+
+    def test_stepfunctions_create_activity(self):
+        self.do_test_requests(
+            "stepfunctions/createactivity/some-activity",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="CreateActivity",
+            span_name="SFN.CreateActivity",
+        )
+
+    def test_stepfunctions_describe_activity(self):
+        self.do_test_requests(
+            "stepfunctions/describeactivity/some-activity",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeActivity",
+            remote_resource_type="AWS::StepFunctions::Activity",
+            remote_resource_identifier="arn:aws:states:us-east-1:000000000000:activity:test-activity",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_ACTIVITY_ARN: "arn:aws:states:us-east-1:000000000000:activity:test-activity",
+            },
+            span_name="SFN.DescribeActivity",
+        )
+    
+    def test_stepfunctions_error(self):
+        self.do_test_requests(
+            "stepfunctions/error",
+            "GET",
+            400,
+            1,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeStateMachine",
+            remote_resource_type="AWS::StepFunctions::StateMachine",
+            remote_resource_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
+            },
+            span_name="SFN.DescribeStateMachine",
+        )
+
+
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_stepfunctions_fault(self):
+    #     self.do_test_requests(
+    #         "stepfunctions/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         rpc_service="SFN",
+    #         remote_service="AWS::StepFunctions",
+    #         remote_operation="CreateStateMachine",
+    #         span_name="SFN.CreateStateMachine",
     #     )
 
     def test_bedrock_get_guardrail(self):

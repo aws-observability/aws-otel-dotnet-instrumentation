@@ -13,6 +13,7 @@
         <PackageReference Include="AWSSDK.SecretsManager" Version="4.0.0-preview" />
         <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.0-preview" />
         <PackageReference Include="AWSSDK.SQS" Version="4.0.0-preview" />
+        <PackageReference Include="AWSSDK.StepFunctions" Version="4.0.0-preview" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
         <PackageReference Include="AWSSDK.Bedrock" Version="4.0.0-preview" />
