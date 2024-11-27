@@ -9,9 +9,9 @@ public class SNSTests(
     [FromKeyedServices("error-sns")] IAmazonSimpleNotificationService errorSns,
     ILogger<SNSTests> logger) : ContractTest(logger)
 {
-    public Task<CreateTopicResponse> CreateTopic()
+    public Task<CreateTopicResponse> CreateTopic(string name)
     {
-        return sns.CreateTopicAsync(new CreateTopicRequest { Name = "test-topic" });
+        return sns.CreateTopicAsync(new CreateTopicRequest { Name = name });
     }
 
     public Task<PublishResponse> Publish()
@@ -21,7 +21,7 @@ public class SNSTests(
 
     protected override Task CreateFault(CancellationToken cancellationToken)
     {
-        return faultSns.CreateTopicAsync(new CreateTopicRequest { Name = "test-topic" }, cancellationToken);
+        return faultSns.GetTopicAttributesAsync(new GetTopicAttributesRequest { TopicArn = "arn:aws:sns:us-east-1:000000000000:invalid-topic" }, cancellationToken);
     }
 
     protected override Task CreateError(CancellationToken cancellationToken)

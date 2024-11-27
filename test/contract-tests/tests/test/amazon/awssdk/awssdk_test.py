@@ -397,19 +397,6 @@ class AWSSdkTest(ContractTestBase):
     #         span_name="Secrets Manager.CreateSecret",
     #     )
 
-    def test_sns_create_topic(self):
-        self.do_test_requests(
-            "sns/createtopic/some-topic",
-            "GET",
-            200,
-            0,
-            0,
-            remote_service="AWS::SNS",
-            remote_operation="CreateTopic",
-            request_response_specific_attributes={},
-            span_name="SNS.CreateTopic"
-        )
-
     def test_sns_publish(self):
         self.do_test_requests(
             "sns/publish/some-topic",
@@ -453,23 +440,13 @@ class AWSSdkTest(ContractTestBase):
     #         0,
     #         1,
     #         remote_service="AWS::SNS",
-    #         remote_operation="CreateTopic",
-    #         request_response_specific_attributes={},
-    #         span_name="SNS.CreateTopic"
+    #         remote_operation="GetTopicAttributes",
+    #         remote_resource_type="AWS::SNS::Topic",
+    #         remote_resource_identifier="arn:aws:sns:us-east-1:000000000000:invalid-topic",
+    #         request_response_specific_attributes={
+    #            _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:invalid-topic",},
+    #         span_name="SNS.GetTopicAttributes"
     #     )
-
-    def test_stepfunctions_create_state_machine(self):
-        self.do_test_requests(
-            "stepfunctions/createstatemachine/some-state-machine",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="SFN",
-            remote_service="AWS::StepFunctions",
-            remote_operation="CreateStateMachine",
-            span_name="SFN.CreateStateMachine",
-        )
     
     def test_stepfunctions_describe_state_machine(self):
         self.do_test_requests(
@@ -487,19 +464,6 @@ class AWSSdkTest(ContractTestBase):
                 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
             },
             span_name="SFN.DescribeStateMachine",
-        )
-
-    def test_stepfunctions_create_activity(self):
-        self.do_test_requests(
-            "stepfunctions/createactivity/some-activity",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="SFN",
-            remote_service="AWS::StepFunctions",
-            remote_operation="CreateActivity",
-            span_name="SFN.CreateActivity",
         )
 
     def test_stepfunctions_describe_activity(self):
@@ -549,8 +513,12 @@ class AWSSdkTest(ContractTestBase):
     #         1,
     #         rpc_service="SFN",
     #         remote_service="AWS::StepFunctions",
-    #         remote_operation="CreateStateMachine",
-    #         span_name="SFN.CreateStateMachine",
+    #         remote_operation="ListStateMachineVersions",
+    #         remote_resource_type="AWS::StepFunctions::StateMachine",
+    #         remote_resource_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",
+    #         request_response_specific_attributes={
+    #            _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",},
+    #         span_name="SFN.ListStateMachineVersions",
     #     )
 
     def test_bedrock_get_guardrail(self):

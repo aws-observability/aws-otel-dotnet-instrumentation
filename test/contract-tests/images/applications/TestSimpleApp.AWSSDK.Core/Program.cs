@@ -147,10 +147,6 @@ app.MapGet("secretsmanager/getsecretvalue/some-secret", (SecretsManagerTests sec
 app.MapGet("secretsmanager/fault", (SecretsManagerTests secretsManager) => secretsManager.Fault()).WithName("secretsmanager-fault").WithOpenApi();
 app.MapGet("secretsmanager/error", (SecretsManagerTests secretsManager) => secretsManager.Error()).WithName("secretsmanager-error").WithOpenApi();
 
-app.MapGet("sns/createtopic/some-topic", (SNSTests sns) => sns.CreateTopic())
-    .WithName("create-topic")
-    .WithOpenApi();
-
 app.MapGet("sns/publish/some-topic", (SNSTests sns) => sns.Publish())
     .WithName("publish")
     .WithOpenApi();
@@ -158,16 +154,8 @@ app.MapGet("sns/publish/some-topic", (SNSTests sns) => sns.Publish())
 app.MapGet("sns/fault", (SNSTests sns) => sns.Fault()).WithName("sns-fault").WithOpenApi();
 app.MapGet("sns/error", (SNSTests sns) => sns.Error()).WithName("sns-error").WithOpenApi();
 
-app.MapGet("stepfunctions/createstatemachine/some-state-machine", (StepFunctionsTests stepFunctions) => stepFunctions.CreateStateMachine())
-    .WithName("create-state-machine")
-    .WithOpenApi();
-
 app.MapGet("stepfunctions/describestatemachine/some-state-machine", (StepFunctionsTests stepFunctions) => stepFunctions.DescribeStateMachine())
     .WithName("describe-state-machine")
-    .WithOpenApi();
-
-app.MapGet("stepfunctions/createactivity/some-activity", (StepFunctionsTests stepFunctions) => stepFunctions.CreateActivity())
-    .WithName("create-activity")
     .WithOpenApi();
 
 app.MapGet("stepfunctions/describeactivity/some-activity", (StepFunctionsTests stepFunctions) => stepFunctions.DescribeActivity())
@@ -225,6 +213,20 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
     .WithName("retrieve")
     .WithOpenApi();
 
+// Create some resources in advance to be accessed by tests
+async Task PrepareAWSServer(IServiceProvider services)
+{
+    var snsTests = services.GetRequiredService<SNSTests>();
+    var stepfunctionsTests = services.GetRequiredService<StepFunctionsTests>();
+
+    // Create a topic for the SNS tests
+    await snsTests.CreateTopic("test-topic");
+
+    // Create a state machine and activity for the Step Functions tests
+    await stepfunctionsTests.CreateStateMachine("test-state-machine");
+    await stepfunctionsTests.CreateActivity("test-activity");
+}
+
 // Reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,
 // we write our own responses with the necessary data to mimic the expected behavior of the Bedrock services.
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
@@ -240,5 +242,7 @@ app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedro
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
 app.MapPost("agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text", (BedrockTests bedrock) => bedrock.InvokeAgentResponse());
 app.MapPost("knowledgebases/test-knowledge-base/retrieve", (BedrockTests bedrock) => bedrock.RetrieveResponse());
+
+await PrepareAWSServer(app.Services);
 
 app.Run();
