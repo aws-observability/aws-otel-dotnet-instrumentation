@@ -9,24 +9,24 @@ public class StepFunctionsTests(
     [FromKeyedServices("error-stepfunctions")] IAmazonStepFunctions errorClient,
     ILogger<StepFunctionsTests> logger) : ContractTest(logger)
 {
-    public Task<CreateStateMachineResponse> CreateStateMachine()
+    public Task<CreateStateMachineResponse> CreateStateMachine(string name)
     {
         return stepFunctions.CreateStateMachineAsync(new CreateStateMachineRequest
         {
-            Name = "test-state-machine",
+            Name = name,
             Definition = "{\"StartAt\":\"TestState\",\"States\":{\"TestState\":{\"Type\":\"Pass\",\"End\":true,\"Result\":\"Result\"}}}",
             RoleArn = "arn:aws:iam::000000000000:role/stepfunctions-role"
         });
     }
 
+    public Task<CreateActivityResponse> CreateActivity(string name)
+    {
+        return stepFunctions.CreateActivityAsync(new CreateActivityRequest { Name = name });
+    }
+
     public Task<DescribeStateMachineResponse> DescribeStateMachine()
     {
         return stepFunctions.DescribeStateMachineAsync(new DescribeStateMachineRequest { StateMachineArn = "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine" });
-    }
-
-    public Task<CreateActivityResponse> CreateActivity()
-    {
-        return stepFunctions.CreateActivityAsync(new CreateActivityRequest { Name = "test-activity" });
     }
 
     public Task<DescribeActivityResponse> DescribeActivity()
@@ -36,11 +36,9 @@ public class StepFunctionsTests(
 
     protected override Task CreateFault(CancellationToken cancellationToken)
     {
-        return faultClient.CreateStateMachineAsync(new CreateStateMachineRequest
+        return faultClient.ListStateMachineVersionsAsync(new ListStateMachineVersionsRequest
         {
-            Name = "test-state-machine",
-            Definition = "{\"StartAt\":\"TestState\",\"States\":{\"TestState\":{\"Type\":\"Pass\",\"End\":true,\"Result\":\"Result\"}}}",
-            RoleArn = "arn:aws:iam::000000000000:role/stepfunctions-role"
+            StateMachineArn = "arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine"
         }, cancellationToken);
     }
 
