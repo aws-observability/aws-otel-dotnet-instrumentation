@@ -90,7 +90,6 @@ class AWSSdkTest(ContractTestBase):
             .with_name("localstack")
             .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
-            # .with_env("PROVIDER_OVERRIDE_STEPFUNCTIONS", "legacy")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
         cls._local_stack.start()
