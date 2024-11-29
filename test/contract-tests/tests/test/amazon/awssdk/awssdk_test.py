@@ -336,6 +336,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateSecret",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             },
@@ -354,6 +355,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetSecretValue",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             },
@@ -372,6 +374,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeSecret",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier="test-secret-error",
+            cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
             },
@@ -391,6 +394,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="CreateSecret",
     #         remote_resource_type="AWS::SecretsManager::Secret",
     #         remote_resource_identifier="test-secret-error",
+    #         cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
     #         request_response_specific_attributes={
     #             _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
     #         },
@@ -408,6 +412,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Publish",
             remote_resource_type="AWS::SNS::Topic",
             remote_resource_identifier="test-topic",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic",
             request_response_specific_attributes={
                 _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic",
             },
@@ -425,6 +430,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Publish",
             remote_resource_type="AWS::SNS::Topic",
             remote_resource_identifier="test-topic-error",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic-error",
             request_response_specific_attributes={
                 _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic-error",
             },
@@ -443,6 +449,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="GetTopicAttributes",
     #         remote_resource_type="AWS::SNS::Topic",
     #         remote_resource_identifier="invalid-topic",
+    #         cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:invalid-topic",
     #         request_response_specific_attributes={
     #            _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:invalid-topic",},
     #         span_name="SNS.GetTopicAttributes"
@@ -460,6 +467,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeStateMachine",
             remote_resource_type="AWS::StepFunctions::StateMachine",
             remote_resource_identifier="test-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
             },
@@ -478,6 +486,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeActivity",
             remote_resource_type="AWS::StepFunctions::Activity",
             remote_resource_identifier="test-activity",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:activity:test-activity",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_ACTIVITY_ARN: "arn:aws:states:us-east-1:000000000000:activity:test-activity",
             },
@@ -496,6 +505,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeStateMachine",
             remote_resource_type="AWS::StepFunctions::StateMachine",
             remote_resource_identifier="error-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
             },
@@ -516,6 +526,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="ListStateMachineVersions",
     #         remote_resource_type="AWS::StepFunctions::StateMachine",
     #         remote_resource_identifier="invalid-state-machine",
+    #         cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",
     #         request_response_specific_attributes={
     #            _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",},
     #         span_name="SFN.ListStateMachineVersions",
@@ -533,7 +544,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            cloudformation_primiary_identifier="test-guardrail",
+            cloudformation_primary_identifier="test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
             },
@@ -683,106 +694,6 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_type="AWS::Bedrock::Model",
             remote_resource_identifier="mistral.mistral-7b-instruct-v0:2",
             cloudformation_primary_identifier="mistral.mistral-7b-instruct-v0:2",
-            request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
-                _GEN_AI_REQUEST_MODEL: "mistral.mistral-7b-instruct-v0:2",
-                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
-                _GEN_AI_REQUEST_TOP_P: 0.456,
-                _GEN_AI_REQUEST_MAX_TOKENS: 123,
-                _GEN_AI_USAGE_INPUT_TOKENS: 456,
-                _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
-                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
-            },
-            span_name="Bedrock Runtime.InvokeModel",
-        )
-    
-    def test_bedrock_runtime_invoke_model_llama(self):
-        self.do_test_requests(
-            "bedrock/invokemodel/invoke-model-llama",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="Bedrock Runtime",
-            remote_service="AWS::BedrockRuntime",
-            remote_operation="InvokeModel",
-            remote_resource_type="AWS::Bedrock::Model",
-            remote_resource_identifier="meta.llama3-8b-instruct-v1:0",
-            request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
-                _GEN_AI_REQUEST_MODEL: "meta.llama3-8b-instruct-v1:0",
-                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
-                _GEN_AI_REQUEST_TOP_P: 0.456,
-                _GEN_AI_REQUEST_MAX_TOKENS: 123,
-                _GEN_AI_USAGE_INPUT_TOKENS: 456,
-                _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
-                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
-            },
-            span_name="Bedrock Runtime.InvokeModel",
-        )
-    
-    def test_bedrock_runtime_invoke_model_command(self):
-        self.do_test_requests(
-            "bedrock/invokemodel/invoke-model-command",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="Bedrock Runtime",
-            remote_service="AWS::BedrockRuntime",
-            remote_operation="InvokeModel",
-            remote_resource_type="AWS::Bedrock::Model",
-            remote_resource_identifier="cohere.command-r-v1:0",
-            request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
-                _GEN_AI_REQUEST_MODEL: "cohere.command-r-v1:0",
-                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
-                _GEN_AI_REQUEST_TOP_P: 0.456,
-                _GEN_AI_REQUEST_MAX_TOKENS: 123,
-                _GEN_AI_USAGE_INPUT_TOKENS: 12,
-                _GEN_AI_USAGE_OUTPUT_TOKENS: 10,
-                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
-            },
-            span_name="Bedrock Runtime.InvokeModel",
-        )
-    
-    def test_bedrock_runtime_invoke_model_jamba(self):
-        self.do_test_requests(
-            "bedrock/invokemodel/invoke-model-jamba",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="Bedrock Runtime",
-            remote_service="AWS::BedrockRuntime",
-            remote_operation="InvokeModel",
-            remote_resource_type="AWS::Bedrock::Model",
-            remote_resource_identifier="ai21.jamba-1-5-large-v1:0",
-            request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
-                _GEN_AI_REQUEST_MODEL: "ai21.jamba-1-5-large-v1:0",
-                _GEN_AI_REQUEST_TEMPERATURE: 0.123,
-                _GEN_AI_REQUEST_TOP_P: 0.456,
-                _GEN_AI_REQUEST_MAX_TOKENS: 123,
-                _GEN_AI_USAGE_INPUT_TOKENS: 456,
-                _GEN_AI_USAGE_OUTPUT_TOKENS: 789,
-                _GEN_AI_RESPONSE_FINISH_REASONS: ["finish_reason"],
-            },
-            span_name="Bedrock Runtime.InvokeModel",
-        )
-
-    def test_bedrock_runtime_invoke_model_mistral(self):
-        self.do_test_requests(
-            "bedrock/invokemodel/invoke-model-mistral",
-            "GET",
-            200,
-            0,
-            0,
-            rpc_service="Bedrock Runtime",
-            remote_service="AWS::BedrockRuntime",
-            remote_operation="InvokeModel",
-            remote_resource_type="AWS::Bedrock::Model",
-            remote_resource_identifier="mistral.mistral-7b-instruct-v0:2",
             request_response_specific_attributes={
                 _GEN_AI_SYSTEM: "aws_bedrock",
                 _GEN_AI_REQUEST_MODEL: "mistral.mistral-7b-instruct-v0:2",
