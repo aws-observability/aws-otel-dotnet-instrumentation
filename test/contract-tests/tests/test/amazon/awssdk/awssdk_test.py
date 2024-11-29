@@ -336,6 +336,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="CreateSecret",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             },
@@ -354,6 +355,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetSecretValue",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
             },
@@ -372,6 +374,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeSecret",
             remote_resource_type="AWS::SecretsManager::Secret",
             remote_resource_identifier="test-secret-error",
+            cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
             request_response_specific_attributes={
                 _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
             },
@@ -391,6 +394,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="CreateSecret",
     #         remote_resource_type="AWS::SecretsManager::Secret",
     #         remote_resource_identifier="test-secret-error",
+    #         cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
     #         request_response_specific_attributes={
     #             _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
     #         },
@@ -408,6 +412,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Publish",
             remote_resource_type="AWS::SNS::Topic",
             remote_resource_identifier="test-topic",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic",
             request_response_specific_attributes={
                 _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic",
             },
@@ -425,6 +430,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="Publish",
             remote_resource_type="AWS::SNS::Topic",
             remote_resource_identifier="test-topic-error",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic-error",
             request_response_specific_attributes={
                 _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic-error",
             },
@@ -443,6 +449,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="GetTopicAttributes",
     #         remote_resource_type="AWS::SNS::Topic",
     #         remote_resource_identifier="invalid-topic",
+    #         cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:invalid-topic",
     #         request_response_specific_attributes={
     #            _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:invalid-topic",},
     #         span_name="SNS.GetTopicAttributes"
@@ -460,6 +467,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeStateMachine",
             remote_resource_type="AWS::StepFunctions::StateMachine",
             remote_resource_identifier="test-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
             },
@@ -478,6 +486,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeActivity",
             remote_resource_type="AWS::StepFunctions::Activity",
             remote_resource_identifier="test-activity",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:activity:test-activity",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_ACTIVITY_ARN: "arn:aws:states:us-east-1:000000000000:activity:test-activity",
             },
@@ -496,6 +505,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="DescribeStateMachine",
             remote_resource_type="AWS::StepFunctions::StateMachine",
             remote_resource_identifier="error-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
             request_response_specific_attributes={
                 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
             },
@@ -516,6 +526,7 @@ class AWSSdkTest(ContractTestBase):
     #         remote_operation="ListStateMachineVersions",
     #         remote_resource_type="AWS::StepFunctions::StateMachine",
     #         remote_resource_identifier="invalid-state-machine",
+    #         cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",
     #         request_response_specific_attributes={
     #            _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",},
     #         span_name="SFN.ListStateMachineVersions",
