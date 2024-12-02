@@ -423,13 +423,13 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSSecretsManagerSecretArn))
             {
                 remoteResourceType = NormalizedSecretsManagerServiceName + "::Secret";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn)).Split(":").Last();
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn)).Split(':').Last();
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn));
             }
             else if (IsKeyPresent(span, AttributeAWSSNSTopicArn))
             {
                 remoteResourceType = NormalizedSNSServiceName + "::Topic";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn)).Split(":").Last();
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn)).Split(':').Last();
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
@@ -447,13 +447,13 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSStepFunctionsActivityArn))
             {
                 remoteResourceType = NormalizedStepFunctionsName + "::Activity";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn)).Split(":").Last();
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn)).Split(':').Last();
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn));
             }
             else if (IsKeyPresent(span, AttributeAWSStepFunctionsStateMachineArn))
             {
                 remoteResourceType = NormalizedStepFunctionsName + "::StateMachine";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn)).Split(":").Last();
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn)).Split(':').Last();
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
