@@ -147,15 +147,6 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 try
                 {
-                    // for bedrock agent, we only extract one attribute based on the operation.
-                    if (AWSServiceType.IsBedrockAgentService(service))
-                    {
-                        if (AWSServiceHelper.OperationNameToResourceMap()[AWSServiceHelper.GetAWSOperationName(requestContext)] != parameter)
-                        {
-                            continue;
-                        }
-                    }
-
                     var property = request.GetType().GetProperty(parameter);
                     if (property != null)
                     {
@@ -169,6 +160,20 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                                 if (modelString != null)
                                 {
                                     AWSLlmModelProcessor.ProcessGenAiAttributes(activity, request, modelString, true);
+                                }
+                            }
+                        }
+
+                        // for secrets manager, only extract SecretId from request if it is a secret ARN.
+                        if (AWSServiceType.IsSecretsManagerService(service) && parameter == "SecretId")
+                        {
+                            var secretId = property.GetValue(request);
+                            if (secretId != null)
+                            {
+                                var secretIdString = secretId.ToString();
+                                if (secretIdString != null && !secretIdString.StartsWith("arn:aws:secretsmanager:"))
+                                {
+                                    continue;
                                 }
                             }
                         }
@@ -216,16 +221,6 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 try
                 {
-                    // for bedrock agent, extract attribute from object in response.
-                    if (AWSServiceType.IsBedrockAgentService(service))
-                    {
-                        var operationName = Utils.RemoveSuffix(response.GetType().Name, "Response");
-                        if (AWSServiceHelper.OperationNameToResourceMap()[operationName] == parameter)
-                        {
-                            AddBedrockAgentResponseAttribute(activity, response, parameter);
-                        }
-                    }
-
                     var property = response.GetType().GetProperty(parameter);
                     if (property != null)
                     {

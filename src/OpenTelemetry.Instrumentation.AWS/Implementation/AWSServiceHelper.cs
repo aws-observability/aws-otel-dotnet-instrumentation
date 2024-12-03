@@ -13,6 +13,10 @@ internal class AWSServiceHelper
         { AWSServiceType.SQSService, new List<string> { "QueueUrl", "QueueName" } },
         { AWSServiceType.S3Service, new List<string> { "BucketName" } },
         { AWSServiceType.KinesisService, new List<string> { "StreamName" } },
+        { AWSServiceType.LambdaService, new List<string> { "UUID" } },
+        { AWSServiceType.SecretsManagerService, new List<string> { "SecretId" } },
+        { AWSServiceType.SNSService, new List<string> { "TopicArn" } },
+        { AWSServiceType.StepFunctionsService, new List<string> { "ActivityArn", "StateMachineArn" } },
         { AWSServiceType.BedrockRuntimeService, new List<string> { "ModelId" } },
         { AWSServiceType.BedrockAgentService, new List<string> { "AgentId", "KnowledgeBaseId", "DataSourceId" } },
         { AWSServiceType.BedrockAgentRuntimeService, new List<string> { "AgentId", "KnowledgeBaseId" } },
@@ -20,6 +24,8 @@ internal class AWSServiceHelper
 
     internal static IReadOnlyDictionary<string, List<string>> ServiceResponseParameterMap = new Dictionary<string, List<string>>()
     {
+        { AWSServiceType.SecretsManagerService, new List<string> { "ARN" } },
+        { AWSServiceType.SQSService, new List<string> { "QueueUrl" } },
         { AWSServiceType.BedrockService, new List<string> { "GuardrailId" } },
         { AWSServiceType.BedrockAgentService, new List<string> { "AgentId", "DataSourceId" } },
     };
@@ -31,6 +37,12 @@ internal class AWSServiceHelper
         { "QueueName", AWSSemanticConventions.AttributeAWSSQSQueueName },
         { "BucketName", AWSSemanticConventions.AttributeAWSS3BucketName },
         { "StreamName", AWSSemanticConventions.AttributeAWSKinesisStreamName },
+        { "TopicArn", AWSSemanticConventions.AttributeAWSSNSTopicArn },
+        { "ARN", AWSSemanticConventions.AttributeAWSSecretsManagerSecretArn },
+        { "SecretId", AWSSemanticConventions.AttributeAWSSecretsManagerSecretArn },
+        { "ActivityArn", AWSSemanticConventions.AttributeAWSStepFunctionsActivityArn },
+        { "StateMachineArn", AWSSemanticConventions.AttributeAWSStepFunctionsStateMachineArn },
+        { "UUID", AWSSemanticConventions.AttributeAWSLambdaResourceMappingId },
         { "ModelId", AWSSemanticConventions.AttributeGenAiModelId },
         { "GuardrailId", AWSSemanticConventions.AttributeAWSBedrockGuardrailId },
         { "AgentId", AWSSemanticConventions.AttributeAWSBedrockAgentId },
