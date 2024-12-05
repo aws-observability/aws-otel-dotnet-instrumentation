@@ -48,9 +48,6 @@ public class Plugin
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
 
-    private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
-    private static readonly string? AwsLambdaFunctionName = System.Environment.GetEnvironmentVariable(AwsLambdaFunctionNameConfig);
-
     private static readonly string AwsXrayDaemonAddressConfig = "AWS_XRAY_DAEMON_ADDRESS";
     private static readonly string? AwsXrayDaemonAddress = System.Environment.GetEnvironmentVariable(AwsXrayDaemonAddressConfig);
 
@@ -106,7 +103,7 @@ public class Plugin
 
             // We want to be adding the exporter as the last processor in the traceProvider since processors
             // are executed in the order they were added to the provider.
-            if (this.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
+            if (AwsSpanProcessingUtil.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
             {
                 Resource processResource = tracerProvider.GetResource();
 
@@ -120,7 +117,7 @@ public class Plugin
             }
 
             // Disable Application Metrics for Lambda environment
-            if (!this.IsLambdaEnvironment())
+            if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
             {
                 string? intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
                 int exportInterval = DefaultMetricExportInterval;
@@ -183,7 +180,6 @@ public class Plugin
             builder.AddProcessor(processor);
         }
 
-        // My custom logic here
         builder.AddAWSInstrumentation();
 #if !NETFRAMEWORK
         builder.AddAWSLambdaConfigurations();
@@ -256,6 +252,11 @@ public class Plugin
         options.FilterHttpRequestMessage = request =>
         {
             if (request.RequestUri?.AbsolutePath == "/GetSamplingRules" || request.RequestUri?.AbsolutePath == "/SamplingTargets")
+            {
+                return false;
+            }
+
+            if (request.RequestUri?.AbsolutePath.Contains("/runtime/invocation/") == true)
             {
                 return false;
             }
@@ -409,7 +410,7 @@ public class Plugin
 
         // Resource detectors are disabled if the environment variable is explicitly set to false or if the
         // application is in a lambda environment
-        if (resourceDetectorsEnabled != "true" || this.IsLambdaEnvironment())
+        if (resourceDetectorsEnabled != "true" || AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
             return builder;
         }
@@ -458,12 +459,6 @@ public class Plugin
           LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
 
         return new OtlpMetricExporter(options);
-    }
-
-    private bool IsLambdaEnvironment()
-    {
-        // detect if running in AWS Lambda environment
-        return AwsLambdaFunctionName != null;
     }
 
     private bool HasCustomTracesEndpoint()
