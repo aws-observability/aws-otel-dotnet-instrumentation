@@ -159,6 +159,20 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                     var property = request.GetType().GetProperty(parameter);
                     if (property != null)
                     {
+                        // for bedrock runtime, LLM specific attributes are extracted based on the model ID.
+                        if (AWSServiceType.IsBedrockRuntimeService(service) && parameter == "ModelId")
+                        {
+                            var model = property.GetValue(request);
+                            if (model != null)
+                            {
+                                var modelString = model.ToString();
+                                if (modelString != null)
+                                {
+                                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, request, modelString, true);
+                                }
+                            }
+                        }
+
                         if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
                         {
                             activity.SetTag(attribute, property.GetValue(request));
@@ -225,6 +239,19 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                 {
                     // Guard against any reflection-related exceptions when running in AoT.
                     // See https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/1543#issuecomment-1907667722.
+                }
+            }
+        }
+        // for bedrock runtime, LLM specific attributes are extracted based on the model ID.
+        if (AWSServiceType.IsBedrockRuntimeService(service))
+        {
+            var model = activity.GetTagItem(AWSSemanticConventions.AttributeGenAiModelId);
+            if (model != null)
+            {
+                var modelString = model.ToString();
+                if (modelString != null)
+                {
+                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, responseContext.Response, modelString, false);
                 }
             }
         }

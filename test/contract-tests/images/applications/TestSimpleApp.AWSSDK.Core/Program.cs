@@ -125,8 +125,28 @@ app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedro
     .WithName("get-guardrail")
     .WithOpenApi();
 
-app.MapGet("bedrock/invokemodel/invoke-model", (BedrockTests bedrock) => bedrock.InvokeModel())
-    .WithName("invoke-model")
+app.MapGet("bedrock/invokemodel/invoke-model-titan", (BedrockTests bedrock) => bedrock.InvokeModelAmazonTitan())
+    .WithName("invoke-model-titan")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-claude", (BedrockTests bedrock) => bedrock.InvokeModelAnthropicClaude())
+    .WithName("invoke-model-claude")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-llama", (BedrockTests bedrock) => bedrock.InvokeModelMetaLlama())
+    .WithName("invoke-model-llama")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-command", (BedrockTests bedrock) => bedrock.InvokeModelCohereCommand())
+    .WithName("invoke-model-command")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-jamba", (BedrockTests bedrock) => bedrock.InvokeModelAi21Jamba())
+    .WithName("invoke-model-jamba")
+    .WithOpenApi();
+
+app.MapGet("bedrock/invokemodel/invoke-model-mistral", (BedrockTests bedrock) => bedrock.InvokeModelMistralAi())
+    .WithName("invoke-model-mistral")
     .WithOpenApi();
 
 app.MapGet("bedrock/getagent/get-agent", (BedrockTests bedrock) => bedrock.GetAgent())
@@ -152,7 +172,13 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
 // Reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,
 // we write our own responses with the necessary data to mimic the expected behavior of the Bedrock services.
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
-app.MapPost("model/test-model/invoke", (BedrockTests bedrock) => bedrock.InvokeModelResponse());
+// For invoke model, we have one test case for each of the 6 suppported models.
+app.MapPost("model/amazon.titan-text-express-v1/invoke", (BedrockTests bedrock) => bedrock.InvokeModelAmazonTitanResponse());
+app.MapPost("model/us.anthropic.claude-3-5-haiku-20241022-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelAnthropicClaudeResponse());
+app.MapPost("model/meta.llama3-8b-instruct-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelMetaLlamaResponse());
+app.MapPost("model/cohere.command-r-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelCohereCommandResponse());
+app.MapPost("model/ai21.jamba-1-5-large-v1:0/invoke", (BedrockTests bedrock) => bedrock.InvokeModelAi21JambaResponse());
+app.MapPost("model/mistral.mistral-7b-instruct-v0:2/invoke", (BedrockTests bedrock) => bedrock.InvokeModelMistralAiResponse());
 app.MapGet("agents/test-agent", (BedrockTests bedrock) => bedrock.GetAgentResponse());
 app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedrock.GetKnowledgeBaseResponse());
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
