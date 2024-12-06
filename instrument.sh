@@ -214,7 +214,8 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_TRACES_EXPORTER="none";
     fi
 
-    # TODO: need to disable all instrumentations except aws sdk and lambda.
+    export OTEL_DOTNET_AUTO_TRACES_INSTRUMENTATION_ENABLED="false"
+    export OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED="false"
 
   else
     export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
