@@ -179,7 +179,7 @@ internal sealed class AwsSpanProcessingUtil
     }
 
 #if NETFRAMEWORK
-    // Uses reflection to the get the HttpRequestRouteHelper.GetRouteTemplate to get the 
+    // Uses reflection to the get the HttpRequestRouteHelper.GetRouteTemplate to get the
     // route template from NETFRAMEWORK applications.
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AspNet/Implementation/HttpRequestRouteHelper.cs#L12
     internal static string? GetHttpRouteData(HttpContext httpContext)
