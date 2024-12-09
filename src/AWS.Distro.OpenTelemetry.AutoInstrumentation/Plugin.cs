@@ -422,7 +422,8 @@ public class Plugin
 
     private bool IsApplicationSignalsRuntimeEnabled()
     {
-        return false;
+        return this.IsApplicationSignalsEnabled() &&
+               !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
     }
 
     private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder)

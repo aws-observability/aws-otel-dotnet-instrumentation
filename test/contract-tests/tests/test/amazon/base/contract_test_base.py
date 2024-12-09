@@ -89,6 +89,7 @@ class ContractTestBase(TestCase):
             .with_exposed_ports(self.get_application_port())
             .with_env("OTEL_METRIC_EXPORT_INTERVAL", "50")
             .with_env("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "true")
+            .with_env("OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED", self.is_runtime_enabled())
             .with_env("OTEL_METRICS_EXPORTER", "none")
             .with_env("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
             .with_env("OTEL_BSP_SCHEDULE_DELAY", "1")
@@ -134,11 +135,7 @@ class ContractTestBase(TestCase):
     def do_test_requests(
         self, path: str, method: str, status_code: int, expected_error: int, expected_fault: int, **kwargs
     ) -> None:
-        address: str = self.application.get_container_host_ip()
-        port: str = self.application.get_exposed_port(self.get_application_port())
-        url: str = f"http://{address}:{port}/{path}"
-        response: Response = request(method, url, timeout=200)
-        self.assertEqual(status_code, response.status_code)
+        self.do_send_request(path, method, status_code)
 
         resource_scope_spans: List[ResourceScopeSpan] = self.mock_collector_client.get_traces()
         self._assert_aws_span_attributes(resource_scope_spans, path, **kwargs)
@@ -150,6 +147,16 @@ class ContractTestBase(TestCase):
         self._assert_metric_attributes(metrics, LATENCY_METRIC, 12000, **kwargs)
         self._assert_metric_attributes(metrics, ERROR_METRIC, expected_error, **kwargs)
         self._assert_metric_attributes(metrics, FAULT_METRIC, expected_fault, **kwargs)
+
+    def do_send_request(
+            self, path: str, method: str, status_code: int
+    ) -> None:
+        address: str = self.application.get_container_host_ip()
+        port: str = self.application.get_exposed_port(self.get_application_port())
+        url: str = f"http://{address}:{port}/{path}"
+        _logger.info("call " + url)
+        response: Response = request(method, url, timeout=200)
+        self.assertEqual(status_code, response.status_code)
 
     def _get_attributes_dict(self, attributes_list: List[KeyValue]) -> Dict[str, AnyValue]:
         attributes_dict: Dict[str, AnyValue] = {}
@@ -216,6 +223,9 @@ class ContractTestBase(TestCase):
 
     def get_application_otel_resource_attributes(self) -> str:
         return "service.name=" + self.get_application_otel_service_name()
+
+    def is_runtime_enabled(self) -> str:
+        return "false"
 
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs):
         self.fail("Tests must implement this function")
