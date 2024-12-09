@@ -102,8 +102,43 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           git add src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           git add build/Build.InstallationScripts.cs
-          git commit -m "Prepare main for next development cycle: Update version to $DEV_VERSION"
-          git push --set-upstream origin "prepare-main-for-next-dev-cycle-${VERSION}"
+
+      - name: Append latest release checksum to release-build-metadata.json
+        run: |
+          ARTIFACT_NAMES=(
+            "aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
+            "aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip"
+            "aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip"
+            "aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip"
+            "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+            "aws-otel-dotnet-install.sh"
+            "AWS.Otel.DotNet.Auto.psm1"
+          )
+
+
+          BASE_URL="https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases/download/v${{ github.event.inputs.version }}"
+          NEW_RELEASE=$(jq -n --arg version "${{ github.event.inputs.version }}" \
+            '{version: $version, checksum: []}')
+          for ARTIFACT_NAME in "${ARTIFACT_NAMES[@]}"; do
+            curl -L -o "$ARTIFACT_NAME" "${BASE_URL}/${ARTIFACT_NAME}"
+            CHECKSUM=$(shasum -a 256 $ARTIFACT_NAME | awk '{ print $1 }')
+
+            NEW_RELEASE=$(echo "$NEW_RELEASE" | jq --arg name "$ARTIFACT_NAME" \
+              --arg checksum "$CHECKSUM" \
+              '.checksum += [{"name": $name, "checksum": $checksum}]')
+          done
+
+          FILE="release-build-metadata.json"
+          UPDATED_JSON=$(jq --argjson new_release "$NEW_RELEASE" \
+            '.release += [$new_release]' "$FILE")
+          echo "$UPDATED_JSON" > "$FILE"
+
+          git add release-build-metadata.json
+
+      - name: Push changes to Github
+        run: |
+          git commit -m "Prepare main for next development cycle: Update version to ${{ github.event.inputs.version }}"
+          git push --set-upstream origin "prepare-main-for-next-dev-cycle-${{ github.event.inputs.version }}"
 
       - name: Create Pull Request to main
         env:
