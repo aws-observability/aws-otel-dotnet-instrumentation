@@ -12,7 +12,7 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 internal partial class Build : NukeBuild
 {
-    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.7.0";
+    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.9.0";
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
     [Solution("AWS.Distro.OpenTelemetry.AutoInstrumentation.sln")]
