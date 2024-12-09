@@ -1,0 +1,37 @@
+{
+    "release": [
+        {
+            "version": "1.4.0",
+            "checksum": [
+                {
+                    "name": "aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip",
+                    "checksum": "eb8528483cd2174ecdba997c5e8ad9cca29e7b925d4d940a5bd998182343827d"
+                },
+                {
+                    "name": "aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip",
+                    "checksum": "f793e834e6eb9f4e2f40b3c7879aeb01270e83e75144a397e0ae26bdd5c0d8b5"
+                },
+                {
+                    "name": "aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip",
+                    "checksum": "064c42e3592a00db9dc952ee3d70da0c3d3fea02ca7a559030958ee84e1c46dd"
+                },
+                {
+                    "name": "aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip",
+                    "checksum": "fe0af95949f5839135c93c549816a535c50204d6e9625e7fc9dcabd4b627a529"
+                },
+                {
+                    "name": "aws-distro-opentelemetry-dotnet-instrumentation-windows.zip",
+                    "checksum": "ff5207bc59115b7dd62b9b462b334453414271f804998206954c94ff707c9827"
+                },
+                {
+                    "name": "aws-otel-dotnet-install.sh",
+                    "checksum": "b49dded80b2c25ccf99745b557af1143672b50621c2259b3a117503f2bdcbcef"
+                },
+                {
+                    "name": "AWS.Otel.DotNet.Auto.psm1",
+                    "checksum": "521c065a66424fc76e41a4d1ff62a2f2cfe850b4632f0726fb9ddf0419598b49"
+                }
+            ]
+        }
+    ]
+}
