@@ -30,7 +30,7 @@ jobs:
     with:
       caller-workflow-name: 'release_lambda_workflow'
 
-  get-layer:
+  setup-regions-matrix:
     runs-on: ubuntu-latest
     outputs:
       aws_regions_json: ${{ steps.set-matrix.outputs.aws_regions_json }}
@@ -50,18 +50,12 @@ jobs:
       - name: Checkout Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@v4
 
-      - name: Download Linux x64 Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          path: ./artifacts/linux/x64
-
   publish-prod:
     runs-on: ubuntu-latest
-    needs: get-layer
+    needs: [build-and-upload, setup-regions-matrix]
     strategy:
       matrix:
-        aws_region: ${{ fromJson(needs.get-layer.outputs.aws_regions_json) }}
+        aws_region: ${{ fromJson(needs.setup-regions-matrix.outputs.aws_regions_json) }}
     steps:
       - name: role arn
         env:
@@ -92,10 +86,10 @@ jobs:
       - name: Get s3 bucket name for release 
         run: |
           echo BUCKET_NAME=dotnet-lambda-layer-${{ github.run_id }}-${{ matrix.aws_region }} | tee --append $GITHUB_ENV
-      - name: download layer.zip
+      - name: Download Linux x64 Artifact
         uses: actions/download-artifact@v3
         with:
-          name: layer.zip
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
       - name: publish
         run: |
           aws s3 mb s3://${{ env.BUCKET_NAME }}
@@ -107,7 +101,7 @@ jobs:
               --compatible-runtimes dotnet6 dotnet8 \
               --compatible-architectures "x86_64" \
               --license-info "Apache-2.0" \
-              --description "AWS Distro of OpenTelemetry Lambda Layer for Python Runtime" \
+              --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime" \
               --query 'LayerVersionArn' \
               --output text
           )
