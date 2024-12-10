@@ -14,6 +14,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSRemoteOperation = "aws.remote.operation";
 
     internal static readonly string AttributeAWSRemoteResourceIdentifier = "aws.remote.resource.identifier";
+    internal static readonly string AttributeAWSCloudformationPrimaryIdentifier = "aws.remote.resource.cfn.primary.identifier";
     internal static readonly string AttributeAWSRemoteResourceType = "aws.remote.resource.type";
     internal static readonly string AttributeAWSSdkDescendant = "aws.sdk.descendant";
     internal static readonly string AttributeAWSConsumerParentSpanKind = "aws.consumer.parent.span.kind";
@@ -47,7 +48,12 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSDynamoTableName = "aws.table_name";
     internal static readonly string AttributeAWSSQSQueueUrl = "aws.queue_url";
 
+    internal static readonly string AttributeAWSLambdaResourceMappingId = "aws.lambda.resource_mapping.id";
     internal static readonly string AttributeAWSS3Bucket = "aws.s3.bucket";
+    internal static readonly string AttributeAWSSecretsManagerSecretArn = "aws.secretsmanager.secret.arn";
+    internal static readonly string AttributeAWSSNSTopicArn = "aws.sns.topic.arn";
+    internal static readonly string AttributeAWSStepFunctionsActivityArn = "aws.stepfunctions.activity.arn";
+    internal static readonly string AttributeAWSStepFunctionsStateMachineArn = "aws.stepfunctions.state_machine.arn";
 
     internal static readonly string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";
     internal static readonly string AttributeAWSBedrockAgentId = "aws.bedrock.agent.id";
