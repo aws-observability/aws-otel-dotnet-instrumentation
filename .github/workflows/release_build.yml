@@ -80,12 +80,6 @@ jobs:
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: ./installationScripts
-      
-      - name: Download nuget package
-        uses: actions/download-artifact@v3
-        with:
-          name: nuget-packages.zip
-          path: ./artifacts/nuget
 
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
@@ -103,7 +97,6 @@ jobs:
           done
           aws s3 cp ./installationScripts/aws-otel-dotnet-install.sh "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/aws-otel-dotnet-install.sh"
           aws s3 cp ./installationScripts/AWS.Otel.DotNet.Auto.psm1 "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/AWS.Otel.DotNet.Auto.psm1"
-          aws s3 cp ./artifacts/nuget/nuget-packages.zip "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/nuget-packages.zip"
 
       # Publish to GitHub releases
       - name: Create GH release
@@ -134,9 +127,6 @@ jobs:
             --clobber
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
-            --clobber
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./artifacts/nuget/nuget-packages.zip \
             --clobber
 
   release-image:
