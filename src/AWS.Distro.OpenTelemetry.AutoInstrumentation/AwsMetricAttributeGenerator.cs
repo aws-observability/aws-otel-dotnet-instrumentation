@@ -389,6 +389,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
+        string? cloudformationPrimaryIdentifier = null;
         if (IsAwsSDKSpan(span))
         {
             if (IsKeyPresent(span, AttributeAWSDynamoTableName))
@@ -410,11 +411,13 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueName));
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
             {
@@ -431,15 +434,19 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedBedrockServiceName + "::Agent";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockAgentId));
             }
-            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
-            {
-                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
-            }
             else if (IsKeyPresent(span, AttributeAWSBedrockDataSourceId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockDataSourceId));
+                cloudformationPrimaryIdentifier =
+                    EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId))
+                    + "|"
+                    + remoteResourceIdentifier;
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
             }
         }
         else if (IsDBSpan(span))
@@ -448,10 +455,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteResourceIdentifier = GetDbConnection(span);
         }
 
-        if (remoteResourceType != null && remoteResourceIdentifier != null)
+        if (cloudformationPrimaryIdentifier == null)
+        {
+            cloudformationPrimaryIdentifier = remoteResourceIdentifier;
+        }
+
+        if (remoteResourceType != null && remoteResourceIdentifier != null && cloudformationPrimaryIdentifier != null)
         {
             attributes.Add(AttributeAWSRemoteResourceType, remoteResourceType);
             attributes.Add(AttributeAWSRemoteResourceIdentifier, remoteResourceIdentifier);
+            attributes.Add(AttributeAWSCloudformationPrimaryIdentifier, cloudformationPrimaryIdentifier);
         }
     }
 
