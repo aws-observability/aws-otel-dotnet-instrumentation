@@ -1,3 +1,5 @@
+using System;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -33,6 +35,14 @@ app.MapGet("/fault", async () =>
         return Results.StatusCode(500);
     })
     .WithName("Fault")
+    .WithOpenApi();
+
+app.MapGet("/gc", async () =>
+    {
+        GC.Collect();
+        return Results.Ok();
+    })
+    .WithName("GCSuccess")
     .WithOpenApi();
 
 app.MapPost("/success/postmethod", async () =>
