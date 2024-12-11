@@ -51,10 +51,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
-    // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
-    // If service name is not specified, SDK defaults the service name starting with unknown_service
-    private static readonly string OtelUnknownServicePrefix = "unknown_service";
-
     /// <inheritdoc/>
     public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
     {
@@ -100,10 +96,10 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
     {
-        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeServiceName).Value;
+        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeAWSLocalService).Value;
 
         // In practice the service name is never null, but we can be defensive here.
-        if (service == null || service.StartsWith(OtelUnknownServicePrefix))
+        if (service == null)
         {
             LogUnknownAttribute(AttributeAWSLocalService, span);
             service = UnknownService;

@@ -1181,6 +1181,7 @@ public class AwsMetricAttributesGeneratorTest
         List<KeyValuePair<string, object?>> resourceAttributes = new List<KeyValuePair<string, object?>>
         {
             new (AutoInstrumentation.AwsMetricAttributeGenerator.AttributeServiceName, this.serviceNameValue),
+            new (AwsAttributeKeys.AttributeAWSLocalService, this.serviceNameValue),
         };
         this.resource = new Resource(resourceAttributes);
     }
