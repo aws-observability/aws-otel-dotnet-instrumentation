@@ -138,26 +138,6 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
-  
-  build-lambda-staging-sample-app:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build Lambda Sample App
-        shell: bash
-        run: dotnet lambda package -pl ./src/SimpleLambdaFunction
-        working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
-      
-      - name: Upload Sample App to S3
-        shell: bash
-        run: |
-          aws s3 cp ./src/SimpleLambdaFunction/bin/Release/net8.0/SimpleLambdaFunction.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
-        working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
-      
 
   application-signals-e2e-test:
     name: "Application Signals E2E Test"
