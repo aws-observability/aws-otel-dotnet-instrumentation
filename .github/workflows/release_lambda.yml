@@ -101,7 +101,7 @@ jobs:
               --compatible-runtimes dotnet6 dotnet8 \
               --compatible-architectures "x86_64" \
               --license-info "Apache-2.0" \
-              --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime" \
+              --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime v${{ github.event.inputs.version }}" \
               --query 'LayerVersionArn' \
               --output text
           )
