@@ -27,7 +27,7 @@ module "test-function" {
   layers = compact([aws_lambda_layer_version.sdk_layer.arn])
 
   environment_variables = {
-    AWS_LAMBDA_EXEC_WRAPPER = "/opt/instrument.sh"
+    AWS_LAMBDA_EXEC_WRAPPER = "/opt/otel-instrument"
   }
 
   tracing_mode = var.tracing_mode

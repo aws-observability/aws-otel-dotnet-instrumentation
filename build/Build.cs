@@ -144,6 +144,10 @@ internal partial class Build : NukeBuild
             var source = RootDirectory / "instrument.sh";
             var dest = this.openTelemetryDistributionFolder;
             FileSystemTasks.CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
+
+            var otelInstrumentSource = RootDirectory / "otel-instrument";
+            var otelInstrumentDest = this.openTelemetryDistributionFolder;
+            FileSystemTasks.CopyFileToDirectory(otelInstrumentSource, otelInstrumentDest, FileExistsPolicy.Overwrite);
         });
 
     private Target CopyConfiguration => _ => _

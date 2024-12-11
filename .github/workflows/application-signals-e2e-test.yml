@@ -163,3 +163,10 @@ jobs:
       aws-region: us-east-1
       test-cluster-name: 'eks-windows-manual'
       caller-workflow-name: 'main-build'
+
+  dotnet-lambda-test:
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
