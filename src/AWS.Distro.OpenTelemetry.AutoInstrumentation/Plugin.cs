@@ -41,7 +41,6 @@ public class Plugin
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
-    private static readonly string ApplicationSignalsRuntimeEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED";
     private static readonly string MetricExporterConfig = "OTEL_METRICS_EXPORTER";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
@@ -62,6 +61,10 @@ public class Plugin
     private static readonly string FormatOtelSampledTracesBinaryPrefix = "T1S";
     private static readonly string FormatOtelUnSampledTracesBinaryPrefix = "T1U";
     private static readonly string RuntimeMetricMeterName = "OpenTelemetry.Instrumentation.Runtime";
+
+    // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
+    // If service name is not specified, SDK defaults the service name starting with unknown_service
+    private static readonly string OtelUnknownServicePrefix = "unknown_service";
 
     private static readonly int LambdaSpanExportBatchSize = 10;
 
@@ -376,6 +379,58 @@ public class Plugin
     }
 #endif
 
+    private static int GetMetricExportInterval()
+    {
+        var intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
+        var exportInterval = DefaultMetricExportInterval;
+        try
+        {
+            var parsedExportInterval = Convert.ToInt32(intervalConfigString);
+            exportInterval = parsedExportInterval != 0 ? parsedExportInterval : DefaultMetricExportInterval;
+        }
+        catch (Exception)
+        {
+            Logger.Log(LogLevel.Warning, "Could not convert OTEL_METRIC_EXPORT_INTERVAL to integer. Using default value 60000.");
+        }
+
+        if (exportInterval.CompareTo(DefaultMetricExportInterval) > 0)
+        {
+            exportInterval = DefaultMetricExportInterval;
+            Logger.Log(LogLevel.Information, "AWS Application Signals metrics export interval capped to {0}", exportInterval);
+        }
+
+        return exportInterval;
+    }
+
+    private static void ConfigureOtlpExporterOptions(OtlpExporterOptions options)
+    {
+        var applicationSignalsEndpoint = System.Environment.GetEnvironmentVariable(ApplicationSignalsExporterEndpointConfig);
+        var protocolString = System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName) ?? "http/protobuf";
+        OtlpExportProtocol protocol;
+
+        switch (protocolString)
+        {
+            case "http/protobuf":
+                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
+                protocol = OtlpExportProtocol.HttpProtobuf;
+                break;
+            case "grpc":
+                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4315";
+                protocol = OtlpExportProtocol.Grpc;
+                break;
+            default:
+                throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + protocolString);
+        }
+
+        options.Endpoint = new Uri(applicationSignalsEndpoint);
+        options.Protocol = protocol;
+
+        Logger.Log(
+            LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
+        Logger.Log(
+            LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
+    }
+
     // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)
     // are finally available from the http instrumentation libraries. The sampler hooked into the Opentelemetry SDK
     // runs right before any activity is started so for the purposes of our X-Ray sampler, that isn't work and breaks
@@ -430,12 +485,13 @@ public class Plugin
         builder.AddAttributes(DistroAttributes);
         var resource = builder.Build();
         var serviceName = (string?)resource.Attributes.FirstOrDefault(attr => attr.Key == ResourceSemanticConventions.AttributeServiceName).Value;
-        if (string.IsNullOrEmpty(serviceName) || serviceName.StartsWith("unknown_service"))
+        if (serviceName == null || serviceName.StartsWith(OtelUnknownServicePrefix))
         {
-            serviceName = "UnknownService";
+            Logger.Log(LogLevel.Warning, "No valid service name provided.");
+            serviceName = AwsSpanProcessingUtil.UnknownService;
         }
 
-        builder.AddAttributes(new Dictionary<string, object> { { "aws.local.service", serviceName } });
+        builder.AddAttributes(new Dictionary<string, object> { { AwsAttributeKeys.AttributeAWSLocalService, serviceName } });
 
         // ResourceDetectors are enabled by default. Adding config to be able to disable during local testing
         var resourceDetectorsEnabled = System.Environment.GetEnvironmentVariable(ResourceDetectorEnableConfig) ?? "true";
@@ -473,58 +529,6 @@ public class Plugin
         ConfigureOtlpExporterOptions(options);
         options.RegisteredScopeNames = registeredScopeNames;
         return new ScopeBasedOtlpMetricExporter(options);
-    }
-
-    private static int GetMetricExportInterval()
-    {
-        var intervalConfigString = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
-        var exportInterval = DefaultMetricExportInterval;
-        try
-        {
-            var parsedExportInterval = Convert.ToInt32(intervalConfigString);
-            exportInterval = parsedExportInterval != 0 ? parsedExportInterval : DefaultMetricExportInterval;
-        }
-        catch (Exception)
-        {
-            Logger.Log(LogLevel.Trace, "Could not convert OTEL_METRIC_EXPORT_INTERVAL to integer. Using default value 60000.");
-        }
-
-        if (exportInterval.CompareTo(DefaultMetricExportInterval) > 0)
-        {
-            exportInterval = DefaultMetricExportInterval;
-            Logger.Log(LogLevel.Information, "AWS Application Signals metrics export interval capped to {0}", exportInterval);
-        }
-
-        return exportInterval;
-    }
-
-    private static void ConfigureOtlpExporterOptions(OtlpExporterOptions options)
-    {
-        var applicationSignalsEndpoint = System.Environment.GetEnvironmentVariable(ApplicationSignalsExporterEndpointConfig);
-        var protocolString = System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName) ?? "http/protobuf";
-        OtlpExportProtocol protocol;
-
-        switch (protocolString)
-        {
-            case "http/protobuf":
-                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
-                protocol = OtlpExportProtocol.HttpProtobuf;
-                break;
-            case "grpc":
-                applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4315";
-                protocol = OtlpExportProtocol.Grpc;
-                break;
-            default:
-                throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + protocolString);
-        }
-
-        options.Endpoint = new Uri(applicationSignalsEndpoint);
-        options.Protocol = protocol;
-
-        Logger.Log(
-            LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
-        Logger.Log(
-            LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
     }
 
     private bool HasCustomTracesEndpoint()
