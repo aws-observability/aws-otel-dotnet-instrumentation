@@ -90,7 +90,6 @@ class AWSSdkTest(ContractTestBase):
             .with_name("localstack")
             .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
-            # .with_env("PROVIDER_OVERRIDE_STEPFUNCTIONS", "legacy")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
         cls._local_stack.start()
@@ -544,7 +543,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            cloudformation_primiary_identifier="test-guardrail",
+            cloudformation_primary_identifier="test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
             },
