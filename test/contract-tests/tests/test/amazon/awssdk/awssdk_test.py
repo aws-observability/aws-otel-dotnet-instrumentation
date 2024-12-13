@@ -331,7 +331,7 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            cloudformation_primiary_identifier="test-guardrail",
+            cloudformation_primary_identifier="test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
             },

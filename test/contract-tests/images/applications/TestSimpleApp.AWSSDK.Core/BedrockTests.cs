@@ -39,7 +39,7 @@ public class BedrockTests(
         };
     }
 
-    // 6 InvokeModel test calls and responses, one for each supported model
+    // 7 InvokeModel test calls and responses, one for each supported model
     // The manual responses are automatically serialized to a MemoryStream and used as the response body
 
     public void InvokeModelAmazonNova()
