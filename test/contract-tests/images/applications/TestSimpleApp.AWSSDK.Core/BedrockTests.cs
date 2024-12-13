@@ -42,6 +42,52 @@ public class BedrockTests(
     // 6 InvokeModel test calls and responses, one for each supported model
     // The manual responses are automatically serialized to a MemoryStream and used as the response body
 
+    public void InvokeModelAmazonNova()
+    {
+        bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
+        {
+            ModelId = "us.amazon.nova-micro-v1:0",
+            Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new
+                            {
+                                text = "sample input text",
+                            }
+                        }
+                    },
+                },
+                inferenceConfig = new
+                {
+                    temperature = 0.123,
+                    top_p = 0.456,
+                    max_new_tokens = 123,
+                },
+            }))),
+            ContentType = "application/json",
+        });
+        return;
+    }
+
+    public object InvokeModelAmazonNovaResponse()
+    {
+        return new
+        {
+            usage = new
+            {
+                inputTokens = 456,
+                outputTokens = 789,
+            },
+            stopReason = "finish_reason",
+        };
+    }
+
     public void InvokeModelAmazonTitan()
     {
         bedrockRuntime.InvokeModelAsync(new InvokeModelRequest
