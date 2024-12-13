@@ -42,18 +42,18 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Normalized remote service names for supported AWS services
     private static readonly string NormalizedDynamoDBServiceName = "AWS::DynamoDB";
     private static readonly string NormalizedKinesisServiceName = "AWS::Kinesis";
+    private static readonly string NormalizedLambdaServiceName = "AWS::Lambda";
     private static readonly string NormalizedS3ServiceName = "AWS::S3";
+    private static readonly string NormalizedSecretsManagerServiceName = "AWS::SecretsManager";
+    private static readonly string NormalizedSNSServiceName = "AWS::SNS";
     private static readonly string NormalizedSQSServiceName = "AWS::SQS";
+    private static readonly string NormalizedStepFunctionsName = "AWS::StepFunctions";
     private static readonly string NormalizedBedrockServiceName = "AWS::Bedrock";
     private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DbConnectionResourceType = "DB::Connection";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
-
-    // As per https://opentelemetry.io/docs/specs/semconv/resource/#service
-    // If service name is not specified, SDK defaults the service name starting with unknown_service
-    private static readonly string OtelUnknownServicePrefix = "unknown_service";
 
     /// <inheritdoc/>
     public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
@@ -100,10 +100,10 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static void SetService(Resource resource, Activity span, ActivityTagsCollection attributes)
 #pragma warning restore SA1204 // Static elements should appear before instance elements
     {
-        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeServiceName).Value;
+        string? service = (string?)resource.Attributes.FirstOrDefault(attribute => attribute.Key == AttributeAWSLocalService).Value;
 
         // In practice the service name is never null, but we can be defensive here.
-        if (service == null || service.StartsWith(OtelUnknownServicePrefix))
+        if (service == null)
         {
             LogUnknownAttribute(AttributeAWSLocalService, span);
             service = UnknownService;
@@ -362,12 +362,20 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonKinesis": // AWS SDK v1
                 case "Kinesis": // AWS SDK v2
                     return NormalizedKinesisServiceName;
+                case "Lambda":
+                    return NormalizedLambdaServiceName;
                 case "Amazon S3": // AWS SDK v1
                 case "S3": // AWS SDK v2
                     return NormalizedS3ServiceName;
+                case "Secrets Manager":
+                    return NormalizedSecretsManagerServiceName;
+                case "SNS":
+                    return NormalizedSNSServiceName;
                 case "AmazonSQS": // AWS SDK v1
                 case "Sqs": // AWS SDK v2
                     return NormalizedSQSServiceName;
+                case "SFN":
+                    return NormalizedStepFunctionsName;
                 case "Bedrock":
                 case "Bedrock Agent":
                 case "Bedrock Agent Runtime":
@@ -389,6 +397,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
+        string? cloudformationPrimaryIdentifier = null;
         if (IsAwsSDKSpan(span))
         {
             if (IsKeyPresent(span, AttributeAWSDynamoTableName))
@@ -401,20 +410,51 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedKinesisServiceName + "::Stream";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSKinesisStreamName));
             }
+            else if (IsKeyPresent(span, AttributeAWSLambdaResourceMappingId))
+            {
+                remoteResourceType = NormalizedLambdaServiceName + "::EventSourceMapping";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaResourceMappingId));
+            }
             else if (IsKeyPresent(span, AttributeAWSS3Bucket))
             {
                 remoteResourceType = NormalizedS3ServiceName + "::Bucket";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSS3Bucket));
             }
+            else if (IsKeyPresent(span, AttributeAWSSecretsManagerSecretArn))
+            {
+                remoteResourceType = NormalizedSecretsManagerServiceName + "::Secret";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn))?.Split(':').Last();
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn));
+            }
+            else if (IsKeyPresent(span, AttributeAWSSNSTopicArn))
+            {
+                remoteResourceType = NormalizedSNSServiceName + "::Topic";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn))?.Split(':').Last();
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn));
+            }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueName));
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
             {
                 remoteResourceType = NormalizedSQSServiceName + "::Queue";
                 remoteResourceIdentifier = EscapeDelimiters(GetQueueName((string?)span.GetTagItem(AttributeAWSSQSQueueUrl)));
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+            }
+            else if (IsKeyPresent(span, AttributeAWSStepFunctionsActivityArn))
+            {
+                remoteResourceType = NormalizedStepFunctionsName + "::Activity";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn))?.Split(':').Last();
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn));
+            }
+            else if (IsKeyPresent(span, AttributeAWSStepFunctionsStateMachineArn))
+            {
+                remoteResourceType = NormalizedStepFunctionsName + "::StateMachine";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn))?.Split(':').Last();
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
             {
@@ -431,15 +471,19 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedBedrockServiceName + "::Agent";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockAgentId));
             }
-            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
-            {
-                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
-            }
             else if (IsKeyPresent(span, AttributeAWSBedrockDataSourceId))
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::DataSource";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockDataSourceId));
+                cloudformationPrimaryIdentifier =
+                    EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId))
+                    + "|"
+                    + remoteResourceIdentifier;
+            }
+            else if (IsKeyPresent(span, AttributeAWSBedrockKnowledgeBaseId))
+            {
+                remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
+                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
             }
         }
         else if (IsDBSpan(span))
@@ -448,10 +492,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteResourceIdentifier = GetDbConnection(span);
         }
 
-        if (remoteResourceType != null && remoteResourceIdentifier != null)
+        if (cloudformationPrimaryIdentifier == null)
+        {
+            cloudformationPrimaryIdentifier = remoteResourceIdentifier;
+        }
+
+        if (remoteResourceType != null && remoteResourceIdentifier != null && cloudformationPrimaryIdentifier != null)
         {
             attributes.Add(AttributeAWSRemoteResourceType, remoteResourceType);
             attributes.Add(AttributeAWSRemoteResourceIdentifier, remoteResourceIdentifier);
+            attributes.Add(AttributeAWSCloudformationPrimaryIdentifier, cloudformationPrimaryIdentifier);
         }
     }
 

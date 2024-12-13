@@ -526,7 +526,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerAddress, "abc.com" },
             { AttributeServerPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when server port is string
         attributesCombination = new Dictionary<string, object>
@@ -536,7 +536,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerAddress, "abc.com" },
             { AttributeServerPort, "3306" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when server port is int32
         attributesCombination = new Dictionary<string, object>
@@ -546,7 +546,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerAddress, "abc.com" },
             { AttributeServerPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate behaviour of DB_NAME with '|' char, SERVER_ADDRESS and SERVER_PORT exist
         attributesCombination = new Dictionary<string, object>
@@ -556,7 +556,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerAddress, "abc.com" },
             { AttributeServerPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^|special|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^|special|abc.com|3306", "db_name^|special|abc.com|3306", false);
 
         // Validate behaviour of DB_NAME with '^' char, SERVER_ADDRESS and SERVER_PORT exist
         attributesCombination = new Dictionary<string, object>
@@ -566,7 +566,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerAddress, "abc.com" },
             { AttributeServerPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^^special|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name^^special|abc.com|3306", "db_name^^special|abc.com|3306", false);
 
         // Validate behaviour of DB_NAME, SERVER_ADDRESS exist
         attributesCombination = new Dictionary<string, object>
@@ -575,7 +575,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbName, "db_name" },
             { AttributeServerAddress, "abc.com" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", "db_name|abc.com", false);
 
         // Validate behaviour of SERVER_ADDRESS exist
         attributesCombination = new Dictionary<string, object>
@@ -583,7 +583,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbSystem, "mysql" },
             { AttributeServerAddress, "abc.com" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", "abc.com", false);
 
         // Validate behaviour of SERVER_PORT exist
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
@@ -604,7 +604,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeNetPeerName, "abc.com" },
             { AttributeNetPeerPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when AttributeNetPeerPort is int32
         attributesCombination = new Dictionary<string, object>
@@ -614,7 +614,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeNetPeerName, "abc.com" },
             { AttributeNetPeerPort, 3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when AttributeNetPeerPort is string
         attributesCombination = new Dictionary<string, object>
@@ -624,7 +624,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeNetPeerName, "abc.com" },
             { AttributeNetPeerPort, "3306" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate behaviour of DB_NAME, NET_PEER_NAME exist
         attributesCombination = new Dictionary<string, object>
@@ -633,7 +633,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbName, "db_name" },
             { AttributeNetPeerName, "abc.com" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", "db_name|abc.com", false);
 
         // Validate behaviour of NET_PEER_NAME exist
         attributesCombination = new Dictionary<string, object>
@@ -641,7 +641,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbSystem, "mysql" },
             { AttributeNetPeerName, "abc.com" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "abc.com", "abc.com", false);
 
         // Validate behaviour of NET_PEER_PORT exist
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
@@ -662,7 +662,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerSocketAddress, "abc.com" },
             { AttributeServerSocketPort, (long)3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when AttributeServerSocketPort is int32
         attributesCombination = new Dictionary<string, object>
@@ -672,7 +672,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerSocketAddress, "abc.com" },
             { AttributeServerSocketPort, 3306 },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate BuildDbConnection string when AttributeServerSocketPort is string
         attributesCombination = new Dictionary<string, object>
@@ -682,7 +682,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeServerSocketAddress, "abc.com" },
             { AttributeServerSocketPort, "3306" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
 
         // Validate behaviour of DB_NAME, SERVER_SOCKET_ADDRESS exist
         attributesCombination = new Dictionary<string, object>
@@ -691,7 +691,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbName, "db_name" },
             { AttributeServerSocketAddress, "abc.com" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|abc.com", "db_name|abc.com", false);
 
         // Validate behaviour of SERVER_SOCKET_PORT exist
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
@@ -722,7 +722,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbName, "db_name" },
             { AttributeDbConnectionString, "mysql://test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com:3306/petclinic" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "db_name|test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", "db_name|test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
 
         // Validate behaviour of DB_CONNECTION_STRING
         attributesCombination = new Dictionary<string, object>
@@ -730,7 +730,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbSystem, "mysql" },
             { AttributeDbConnectionString, "mysql://test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com:3306/petclinic" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", "test-apm.cluster-cnrw3s3ddo7n.us-east-1.rds.amazonaws.com|3306", false);
 
         // Validate behaviour of DB_CONNECTION_STRING exist without port
         attributesCombination = new Dictionary<string, object>
@@ -738,7 +738,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeDbSystem, "mysql" },
             { AttributeDbConnectionString, "http://dbserver" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "dbserver|80", false);
+        this.ValidateRemoteResourceAttributes(attributesCombination, "DB::Connection", "dbserver|80", "dbserver|80", false);
 
         // Validate behaviour of DB_NAME and invalid DB_CONNECTION_STRING exist
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
@@ -876,106 +876,168 @@ public class AwsMetricAttributesGeneratorTest
         {
             { AttributeAWSS3Bucket, "aws_s3_bucket_name" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name", "aws_s3_bucket_name");
 
+        // when QueueName and QueueUrl are both available, QueueName is used as resource identifier. QueueUrl is always used as the CFN primary identifier.
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSQSQueueName, "aws_queue_name" },
+            { AttributeAWSSQSQueueUrl, "https://sqs.us-east-2.amazonaws.com/123456789012/Queue" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
-        attributesCombination[AttributeAWSSQSQueueUrl] = "https://sqs.us-east-2.amazonaws.com/123456789012/Queue";
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "https://sqs.us-east-2.amazonaws.com/123456789012/Queue");
 
         attributesCombination[AttributeAWSSQSQueueUrl] = "invalidUrl";
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "invalidUrl");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSKinesisStreamName, "aws_stream_name" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name", "aws_stream_name");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table_name" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name", "aws_table_name");
 
         // validate behavior of AttributeAWSDynamoTableName with special chars('|', '^')
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table|name" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name", "aws_table^|name");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table^name" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name", "aws_table^^name");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_id", "aws_event_source_mapping_id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_^id" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_^^id", "aws_event_source_mapping_^^id");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_^^arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_^^arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_^^arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_^^arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^^arn");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id", "aws_guardrail_id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_^id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id", "aws_guardrail_^^id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeGenAiModelId, "gen_ai_model_id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id", "gen_ai_model_id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeGenAiModelId, "gen_ai_model_^id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_^^id", "gen_ai_model_^^id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockAgentId, "aws_agent_id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_id", "aws_agent_id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockAgentId, "aws_agent_^id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_^^id", "aws_agent_^^id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id", "aws_knowledge_base_id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_^id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_^^id", "aws_knowledge_base_^^id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockDataSourceId, "aws_data_source_id" },
+            { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id", "aws_knowledge_base_id|aws_data_source_id");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockDataSourceId, "aws_data_source_^id" },
+            { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_^id" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_^^id", "aws_knowledge_base_^^id|aws_data_source_^^id");
     }
 
-    private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, bool isAwsServiceTest = true)
+    private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, string cfnIdentifier, bool isAwsServiceTest = true)
     {
         this.spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
         foreach (var attribute in attributesCombination)
@@ -992,8 +1054,10 @@ public class AwsMetricAttributesGeneratorTest
         attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteResourceType, out var actualAWSRemoteResourceType);
         dependencyMetric.TryGetValue(AttributeAWSRemoteResourceIdentifier, out var actualAWSRemoteResourceIdentifier);
+        dependencyMetric.TryGetValue(AttributeAWSCloudformationPrimaryIdentifier, out var actualAWSCloudformationPrimaryIdentifier);
         Assert.Equal(type, actualAWSRemoteResourceType);
         Assert.Equal(identifier, actualAWSRemoteResourceIdentifier);
+        Assert.Equal(cfnIdentifier, actualAWSCloudformationPrimaryIdentifier);
         this.spanDataMock.Dispose();
     }
 
@@ -1181,6 +1245,7 @@ public class AwsMetricAttributesGeneratorTest
         List<KeyValuePair<string, object?>> resourceAttributes = new List<KeyValuePair<string, object?>>
         {
             new (AutoInstrumentation.AwsMetricAttributeGenerator.AttributeServiceName, this.serviceNameValue),
+            new (AwsAttributeKeys.AttributeAWSLocalService, this.serviceNameValue),
         };
         this.resource = new Resource(resourceAttributes);
     }

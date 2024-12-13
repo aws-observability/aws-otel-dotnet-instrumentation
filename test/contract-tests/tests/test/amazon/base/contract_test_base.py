@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 import time
+import re
 from logging import INFO, Logger, getLogger
 from typing import Dict, List
 from unittest import TestCase
@@ -89,6 +90,7 @@ class ContractTestBase(TestCase):
             .with_exposed_ports(self.get_application_port())
             .with_env("OTEL_METRIC_EXPORT_INTERVAL", "50")
             .with_env("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "true")
+            .with_env("OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED", self.is_runtime_enabled())
             .with_env("OTEL_METRICS_EXPORTER", "none")
             .with_env("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
             .with_env("OTEL_BSP_SCHEDULE_DELAY", "1")
@@ -134,11 +136,7 @@ class ContractTestBase(TestCase):
     def do_test_requests(
         self, path: str, method: str, status_code: int, expected_error: int, expected_fault: int, **kwargs
     ) -> None:
-        address: str = self.application.get_container_host_ip()
-        port: str = self.application.get_exposed_port(self.get_application_port())
-        url: str = f"http://{address}:{port}/{path}"
-        response: Response = request(method, url, timeout=200)
-        self.assertEqual(status_code, response.status_code)
+        self.do_send_request(path, method, status_code)
 
         resource_scope_spans: List[ResourceScopeSpan] = self.mock_collector_client.get_traces()
         self._assert_aws_span_attributes(resource_scope_spans, path, **kwargs)
@@ -151,6 +149,16 @@ class ContractTestBase(TestCase):
         self._assert_metric_attributes(metrics, ERROR_METRIC, expected_error, **kwargs)
         self._assert_metric_attributes(metrics, FAULT_METRIC, expected_fault, **kwargs)
 
+    def do_send_request(
+            self, path: str, method: str, status_code: int
+    ) -> None:
+        address: str = self.application.get_container_host_ip()
+        port: str = self.application.get_exposed_port(self.get_application_port())
+        url: str = f"http://{address}:{port}/{path}"
+        _logger.info("call " + url)
+        response: Response = request(method, url, timeout=200)
+        self.assertEqual(status_code, response.status_code)
+
     def _get_attributes_dict(self, attributes_list: List[KeyValue]) -> Dict[str, AnyValue]:
         attributes_dict: Dict[str, AnyValue] = {}
         for attribute in attributes_list:
@@ -162,11 +170,27 @@ class ContractTestBase(TestCase):
             attributes_dict[key] = value
         return attributes_dict
 
+    def _is_regex(self, value: str) -> bool:
+        try:
+            re.compile(value)
+            return True
+        except re.error:
+            return False
+
     def _assert_str_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: str):
         self.assertIn(key, attributes_dict)
         actual_value: AnyValue = attributes_dict[key]
         self.assertIsNotNone(actual_value)
-        self.assertEqual(expected_value, actual_value.string_value)
+        if self._is_regex(expected_value):
+            self.assertRegex(actual_value.string_value, expected_value)
+        else:
+            self.assertEqual(expected_value, actual_value.string_value)
+
+    def _assert_regex_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: str):
+        self.assertIn(key, attributes_dict)
+        actual_value: AnyValue = attributes_dict[key]
+        self.assertIsNotNone(actual_value)
+        self.assertRegex(actual_value.string_value, expected_value)
 
     def _assert_int_attribute(self, attributes_dict: Dict[str, AnyValue], key: str, expected_value: int) -> None:
         self.assertIn(key, attributes_dict)
@@ -216,6 +240,9 @@ class ContractTestBase(TestCase):
 
     def get_application_otel_resource_attributes(self) -> str:
         return "service.name=" + self.get_application_otel_service_name()
+
+    def is_runtime_enabled(self) -> str:
+        return "false"
 
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs):
         self.fail("Tests must implement this function")
