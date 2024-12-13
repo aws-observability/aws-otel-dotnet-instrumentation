@@ -37,7 +37,11 @@ internal class AWSLlmModelProcessor
                     }
 
                     // extract model specific attributes based on model name
-                    if (modelName.Contains("amazon.titan"))
+                    if (modelName.Contains("amazon.nova"))
+                    {
+                        ProcessNovaModelAttributes(activity, jsonObject, isRequest);
+                    }
+                    else if (modelName.Contains("amazon.titan"))
                     {
                         ProcessTitanModelAttributes(activity, jsonObject, isRequest);
                     }
@@ -67,6 +71,55 @@ internal class AWSLlmModelProcessor
                     Console.WriteLine("Exception: " + ex.Message);
                 }
             }
+        }
+    }
+
+    private static void ProcessNovaModelAttributes(Activity activity, Dictionary<string, JsonElement> jsonBody, bool isRequest)
+    {
+        try
+        {
+            if (isRequest)
+            {
+                if (jsonBody.TryGetValue("inferenceConfig", out var inferenceConfig))
+                {
+                    if (inferenceConfig.TryGetProperty("top_p", out var topP))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiTopP, topP.GetDouble());
+                    }
+
+                    if (inferenceConfig.TryGetProperty("temperature", out var temperature))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiTemperature, temperature.GetDouble());
+                    }
+
+                    if (inferenceConfig.TryGetProperty("max_new_tokens", out var maxTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiMaxTokens, maxTokens.GetInt32());
+                    }
+                }
+            }
+            else
+            {
+                if (jsonBody.TryGetValue("usage", out var usage))
+                {
+                    if (usage.TryGetProperty("inputTokens", out var inputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiInputTokens, inputTokens.GetInt32());
+                    }
+                    if (usage.TryGetProperty("outputTokens", out var outputTokens))
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeGenAiOutputTokens, outputTokens.GetInt32());
+                    }
+                }
+                if (jsonBody.TryGetValue("stopReason", out var finishReasons))
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeGenAiFinishReasons, new string[] { finishReasons.GetString() ?? string.Empty });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Exception: " + ex.Message);
         }
     }
 
