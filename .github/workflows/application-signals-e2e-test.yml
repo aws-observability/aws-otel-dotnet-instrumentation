@@ -199,7 +199,7 @@ jobs:
         
   dotnet-lambda-test:
     needs: [ build-lambda-staging-sample-app ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@dotnetLambdaE2E
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
     secrets: inherit
     with:
       aws-region: us-east-1
