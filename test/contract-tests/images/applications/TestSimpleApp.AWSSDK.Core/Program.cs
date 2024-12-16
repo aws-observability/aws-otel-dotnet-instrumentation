@@ -5,7 +5,10 @@ using Amazon.BedrockRuntime;
 using Amazon.DynamoDBv2;
 using Amazon.Kinesis;
 using Amazon.S3;
+using Amazon.SecretsManager;
+using Amazon.SimpleNotificationService;
 using Amazon.SQS;
+using Amazon.StepFunctions;
 using TestSimpleApp.AWSSDK.Core;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +23,9 @@ builder.Services
     .AddSingleton<IAmazonS3>(provider => new AmazonS3Client(new AmazonS3Config { ServiceURL = "http://localstack:4566", ForcePathStyle = true }))
     .AddSingleton<IAmazonSQS>(provider => new AmazonSQSClient(new AmazonSQSConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<IAmazonKinesis>(provider => new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddSingleton<IAmazonSecretsManager>(provider => new AmazonSecretsManagerClient(new AmazonSecretsManagerConfig { ServiceURL = "http://localstack:4566" }))
+    .AddSingleton<IAmazonSimpleNotificationService>(provider => new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
+    .AddSingleton<IAmazonStepFunctions>(provider => new AmazonStepFunctionsClient(new AmazonStepFunctionsConfig { ServiceURL = "http://localstack:4566" }))
     // Bedrock services are not supported by localstack, so we mock the API responses on the aws-application-signals-tests-testsimpleapp server.
     .AddSingleton<IAmazonBedrock>(provider => new AmazonBedrockClient(new AmazonBedrockConfig { ServiceURL = "http://localhost:8080" }))
     .AddSingleton<IAmazonBedrockRuntime>(provider => new AmazonBedrockRuntimeClient(new AmazonBedrockRuntimeConfig { ServiceURL = "http://localhost:8080" }))
@@ -30,15 +36,24 @@ builder.Services
     .AddKeyedSingleton<IAmazonS3>("fault-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>(true)))
     .AddKeyedSingleton<IAmazonSQS>("fault-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>(true)))
     .AddKeyedSingleton<IAmazonKinesis>("fault-kinesis", new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSecretsManager>("fault-secretsmanager", new AmazonSecretsManagerClient(new AmazonSecretsManagerConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSimpleNotificationService>("fault-sns", new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonStepFunctions>("fault-stepfunctions", new AmazonStepFunctionsClient(new AmazonStepFunctionsConfig { ServiceURL = "http://localstack:4566" }))
     //error client
     .AddKeyedSingleton<IAmazonDynamoDB>("error-ddb", new AmazonDynamoDBClient(AmazonClientConfigHelper.CreateConfig<AmazonDynamoDBConfig>()))
     .AddKeyedSingleton<IAmazonS3>("error-s3", new AmazonS3Client(AmazonClientConfigHelper.CreateConfig<AmazonS3Config>()))
     .AddKeyedSingleton<IAmazonSQS>("error-sqs", new AmazonSQSClient(AmazonClientConfigHelper.CreateConfig<AmazonSQSConfig>()))
     .AddKeyedSingleton<IAmazonKinesis>("error-kinesis", new AmazonKinesisClient(new AmazonKinesisConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSecretsManager>("error-secretsmanager", new AmazonSecretsManagerClient(new AmazonSecretsManagerConfig {ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonSimpleNotificationService>("error-sns", new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
+    .AddKeyedSingleton<IAmazonStepFunctions>("error-stepfunctions", new AmazonStepFunctionsClient(new AmazonStepFunctionsConfig { ServiceURL = "http://localstack:4566" }))
     .AddSingleton<S3Tests>()
     .AddSingleton<DynamoDBTests>()
     .AddSingleton<SQSTests>()
     .AddSingleton<KinesisTests>()
+    .AddSingleton<SecretsManagerTests>()
+    .AddSingleton<SNSTests>()
+    .AddSingleton<StepFunctionsTests>()
     .AddSingleton<BedrockTests>();
 
 var app = builder.Build();
@@ -121,6 +136,35 @@ app.MapGet("kinesis/deletestream/my-stream", (KinesisTests kinesis) => kinesis.D
 app.MapGet("kinesis/fault", (KinesisTests kinesis) => kinesis.Fault()).WithName("kinesis-fault").WithOpenApi();
 app.MapGet("kinesis/error", (KinesisTests kinesis) => kinesis.Error()).WithName("kinesis-error").WithOpenApi();
 
+app.MapGet("secretsmanager/createsecret/some-secret", (SecretsManagerTests secretsManager) => secretsManager.CreateSecret())
+    .WithName("create-secret")
+    .WithOpenApi();
+
+app.MapGet("secretsmanager/getsecretvalue/some-secret", (SecretsManagerTests secretsManager) => secretsManager.GetSecretValue())
+    .WithName("get-secret-value")
+    .WithOpenApi();
+
+app.MapGet("secretsmanager/fault", (SecretsManagerTests secretsManager) => secretsManager.Fault()).WithName("secretsmanager-fault").WithOpenApi();
+app.MapGet("secretsmanager/error", (SecretsManagerTests secretsManager) => secretsManager.Error()).WithName("secretsmanager-error").WithOpenApi();
+
+app.MapGet("sns/publish/some-topic", (SNSTests sns) => sns.Publish())
+    .WithName("publish")
+    .WithOpenApi();
+
+app.MapGet("sns/fault", (SNSTests sns) => sns.Fault()).WithName("sns-fault").WithOpenApi();
+app.MapGet("sns/error", (SNSTests sns) => sns.Error()).WithName("sns-error").WithOpenApi();
+
+app.MapGet("stepfunctions/describestatemachine/some-state-machine", (StepFunctionsTests stepFunctions) => stepFunctions.DescribeStateMachine())
+    .WithName("describe-state-machine")
+    .WithOpenApi();
+
+app.MapGet("stepfunctions/describeactivity/some-activity", (StepFunctionsTests stepFunctions) => stepFunctions.DescribeActivity())
+    .WithName("describe-activity")
+    .WithOpenApi();
+
+app.MapGet("stepfunctions/fault", (StepFunctionsTests stepFunctions) => stepFunctions.Fault()).WithName("stepfunctions-fault").WithOpenApi();
+app.MapGet("stepfunctions/error", (StepFunctionsTests stepFunctions) => stepFunctions.Error()).WithName("stepfunctions-error").WithOpenApi();
+
 app.MapGet("bedrock/getguardrail/get-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrail())
     .WithName("get-guardrail")
     .WithOpenApi();
@@ -169,6 +213,22 @@ app.MapGet("bedrock/retrieve/retrieve", (BedrockTests bedrock) => bedrock.Retrie
     .WithName("retrieve")
     .WithOpenApi();
 
+// Create some resources in advance to be accessed by tests
+async Task PrepareAWSServer(IServiceProvider services)
+{
+    var snsTests = services.GetRequiredService<SNSTests>();
+    var stepfunctionsTests = services.GetRequiredService<StepFunctionsTests>();
+
+    // Create a topic for the SNS tests
+    await snsTests.CreateTopic("test-topic");
+
+    // Create a state machine and activity for the Step Functions tests
+    await stepfunctionsTests.CreateStateMachine("test-state-machine");
+    await stepfunctionsTests.CreateActivity("test-activity");
+
+    // TODO: create resources for Lambda event source mapping test
+}
+
 // Reroute the Bedrock API calls to our mock responses in BedrockTests. While other services use localstack to handle the requests,
 // we write our own responses with the necessary data to mimic the expected behavior of the Bedrock services.
 app.MapGet("guardrails/test-guardrail", (BedrockTests bedrock) => bedrock.GetGuardrailResponse());
@@ -184,5 +244,7 @@ app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedro
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
 app.MapPost("agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text", (BedrockTests bedrock) => bedrock.InvokeAgentResponse());
 app.MapPost("knowledgebases/test-knowledge-base/retrieve", (BedrockTests bedrock) => bedrock.RetrieveResponse());
+
+await PrepareAWSServer(app.Services);
 
 app.Run();
