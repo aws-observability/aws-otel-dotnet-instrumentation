@@ -564,7 +564,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="us.amazon.nova-micro-v1:0",
             cloudformation_primary_identifier="us.amazon.nova-micro-v1:0",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "us.amazon.nova-micro-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
