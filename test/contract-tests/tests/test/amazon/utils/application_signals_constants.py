@@ -8,6 +8,11 @@ Constants for attributes and metric names defined in Application Signals.
 LATENCY_METRIC: str = "latency"
 ERROR_METRIC: str = "error"
 FAULT_METRIC: str = "fault"
+GC_COUNT_METRIC: str = "process.runtime.dotnet.gc.collections.count"
+GC_DURATION_METRIC: str = "process.runtime.dotnet.gc.duration"
+GC_HEAP_METRIC: str = "process.runtime.dotnet.gc.heap.size"
+THREAD_COUNT_METRIC: str = "process.runtime.dotnet.thread_pool.threads.count"
+THREAD_QUEUE_METRIC: str = "process.runtime.dotnet.thread_pool.queue.length"
 
 # Attribute names
 AWS_LOCAL_SERVICE: str = "aws.local.service"

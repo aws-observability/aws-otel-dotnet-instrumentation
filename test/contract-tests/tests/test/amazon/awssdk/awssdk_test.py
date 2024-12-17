@@ -28,6 +28,10 @@ _logger.setLevel(INFO)
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
+_AWS_SECRETSMANAGER_SECRET_ARN: str = "aws.secretsmanager.secret.arn"
+_AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
+_AWS_STEPFUNCTIONS_ACTIVITY_ARN: str = "aws.stepfunctions.activity.arn"
+_AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: str = "aws.stepfunctions.state_machine.arn"
 _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
@@ -82,9 +86,9 @@ class AWSSdkTest(ContractTestBase):
             )
         }
         cls._local_stack: LocalStackContainer = (
-            LocalStackContainer(image="localstack/localstack:3.0.2")
+            LocalStackContainer(image="localstack/localstack:4.0.0")
             .with_name("localstack")
-            .with_services("s3", "sqs", "dynamodb", "kinesis")
+            .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
             .with_env("DEFAULT_REGION", "us-west-2")
             .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
         )
@@ -319,6 +323,214 @@ class AWSSdkTest(ContractTestBase):
     #         span_name="Kinesis.CreateStream",
     #     )
 
+    def test_secretsmanager_create_secret(self):
+        self.do_test_requests(
+            "secretsmanager/createsecret/some-secret",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="CreateSecret",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            },
+            span_name="Secrets Manager.CreateSecret",
+        )
+    
+    def test_secretsmanager_get_secret_value(self):
+        self.do_test_requests(
+            "secretsmanager/getsecretvalue/some-secret",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="GetSecretValue",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier=r"test-secret-[a-zA-Z0-9]{6}$",
+            cloudformation_primary_identifier=r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: r"arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-[a-zA-Z0-9]{6}$",
+            },
+            span_name="Secrets Manager.GetSecretValue",
+        )
+    
+    def test_secretsmanager_error(self):
+        self.do_test_requests(
+            "secretsmanager/error",
+            "GET",
+            400,
+            1,
+            0,
+            rpc_service="Secrets Manager",
+            remote_service="AWS::SecretsManager",
+            remote_operation="DescribeSecret",
+            remote_resource_type="AWS::SecretsManager::Secret",
+            remote_resource_identifier="test-secret-error",
+            cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+            request_response_specific_attributes={
+                _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+            },
+            span_name="Secrets Manager.DescribeSecret",
+        )
+    
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_secretsmanager_fault(self):
+    #     self.do_test_requests(
+    #         "secretsmanager/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         rpc_service="Secrets Manager",
+    #         remote_service="AWS::SecretsManager",
+    #         remote_operation="CreateSecret",
+    #         remote_resource_type="AWS::SecretsManager::Secret",
+    #         remote_resource_identifier="test-secret-error",
+    #         cloudformation_primary_identifier="arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+    #         request_response_specific_attributes={
+    #             _AWS_SECRETSMANAGER_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:000000000000:secret:test-secret-error",
+    #         },
+    #         span_name="Secrets Manager.CreateSecret",
+    #     )
+
+    def test_sns_publish(self):
+        self.do_test_requests(
+            "sns/publish/some-topic",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::SNS",
+            remote_operation="Publish",
+            remote_resource_type="AWS::SNS::Topic",
+            remote_resource_identifier="test-topic",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic",
+            request_response_specific_attributes={
+                _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic",
+            },
+            span_name="SNS.Publish",
+        )
+    
+    def test_sns_error(self):
+        self.do_test_requests(
+            "sns/error",
+            "GET",
+            400,
+            1,
+            0,
+            remote_service="AWS::SNS",
+            remote_operation="Publish",
+            remote_resource_type="AWS::SNS::Topic",
+            remote_resource_identifier="test-topic-error",
+            cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:test-topic-error",
+            request_response_specific_attributes={
+                _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:test-topic-error",
+            },
+            span_name="SNS.Publish",
+        )
+
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_sns_fault(self):
+    #     self.do_test_requests(
+    #         "sns/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         remote_service="AWS::SNS",
+    #         remote_operation="GetTopicAttributes",
+    #         remote_resource_type="AWS::SNS::Topic",
+    #         remote_resource_identifier="invalid-topic",
+    #         cloudformation_primary_identifier="arn:aws:sns:us-east-1:000000000000:invalid-topic",
+    #         request_response_specific_attributes={
+    #            _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:invalid-topic",},
+    #         span_name="SNS.GetTopicAttributes"
+    #     )
+    
+    def test_stepfunctions_describe_state_machine(self):
+        self.do_test_requests(
+            "stepfunctions/describestatemachine/some-state-machine",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeStateMachine",
+            remote_resource_type="AWS::StepFunctions::StateMachine",
+            remote_resource_identifier="test-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:test-state-machine",
+            },
+            span_name="SFN.DescribeStateMachine",
+        )
+
+    def test_stepfunctions_describe_activity(self):
+        self.do_test_requests(
+            "stepfunctions/describeactivity/some-activity",
+            "GET",
+            200,
+            0,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeActivity",
+            remote_resource_type="AWS::StepFunctions::Activity",
+            remote_resource_identifier="test-activity",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:activity:test-activity",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_ACTIVITY_ARN: "arn:aws:states:us-east-1:000000000000:activity:test-activity",
+            },
+            span_name="SFN.DescribeActivity",
+        )
+    
+    def test_stepfunctions_error(self):
+        self.do_test_requests(
+            "stepfunctions/error",
+            "GET",
+            400,
+            1,
+            0,
+            rpc_service="SFN",
+            remote_service="AWS::StepFunctions",
+            remote_operation="DescribeStateMachine",
+            remote_resource_type="AWS::StepFunctions::StateMachine",
+            remote_resource_identifier="error-state-machine",
+            cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
+            request_response_specific_attributes={
+                _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:error-state-machine",
+            },
+            span_name="SFN.DescribeStateMachine",
+        )
+
+
+    # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
+    # def test_stepfunctions_fault(self):
+    #     self.do_test_requests(
+    #         "stepfunctions/fault",
+    #         "GET",
+    #         500,
+    #         0,
+    #         1,
+    #         rpc_service="SFN",
+    #         remote_service="AWS::StepFunctions",
+    #         remote_operation="ListStateMachineVersions",
+    #         remote_resource_type="AWS::StepFunctions::StateMachine",
+    #         remote_resource_identifier="invalid-state-machine",
+    #         cloudformation_primary_identifier="arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",
+    #         request_response_specific_attributes={
+    #            _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:000000000000:stateMachine:invalid-state-machine",},
+    #         span_name="SFN.ListStateMachineVersions",
+    #     )
+
     def test_bedrock_get_guardrail(self):
         self.do_test_requests(
             "bedrock/getguardrail/get-guardrail",
@@ -378,7 +590,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="amazon.titan-text-express-v1",
             cloudformation_primary_identifier="amazon.titan-text-express-v1",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "amazon.titan-text-express-v1",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -404,7 +616,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="us.anthropic.claude-3-5-haiku-20241022-v1:0",
             cloudformation_primary_identifier="us.anthropic.claude-3-5-haiku-20241022-v1:0",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "us.anthropic.claude-3-5-haiku-20241022-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -430,7 +642,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="meta.llama3-8b-instruct-v1:0",
             cloudformation_primary_identifier="meta.llama3-8b-instruct-v1:0",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "meta.llama3-8b-instruct-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -456,7 +668,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="cohere.command-r-v1:0",
             cloudformation_primary_identifier="cohere.command-r-v1:0",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "cohere.command-r-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -482,7 +694,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="ai21.jamba-1-5-large-v1:0",
             cloudformation_primary_identifier="ai21.jamba-1-5-large-v1:0",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "ai21.jamba-1-5-large-v1:0",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -508,7 +720,7 @@ class AWSSdkTest(ContractTestBase):
             remote_resource_identifier="mistral.mistral-7b-instruct-v0:2",
             cloudformation_primary_identifier="mistral.mistral-7b-instruct-v0:2",
             request_response_specific_attributes={
-                _GEN_AI_SYSTEM: "aws_bedrock",
+                _GEN_AI_SYSTEM: "aws.bedrock",
                 _GEN_AI_REQUEST_MODEL: "mistral.mistral-7b-instruct-v0:2",
                 _GEN_AI_REQUEST_TEMPERATURE: 0.123,
                 _GEN_AI_REQUEST_TOP_P: 0.456,
@@ -615,6 +827,8 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Agent.GetDataSource",
         )
+
+    # TODO: add contract test for Lambda event source mapping resource
 
     @override
     def _assert_aws_span_attributes(self, resource_scope_spans: List[ResourceScopeSpan], path: str, **kwargs) -> None:

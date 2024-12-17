@@ -75,13 +75,13 @@ jobs:
           shortsha="$(git rev-parse --short HEAD)"
           echo "SHORT_SHA=$shortsha" >> $GITHUB_OUTPUT
         shell: bash
-  
+
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME}}
           aws-region: us-east-1
-          
+
       - name: Login to Amazon private ECR
         id: login-ecr
         run: |
@@ -162,4 +162,45 @@ jobs:
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'eks-windows-manual'
+      caller-workflow-name: 'main-build'
+        
+  build-lambda-staging-sample-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.STAING_ARTIFACTS_ACCESS_ROLE }}
+          role-external-id: ApplicationSignalsDotnet
+          aws-region: us-east-1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup .NET Lambda Tools
+        shell: bash
+        run: dotnet tool install -g Amazon.Lambda.Tools
+        working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
+
+      - name: Build Lambda Sample App
+        shell: bash
+        run: dotnet lambda package -pl ./src/SimpleLambdaFunction
+        working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
+      
+      - name: Upload Sample App to S3
+        shell: bash
+        run: |
+          aws s3 cp ./src/SimpleLambdaFunction/bin/Release/net8.0/SimpleLambdaFunction.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
+        working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
+        
+  dotnet-lambda-test:
+    needs: [ build-lambda-staging-sample-app ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
       caller-workflow-name: 'main-build'
