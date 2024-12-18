@@ -17,6 +17,9 @@ using Microsoft.AspNetCore.Routing.Patterns;
 using Moq;
 using Xunit;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+#pragma warning disable CS8602 // Possible null reference argument.
+#pragma warning disable CS8604 // Possible null reference argument.
 public class AwsSpanProcessingUtilTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
@@ -203,7 +206,7 @@ public class AwsSpanProcessingUtilTest
         var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Consumer);
         spanDataMock.DisplayName = string.Empty;
         spanDataMock.Start();
-        string actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
+        string? actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
         Assert.Equal(this.internalOperation, actualOperation);
     }
 
@@ -214,7 +217,7 @@ public class AwsSpanProcessingUtilTest
         var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);
         spanDataMock.SetTag(AttributeAWSLocalOperation, operation);
         spanDataMock.Start();
-        string actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
+        string? actualOperation = AwsSpanProcessingUtil.GetEgressOperation(spanDataMock);
         Assert.Equal(operation, actualOperation);
     }
 
@@ -229,7 +232,7 @@ public class AwsSpanProcessingUtilTest
     [Fact]
     public void TestExtractAPIPathValueNullTarget()
     {
-        string invalidTarget = null;
+        string? invalidTarget = null;
         string pathValue = AwsSpanProcessingUtil.ExtractAPIPathValue(invalidTarget);
         Assert.Equal(this.defaultPathValue, pathValue);
     }
@@ -437,8 +440,8 @@ public class AwsSpanProcessingUtilTest
         using (var spanDataMock = this.testSource.StartActivity("test"))
         {
             spanDataMock.SetParentId(parentSpan.TraceId, parentSpan.SpanId);
-            PropertyInfo propertyInfo = typeof(Activity).GetProperty("HasRemoteParent", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            MethodInfo setterMethodInfo = propertyInfo.GetSetMethod(true);
+            PropertyInfo? propertyInfo = typeof(Activity).GetProperty("HasRemoteParent", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodInfo? setterMethodInfo = propertyInfo.GetSetMethod(true);
             setterMethodInfo.Invoke(spanDataMock, new object[] { true });
             Assert.True(AwsSpanProcessingUtil.IsLocalRoot(spanDataMock));
         }
@@ -446,8 +449,8 @@ public class AwsSpanProcessingUtilTest
         parentSpan.Dispose();
         using (var spanDataMock = this.testSource.StartActivity("test"))
         {
-            PropertyInfo propertyInfo = typeof(Activity).GetProperty("HasRemoteParent", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            MethodInfo setterMethodInfo = propertyInfo.GetSetMethod(true);
+            PropertyInfo? propertyInfo = typeof(Activity).GetProperty("HasRemoteParent", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            MethodInfo? setterMethodInfo = propertyInfo.GetSetMethod(true);
             setterMethodInfo.Invoke(spanDataMock, new object[] { true });
             Assert.True(AwsSpanProcessingUtil.IsLocalRoot(spanDataMock));
         }

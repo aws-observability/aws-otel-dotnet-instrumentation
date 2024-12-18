@@ -24,5 +24,8 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpUdpExporter.Export(OpenTelemetry.Batch{System.Diagnostics.Activity}@)~OpenTelemetry.ExportResult")]
 [assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpUdpExporter.SerializeSpans(OpenTelemetry.Batch{System.Diagnostics.Activity})~System.Byte[]")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:StatusCodeConverter")]
+[assembly: SuppressMessage("StyleCop.CSharp.NamingRules", "SA1307:Accessible fields should begin with upper-case letter", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
+[assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1400:Access modifier should be declared", Justification = "Reviewed", Scope = "type", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version")]
+[assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
 
 // TODO, review these suppressions.

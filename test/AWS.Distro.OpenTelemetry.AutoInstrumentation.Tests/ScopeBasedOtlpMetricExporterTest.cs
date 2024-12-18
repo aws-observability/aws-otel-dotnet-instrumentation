@@ -10,6 +10,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 /// <summary>
 /// ScopeBasedOtlpMetricExporter test class
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class ScopeBasedOtlpMetricExporterTest
 {
     private readonly string retainedScopeName = "test.retained";
