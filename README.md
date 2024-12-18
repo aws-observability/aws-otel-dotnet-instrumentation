@@ -55,3 +55,10 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
+## Checksum Verification
+
+Artifacts released will include a `.sha256` file for checksum verification starting from v1.32.6
+To verify, run the command `shasum -a 256 -c <artifact_name>.sha256` 
+It should return the output `<artifact_name>: OK` if the validation is successful
+
