@@ -8,10 +8,13 @@ using OpenTelemetry.Resources;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+#pragma warning disable CS8604 // Possible null reference argument.
+#pragma warning disable CS8602 // Possible null reference argument.
 public class AwsMetricAttributesSpanProcessorTest
 {
     private Mock<AwsMetricAttributeGenerator> generator = new Mock<AwsMetricAttributeGenerator>();
-    private Activity span;
+    private Activity? span;
     private ActivitySource testSource = new ActivitySource("test");
     private AwsMetricAttributesSpanProcessor attributesSpanProcessor;
 
@@ -98,13 +101,13 @@ public class AwsMetricAttributesSpanProcessorTest
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.span, Resource.Empty))
             .Returns(expectAttributes);
 
-        Activity span2 = this.testSource.StartActivity("test2", ActivityKind.Server);
+        Activity? span2 = this.testSource.StartActivity("test2", ActivityKind.Server);
         Dictionary<string, ActivityTagsCollection> expectAttribute2 = this.BuildMetricAttributes(false, this.MetricAttributesHelper(), span2);
         span2.SetTag("original key", "original value");
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(span2, Resource.Empty))
             .Returns(expectAttribute2);
 
-        Activity span3 = this.testSource.StartActivity("test3", ActivityKind.Server);
+        Activity? span3 = this.testSource.StartActivity("test3", ActivityKind.Server);
         Dictionary<string, ActivityTagsCollection> expectAttribute3 = this.BuildMetricAttributes(true, this.MetricAttributesHelper(), span3);
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(span3, Resource.Empty))
             .Returns(expectAttribute3);
@@ -157,13 +160,13 @@ public class AwsMetricAttributesSpanProcessorTest
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(this.span, Resource.Empty))
             .Returns(expectAttributes);
 
-        Activity span2 = this.testSource.StartActivity("test2", ActivityKind.Client);
+        Activity? span2 = this.testSource.StartActivity("test2", ActivityKind.Client);
         Dictionary<string, ActivityTagsCollection> expectAttribute2 = this.BuildMetricAttributes(false, this.MetricAttributesHelper(), span2);
         span2.SetTag("original key", "original value");
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(span2, Resource.Empty))
             .Returns(expectAttribute2);
 
-        Activity span3 = this.testSource.StartActivity("test3", ActivityKind.Client);
+        Activity? span3 = this.testSource.StartActivity("test3", ActivityKind.Client);
         Dictionary<string, ActivityTagsCollection> expectAttribute3 = this.BuildMetricAttributes(true, this.MetricAttributesHelper(), span3);
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(span3, Resource.Empty))
             .Returns(expectAttribute3);
@@ -189,7 +192,7 @@ public class AwsMetricAttributesSpanProcessorTest
     public void TestLocalRootSpan()
     {
         this.span.Dispose();
-        Activity localRootSpan1 = this.testSource.StartActivity("test local root", ActivityKind.Client);
+        Activity? localRootSpan1 = this.testSource.StartActivity("test local root", ActivityKind.Client);
         Dictionary<string, ActivityTagsCollection> expectAttribute1 = this.BuildMetricAttributes(true, this.MetricAttributesHelper(), localRootSpan1);
         localRootSpan1.SetTag("original key", "original value");
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(localRootSpan1, Resource.Empty))
@@ -203,7 +206,7 @@ public class AwsMetricAttributesSpanProcessorTest
             localRootSpan1.GetTagItem(this.MetricAttributesHelper().FirstOrDefault().Key));
         localRootSpan1.Dispose();
 
-        Activity localRootSpan2 = this.testSource.StartActivity("test local root", ActivityKind.Client);
+        Activity? localRootSpan2 = this.testSource.StartActivity("test local root", ActivityKind.Client);
         Dictionary<string, ActivityTagsCollection> expectAttribute2 = this.BuildMetricAttributes(true, this.MetricAttributesHelper(), localRootSpan2);
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(localRootSpan2, Resource.Empty))
             .Returns(expectAttribute2);
@@ -215,7 +218,7 @@ public class AwsMetricAttributesSpanProcessorTest
             localRootSpan2.GetTagItem(this.MetricAttributesHelper().FirstOrDefault().Key));
         localRootSpan2.Dispose();
 
-        Activity localRootSpan3 = this.testSource.StartActivity("test local root", ActivityKind.Client);
+        Activity? localRootSpan3 = this.testSource.StartActivity("test local root", ActivityKind.Client);
         Dictionary<string, ActivityTagsCollection> expectAttribute3 = this.BuildMetricAttributes(false, this.MetricAttributesHelper(), localRootSpan2);
         localRootSpan3.SetTag("original key", "original value");
         this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(localRootSpan3, Resource.Empty))
@@ -231,13 +234,13 @@ public class AwsMetricAttributesSpanProcessorTest
     {
         if (containsAttribute)
         {
-            this.span.SetTag("original key", "original value");
+            this.span?.SetTag("original key", "original value");
         }
     }
 
-    private Dictionary<string, ActivityTagsCollection> BuildMetricAttributes(bool containsAttribute, ActivityTagsCollection tagsCollection, Activity span = null)
+    private Dictionary<string, ActivityTagsCollection> BuildMetricAttributes(bool containsAttribute, ActivityTagsCollection tagsCollection, Activity? span = null)
     {
-        if (span == null)
+        if (span == null && this.span != null)
         {
             span = this.span;
         }
