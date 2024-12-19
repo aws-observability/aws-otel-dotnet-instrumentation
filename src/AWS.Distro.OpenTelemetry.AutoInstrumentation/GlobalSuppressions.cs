@@ -27,5 +27,6 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.NamingRules", "SA1307:Accessible fields should begin with upper-case letter", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1400:Access modifier should be declared", Justification = "Reviewed", Scope = "type", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1636:File header copyright text should match", Justification = "Reviewed")]
 
 // TODO, review these suppressions.
