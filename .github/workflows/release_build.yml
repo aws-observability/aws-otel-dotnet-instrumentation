@@ -109,7 +109,7 @@ jobs:
              "v${{ github.event.inputs.version }}" \
               --notes "Release Verions v${{ github.event.inputs.version }}"
 
-      - name: Upload artifacts to release
+      - name: Upload artifacts and checksum to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -118,15 +118,21 @@ jobs:
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
           cp "$file" "$base"
+          shasum -a 256 $base > $base.sha256
           gh release upload "v${{ github.event.inputs.version }}" \
             $base \
+            $base.sha256 \
             --clobber
           done
+          shasum -a 256 ./installationScripts/aws-otel-dotnet-install.sh | sed "s|./installationScripts/||" > aws-otel-dotnet-install.sh.sha256
+          shasum -a 256 ./installationScripts/AWS.Otel.DotNet.Auto.psm1 | sed "s|./installationScripts/||" > AWS.Otel.DotNet.Auto.psm1.sha256
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/aws-otel-dotnet-install.sh \
+            aws-otel-dotnet-install.sh.sha256 \
             --clobber
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
+            AWS.Otel.DotNet.Auto.psm1.sha256 \
             --clobber
 
   release-image:
