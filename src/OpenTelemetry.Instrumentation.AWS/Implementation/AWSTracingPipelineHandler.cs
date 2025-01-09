@@ -24,6 +24,8 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
 
     private static readonly ActivitySource AWSSDKActivitySource = new(ActivitySourceName, typeof(AWSTracingPipelineHandler).Assembly.GetPackageVersion());
 
+    private readonly AsyncLocal<Activity?> activity = new();
+
     private readonly AWSClientInstrumentationOptions options;
 
     public AWSTracingPipelineHandler(AWSClientInstrumentationOptions options)
@@ -31,7 +33,11 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
         this.options = options;
     }
 
-    public Activity? Activity { get; private set; }
+    public Activity? Activity
+    {
+        get => this.activity.Value;
+        private set => this.activity.Value = value;
+    }
 
     public override void InvokeSync(IExecutionContext executionContext)
     {
