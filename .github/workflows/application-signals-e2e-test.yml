@@ -59,6 +59,8 @@ jobs:
 
   upload-main-build-image:
     runs-on: ${{ matrix.os }}
+    outputs: 
+      short_sha: ${{ steps.short_sha.outputs.SHORT_SHA }}
     continue-on-error: true
     strategy:
       matrix:
@@ -67,13 +69,19 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        
+      - name: Get Short SHA
+        id: short_sha
+        run: |
+          shortsha="$(git rev-parse --short HEAD)"
+          echo "SHORT_SHA=$shortsha" >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME}}
           aws-region: us-east-1
-          
+
       - name: Login to Amazon private ECR
         id: login-ecr
         run: |
@@ -108,14 +116,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64 -f ./Dockerfile.linux .
-          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.linux .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }}
       
       - name: Build Windows container
         if: runner.os == 'Windows'
         run: |
-          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022 -f ./Dockerfile.windows2022 .
-          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022
+          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.windows2022 .
+          docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }}
         shell: powershell
   #
   # PACKAGED DISTRIBUTION LANGUAGE VERSION COVERAGE

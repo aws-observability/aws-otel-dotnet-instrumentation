@@ -69,6 +69,9 @@ internal sealed class AwsSpanProcessingUtil
     private static readonly string HttpRouteDataParsingEnabledConfig = "HTTP_ROUTE_DATA_PARSING_ENABLED";
     private static readonly string HttpRouteDataParsingEnabled = System.Environment.GetEnvironmentVariable(HttpRouteDataParsingEnabledConfig) ?? "false";
 
+    private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
+    private static readonly string? AwsLambdaFunctionName = Environment.GetEnvironmentVariable(AwsLambdaFunctionNameConfig);
+
     internal static List<string> GetDialectKeywords()
     {
         try
@@ -107,15 +110,32 @@ internal sealed class AwsSpanProcessingUtil
     // null, UnknownOperation or http.method value.
     internal static string GetIngressOperation(Activity span)
     {
-        string operation = span.DisplayName;
-
         if (ShouldUseInternalOperation(span))
         {
-            operation = InternalOperation;
+            return InternalOperation;
         }
 
+        // There is the case where we can run an ASP.NET application in a lambda environment.
+        // In this case, we need to decide which takes precedence for the aws.local.operation
+        // between functionName/FunctionHandler or the route template.
+        else if (IsLambdaEnvironment())
+        {
+            return AwsLambdaFunctionName + "/FunctionHandler";
+        }
+        else if (span.GetCustomProperty("HttpContextWeakRef") != null)
+        {
+            return GetRouteTemplate(span);
+        }
+
+        return RouteFallback(span);
+    }
+
+    internal static string GetRouteTemplate(Activity span)
+    {
+        string operation = span.DisplayName;
+
         // Access the HttpContext object to get the route data.
-        else if (span.GetCustomProperty("HttpContextWeakRef") is WeakReference<HttpContext> httpContextWeakRef &&
+        if (span.GetCustomProperty("HttpContextWeakRef") is WeakReference<HttpContext> httpContextWeakRef &&
             httpContextWeakRef.TryGetTarget(out var httpContext))
         {
 #if !NETFRAMEWORK
@@ -135,11 +155,22 @@ internal sealed class AwsSpanProcessingUtil
             {
                 operation = GenerateIngressOperation(span);
             }
+
+            return operation;
         }
+        else
+        {
+            return RouteFallback(span);
+        }
+    }
+
+    internal static string RouteFallback(Activity span)
+    {
+        string operation = span.DisplayName;
 
         // workaround for now so that both Server and Consumer spans have same operation
         // TODO: Update this and other languages so that all of them set the operation during propagation.
-        else if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
+        if (!IsValidOperation(span, operation) || (IsKeyPresent(span, AttributeUrlPath) && HttpRouteDataParsingEnabled == "false"))
         {
             operation = GenerateIngressOperation(span);
         }
@@ -148,7 +179,7 @@ internal sealed class AwsSpanProcessingUtil
     }
 
 #if NETFRAMEWORK
-    // Uses reflection to the get the HttpRequestRouteHelper.GetRouteTemplate to get the 
+    // Uses reflection to the get the HttpRequestRouteHelper.GetRouteTemplate to get the
     // route template from NETFRAMEWORK applications.
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AspNet/Implementation/HttpRequestRouteHelper.cs#L12
     internal static string? GetHttpRouteData(HttpContext httpContext)
@@ -263,6 +294,12 @@ internal sealed class AwsSpanProcessingUtil
     internal static bool IsLocalRoot(Activity span)
     {
         return span.Parent == null || !span.Parent.Context.IsValid() || span.HasRemoteParent;
+    }
+
+    internal static bool IsLambdaEnvironment()
+    {
+        // detect if running in AWS Lambda environment
+        return AwsLambdaFunctionName != null;
     }
 
     // To identify the SQS consumer spans produced by AWS SDK instrumentation

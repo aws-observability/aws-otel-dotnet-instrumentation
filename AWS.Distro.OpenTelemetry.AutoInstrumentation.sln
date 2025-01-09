@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MockCollector", "test\image
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenTelemetry.Instrumentation.AWS", "src\OpenTelemetry.Instrumentation.AWS\OpenTelemetry.Instrumentation.AWS.csproj", "{30B39779-F7AA-4AAB-B3AB-A0EFEEC35CED}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleLambdaFunction", "sample-applications\lambda-test-apps\SimpleLambdaFunction\src\SimpleLambdaFunction\SimpleLambdaFunction.csproj", "{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,10 @@ Global
 		{30B39779-F7AA-4AAB-B3AB-A0EFEEC35CED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{30B39779-F7AA-4AAB-B3AB-A0EFEEC35CED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{30B39779-F7AA-4AAB-B3AB-A0EFEEC35CED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -81,5 +87,6 @@ Global
 		{E3401B0D-DCE1-45C2-8178-2D21FA52F659} = {DD015346-5FF7-4298-AD31-326B18040908}
 		{ECD2F534-A9FB-48B4-8C06-6DD2F8B07C41} = {E3401B0D-DCE1-45C2-8178-2D21FA52F659}
 		{30B39779-F7AA-4AAB-B3AB-A0EFEEC35CED} = {BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}
+		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49} = {7E420F1D-B6D6-47AF-A430-5368FE14D2AA}
 	EndGlobalSection
 EndGlobal

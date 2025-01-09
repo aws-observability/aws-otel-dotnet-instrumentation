@@ -147,18 +147,37 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 try
                 {
-                    // for bedrock agent, we only extract one attribute based on the operation.
-                    if (AWSServiceType.IsBedrockAgentService(service))
-                    {
-                        if (AWSServiceHelper.OperationNameToResourceMap()[AWSServiceHelper.GetAWSOperationName(requestContext)] != parameter)
-                        {
-                            continue;
-                        }
-                    }
-
                     var property = request.GetType().GetProperty(parameter);
                     if (property != null)
                     {
+                        // for bedrock runtime, LLM specific attributes are extracted based on the model ID.
+                        if (AWSServiceType.IsBedrockRuntimeService(service) && parameter == "ModelId")
+                        {
+                            var model = property.GetValue(request);
+                            if (model != null)
+                            {
+                                var modelString = model.ToString();
+                                if (modelString != null)
+                                {
+                                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, request, modelString, true);
+                                }
+                            }
+                        }
+
+                        // for secrets manager, only extract SecretId from request if it is a secret ARN.
+                        if (AWSServiceType.IsSecretsManagerService(service) && parameter == "SecretId")
+                        {
+                            var secretId = property.GetValue(request);
+                            if (secretId != null)
+                            {
+                                var secretIdString = secretId.ToString();
+                                if (secretIdString != null && !secretIdString.StartsWith("arn:aws:secretsmanager:"))
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+
                         if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
                         {
                             activity.SetTag(attribute, property.GetValue(request));
@@ -189,7 +208,7 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
         }
         else if (AWSServiceType.IsBedrockRuntimeService(service))
         {
-            activity.SetTag(AWSSemanticConventions.AttributeGenAiSystem, "aws_bedrock");
+            activity.SetTag(AWSSemanticConventions.AttributeGenAiSystem, "aws.bedrock");
         }
     }
 
@@ -202,16 +221,6 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 try
                 {
-                    // for bedrock agent, extract attribute from object in response.
-                    if (AWSServiceType.IsBedrockAgentService(service))
-                    {
-                        var operationName = Utils.RemoveSuffix(response.GetType().Name, "Response");
-                        if (AWSServiceHelper.OperationNameToResourceMap()[operationName] == parameter)
-                        {
-                            AddBedrockAgentResponseAttribute(activity, response, parameter);
-                        }
-                    }
-
                     var property = response.GetType().GetProperty(parameter);
                     if (property != null)
                     {
@@ -225,6 +234,19 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                 {
                     // Guard against any reflection-related exceptions when running in AoT.
                     // See https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/1543#issuecomment-1907667722.
+                }
+            }
+        }
+        // for bedrock runtime, LLM specific attributes are extracted based on the model ID.
+        if (AWSServiceType.IsBedrockRuntimeService(service))
+        {
+            var model = activity.GetTagItem(AWSSemanticConventions.AttributeGenAiModelId);
+            if (model != null)
+            {
+                var modelString = model.ToString();
+                if (modelString != null)
+                {
+                    AWSLlmModelProcessor.ProcessGenAiAttributes(activity, responseContext.Response, modelString, false);
                 }
             }
         }

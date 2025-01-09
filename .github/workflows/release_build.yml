@@ -80,12 +80,6 @@ jobs:
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: ./installationScripts
-      
-      - name: Download nuget package
-        uses: actions/download-artifact@v3
-        with:
-          name: nuget-packages.zip
-          path: ./artifacts/nuget
 
       - name: Configure AWS credentials for Private S3 Bucket
         uses: aws-actions/configure-aws-credentials@v4
@@ -103,7 +97,6 @@ jobs:
           done
           aws s3 cp ./installationScripts/aws-otel-dotnet-install.sh "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/aws-otel-dotnet-install.sh"
           aws s3 cp ./installationScripts/AWS.Otel.DotNet.Auto.psm1 "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/AWS.Otel.DotNet.Auto.psm1"
-          aws s3 cp ./artifacts/nuget/nuget-packages.zip "${{ env.RELEASE_PRIVATE_S3 }}/$PREFIX/nuget-packages.zip"
 
       # Publish to GitHub releases
       - name: Create GH release
@@ -116,7 +109,7 @@ jobs:
              "v${{ github.event.inputs.version }}" \
               --notes "Release Verions v${{ github.event.inputs.version }}"
 
-      - name: Upload artifacts to release
+      - name: Upload artifacts and checksum to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -125,18 +118,21 @@ jobs:
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
           cp "$file" "$base"
+          shasum -a 256 $base > $base.sha256
           gh release upload "v${{ github.event.inputs.version }}" \
             $base \
+            $base.sha256 \
             --clobber
           done
+          shasum -a 256 ./installationScripts/aws-otel-dotnet-install.sh | sed "s|./installationScripts/||" > aws-otel-dotnet-install.sh.sha256
+          shasum -a 256 ./installationScripts/AWS.Otel.DotNet.Auto.psm1 | sed "s|./installationScripts/||" > AWS.Otel.DotNet.Auto.psm1.sha256
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/aws-otel-dotnet-install.sh \
+            aws-otel-dotnet-install.sh.sha256 \
             --clobber
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
-            --clobber
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./artifacts/nuget/nuget-packages.zip \
+            AWS.Otel.DotNet.Auto.psm1.sha256 \
             --clobber
 
   release-image:

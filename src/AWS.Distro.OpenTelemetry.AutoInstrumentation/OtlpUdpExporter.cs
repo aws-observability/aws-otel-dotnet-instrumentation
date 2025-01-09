@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -20,7 +21,7 @@ using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 /// </summary>
 public class OtlpUdpExporter : BaseExporter<Activity>
 {
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpUdpExporter>();
 
     private UdpExporter udpExporter;
@@ -208,6 +209,7 @@ public class OtlpUdpExporter : BaseExporter<Activity>
                 var settings = new JsonSerializerSettings();
                 settings.Converters.Add(new ByteStringConverter());
                 settings.Converters.Add(new SpanKindConverter());
+                settings.Converters.Add(new StatusCodeConverter());
 
                 // Below is a workaround to casting and works by converting an object into JSON then converting the
                 // JSON string back into the required object type. The reason casting isn't working is because of different
@@ -249,7 +251,7 @@ internal class UdpExporter
     internal const string ProtocolHeader = "{\"format\":\"json\",\"version\":1}\n";
     internal const string DefaultFormatOtelTracesBinaryPrefix = "T1S";
 
-    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddConsole());
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<UdpExporter>();
 
     private string endpoint;
@@ -354,6 +356,36 @@ internal class SpanKindConverter : JsonConverter<Span.Types.SpanKind>
 
     /// <inheritdoc/>
     public override void WriteJson(JsonWriter writer, Span.Types.SpanKind value, JsonSerializer serializer)
+    {
+        // Write the string representation of the enum
+        writer.WriteValue(value.ToString());
+    }
+}
+
+internal class StatusCodeConverter : JsonConverter<Status.Types.StatusCode>
+{
+    /// <inheritdoc/>
+    public override Status.Types.StatusCode ReadJson(JsonReader reader, Type objectType, Status.Types.StatusCode existingValue, bool hasExistingValue, JsonSerializer serializer)
+    {
+        // Handle the string to enum conversion
+        string? enumString = reader.Value?.ToString();
+
+        // Convert the string representation to the corresponding enum value
+        switch (enumString)
+        {
+            case "STATUS_CODE_UNSET":
+                return Status.Types.StatusCode.Unset;
+            case "STATUS_CODE_OK":
+                return Status.Types.StatusCode.Ok;
+            case "STATUS_CODE_ERROR":
+                return Status.Types.StatusCode.Error;
+            default:
+                throw new JsonSerializationException($"Unknown StatusCode: {enumString}");
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void WriteJson(JsonWriter writer, Status.Types.StatusCode value, JsonSerializer serializer)
     {
         // Write the string representation of the enum
         writer.WriteValue(value.ToString());
