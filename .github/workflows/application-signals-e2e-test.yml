@@ -177,6 +177,14 @@ jobs:
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-windows-canary-test'
       caller-workflow-name: 'main-build'
+
+  dotnet-k8s-test:
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-k8s-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      adot-image-name: ${{ inputs.ec2-default-image-name }}
         
   build-lambda-staging-sample-app:
     runs-on: ubuntu-latest
