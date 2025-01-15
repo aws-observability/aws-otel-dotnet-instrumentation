@@ -184,8 +184,6 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
     export OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER="$_HANDLER"
     export _HANDLER="AWS.Distro.OpenTelemetry.AutoInstrumentation::AWS.Distro.OpenTelemetry.AutoInstrumentation.LambdaWrapper::TracingFunctionHandler"
 
-    echo "$DOTNET_SHARED_STORE"
-
     if [ -z "${OTEL_EXPORTER_OTLP_PROTOCOL}" ]; then
       export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
     fi
@@ -221,6 +219,10 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
     if [ -z "${OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED}" ]; then
       export OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED="false";
     fi
+
+    # HTTP Specific Instrumentations enabled by default for Lambda
+    export OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_ENABLED="true";
+    export OTEL_DOTNET_AUTO_TRACES_HTTPCLIENT_INSTRUMENTATION_ENABLED="true";
 
   else
     export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
