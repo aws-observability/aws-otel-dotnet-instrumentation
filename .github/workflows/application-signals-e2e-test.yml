@@ -44,11 +44,11 @@ jobs:
           role-external-id: ApplicationSignalsDotnet
           aws-region: us-east-1
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.ec2-default-image-name }}
       
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.ec2-windows-image-name }}
 
@@ -89,14 +89,14 @@ jobs:
         
       - name: Download Linux x64 Artifact
         if: runner.os == 'Linux'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
           
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
@@ -161,7 +161,7 @@ jobs:
     with:
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
+      test-cluster-name: 'e2e-dotnet-windows-canary-test'
       caller-workflow-name: 'main-build'
         
   build-lambda-staging-sample-app:
