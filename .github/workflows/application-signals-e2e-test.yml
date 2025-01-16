@@ -161,7 +161,7 @@ jobs:
     with:
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
+      test-cluster-name: 'e2e-dotnet-windows-canary-test'
       caller-workflow-name: 'main-build'
         
   build-lambda-staging-sample-app:
