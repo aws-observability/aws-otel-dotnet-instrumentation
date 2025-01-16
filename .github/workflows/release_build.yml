@@ -354,7 +354,7 @@ jobs:
           -o .\Deployment\nuget-packages
 
       - name: Upload nugets to this GitHub Action run as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nuget-packages.zip
           path: Deployment/nuget-packages/
