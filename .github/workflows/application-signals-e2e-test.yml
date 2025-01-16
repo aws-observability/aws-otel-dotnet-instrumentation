@@ -184,7 +184,7 @@ jobs:
     with:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
-      adot-image-name: ${{ inputs.ec2-default-image-name }}
+      adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
         
   build-lambda-staging-sample-app:
     runs-on: ubuntu-latest
