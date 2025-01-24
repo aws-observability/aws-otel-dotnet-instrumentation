@@ -1,7 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env
 WORKDIR /app
 COPY . ./
-RUN dotnet publish integration-test-app/*.csproj -c Release -o out
+ARG TARGET_DOTNET_RUNTIME=linux-x64
+RUN dotnet publish integration-test-app/*.csproj -c Release -o out --runtime ${TARGET_DOTNET_RUNTIME} --self-contained true
 
 FROM mcr.microsoft.com/dotnet/aspnet:6.0
 WORKDIR /app

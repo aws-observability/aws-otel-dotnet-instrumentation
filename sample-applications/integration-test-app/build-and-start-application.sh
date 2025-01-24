@@ -17,7 +17,8 @@ rm -rf ./OpenTelemetryDistribution
 cp -r ../../OpenTelemetryDistribution .
 check_if_step_failed_and_exit "There was an error moving OpenTelemetryDistribution to the sample app , exiting"
 
-docker build -t aspnetapp .
+# On ARM CPU, set TARGET_DOTNET_RUNTIME=linux-arm64
+docker build --build-arg TARGET_DOTNET_RUNTIME=linux-x64 -t aspnetapp .
 check_if_step_failed_and_exit "There was an error building the docker container, exiting"
 
 docker compose up 
