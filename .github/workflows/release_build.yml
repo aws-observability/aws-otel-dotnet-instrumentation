@@ -62,7 +62,7 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
           path: ./artifacts/linux/x64-musl
-      
+
       - name: Download Linux arm64 MUSL Artifact
         uses: actions/download-artifact@v4
         with:
@@ -74,7 +74,7 @@ jobs:
         with:
           name: aws-otel-dotnet-install.sh
           path: ./installationScripts
-      
+
       - name: Download psm1 installation script
         uses: actions/download-artifact@v4
         with:
