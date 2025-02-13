@@ -325,6 +325,18 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         this.ValidateMetricsGeneratedForStatusDataOk(600, ExpectedStatusMetric.NEITHER);
     }
 
+    [Fact]
+    public void TestOnEndMetricsGenerationFromEc2MetadataApi()
+    {
+        Activity? spanDataMock = this.activitySource.StartActivity("test", ActivityKind.Client);
+        this.SetLatency(spanDataMock);
+        Dictionary<string, ActivityTagsCollection> expectAttributes = this.BuildEc2MetadataApiMetricAttributes();
+        this.generator.Setup(g => g.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource))
+            .Returns(expectAttributes);
+        this.awsSpanMetricsProcessor.OnEnd(spanDataMock);
+        this.VerifyHistogramRecords(expectAttributes, 0, 0);
+    }
+
     private void ValidateMetricsGeneratedForAttributeStatusCode(
         int? awsStatusCode, ExpectedStatusMetric expectedStatusMetric)
     {
@@ -521,6 +533,13 @@ public class AwsSpanMetricsProcessorTest : IDisposable
             }
         }
 
+        return attributes;
+    }
+
+    private Dictionary<string, ActivityTagsCollection> BuildEc2MetadataApiMetricAttributes()
+    {
+        Dictionary<string, ActivityTagsCollection> attributes = new Dictionary<string, ActivityTagsCollection>();
+        attributes.Add(MetricAttributeGeneratorConstants.DependencyMetric, new ActivityTagsCollection([new KeyValuePair<string, object?>(AttributeAWSRemoteService, "169.254.169.254")]));
         return attributes;
     }
 
