@@ -90,6 +90,11 @@ public class Plugin
     /// <param name="tracerProvider"><see cref="TracerProvider"/> Provider to configure</param>
     public void TracerProviderInitialized(TracerProvider tracerProvider)
     {
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment())
+        {
+            tracerProvider.AddProcessor(new AwsLambdaSpanProcessor());
+        }
+
         if (this.IsApplicationSignalsEnabled())
         {
             // setting the default propagators to be W3C tracecontext, b3, b3multi and xray
