@@ -182,7 +182,6 @@ public class OtlpExporterUtils
         // Create an instance of SdkLimitOptions using the default parameterless constructor
         object? sdkLimitOptionsInstance = Activator.CreateInstance(sdkLimitOptionsType);
         return sdkLimitOptionsInstance;
-
     }
 }
 

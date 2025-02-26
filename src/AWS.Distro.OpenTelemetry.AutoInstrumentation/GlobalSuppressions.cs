@@ -28,5 +28,6 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1400:Access modifier should be declared", Justification = "Reviewed", Scope = "type", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1636:File header copyright text should match", Justification = "Reviewed")]
+[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpExporterUtils.SerializeSpans(OpenTelemetry.Batch{System.Diagnostics.Activity},OpenTelemetry.Resources.Resource)~System.Byte[]")]
 
 // TODO, review these suppressions.
