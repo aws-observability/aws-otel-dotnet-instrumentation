@@ -13,7 +13,8 @@ using OpenTelemetry.Proto.Trace.V1;
 using OpenTelemetry.Resources;
 using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
-public class OtlpExporterUtils {
+public class OtlpExporterUtils
+{
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpExporterUtils>();
 
@@ -181,6 +182,7 @@ public class OtlpExporterUtils {
         // Create an instance of SdkLimitOptions using the default parameterless constructor
         object? sdkLimitOptionsInstance = Activator.CreateInstance(sdkLimitOptionsType);
         return sdkLimitOptionsInstance;
+
     }
 }
 
