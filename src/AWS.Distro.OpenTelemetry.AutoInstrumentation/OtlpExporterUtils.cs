@@ -8,6 +8,8 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using OpenTelemetry;
+using OpenTelemetry.Proto.Collector.Trace.V1;
+using OpenTelemetry.Proto.Trace.V1;
 using OpenTelemetry.Resources;
 using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
