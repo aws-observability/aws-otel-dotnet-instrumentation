@@ -445,7 +445,10 @@ public class Plugin
 
         // We should sample the parent span only as any trace flags set on the parent
         // automatically propagates to all child spans (the X-Ray sampler is wrapped by ParentBasedSampler).
-        if (activity.Parent != null)
+        // An activity can still have a parent even if the parent object is null. This is the case if the
+        // parent is remote. In this case, the child span will inherit the sampling decision from the parent context
+        // but won't have a Parent object.
+        if (activity.Parent != null || activity.HasRemoteParent || activity.ParentId != null)
         {
             return;
         }
