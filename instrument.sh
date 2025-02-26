@@ -225,13 +225,34 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
     export OTEL_DOTNET_AUTO_TRACES_HTTPCLIENT_INSTRUMENTATION_ENABLED="true";
 
   else
-    export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-    export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316"
-    export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics"
-    export OTEL_METRICS_EXPORTER="none"
-    export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
-    export OTEL_TRACES_SAMPLER="xray"
-    export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000"
+    if [ -z "${OTEL_EXPORTER_OTLP_PROTOCOL}" ]; then
+      export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf";
+    fi
+
+    if [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT}" ]; then
+      export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316";
+    fi
+
+    if [ -z "${OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT}" ]; then
+      export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics";
+    fi
+
+    if [ -z "${OTEL_METRICS_EXPORTER}" ]; then
+      export OTEL_METRICS_EXPORTER="none";
+    fi
+
+    if [ -z "${OTEL_AWS_APPLICATION_SIGNALS_ENABLED}" ]; then
+      export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true";
+    fi
+
+    if [ -z "${OTEL_TRACES_SAMPLER}" ]; then
+      export OTEL_TRACES_SAMPLER="xray";
+    fi
+
+    if [ -z "${OTEL_TRACES_SAMPLER_ARG}" ]; then
+      export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000";
+    fi
+
   fi
 
 fi
