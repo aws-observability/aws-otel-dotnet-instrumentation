@@ -77,7 +77,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
         {
             IRequest sigV4Headers = Task.Run(() =>
             {
-                return this.SendSignedRequestAsync(serializedSpans);
+                return this.GetSignedSigV4Request(serializedSpans);
             }).GetAwaiter().GetResult();
 
             sigV4Headers.Headers.Remove("content-type");
@@ -138,7 +138,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
             : informationalVersion;
     }
 
-    private async Task<IRequest> SendSignedRequestAsync(byte[] content)
+    private async Task<IRequest> GetSignedSigV4Request(byte[] content)
     {
         IRequest request = new DefaultRequest(new EmptyAmazonWebServiceRequest(), ServiceName)
         {
