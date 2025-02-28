@@ -27,7 +27,7 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
             this.lambdaActivity = activity;
         }
 
-        if (activity.Source.Name.Equals("Microsoft.AspNetCore") && activity.ParentId != null && 
+        if (activity.Source.Name.Equals("Microsoft.AspNetCore") && activity.ParentId != null &&
             (activity.ParentId.Equals(this.lambdaActivity?.SpanId) || activity.ParentId.Equals(this.lambdaActivity?.Id)))
         {
             this.lambdaActivity.SetTag(AttributeAWSTraceLambdaFlagMultipleServer, "true");
