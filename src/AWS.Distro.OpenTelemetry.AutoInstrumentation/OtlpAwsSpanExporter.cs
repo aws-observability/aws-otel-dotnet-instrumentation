@@ -95,6 +95,11 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
             httpRequest.Content = content;
 
             var response = this.client.SendAsync(httpRequest).Result;
+
+            if (!response.IsSuccessStatusCode) {
+                Logger.LogError("Failed to export spans: " + response.ReasonPhrase);
+                return ExportResult.Failure;
+            }
         }
         catch (Exception ex)
         {
