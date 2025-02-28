@@ -8,7 +8,8 @@ using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
-/// add more summary here
+/// Simple Span Processor that adds a new Lambda specific flag to the Lambda Handler Span
+/// This is used to show that the lambda span belongs to a trace with multiple server spans
 /// </summary>
 public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
 {
@@ -16,22 +17,18 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
 
     /// <summary>
     /// OnStart caches a reference to the lambda activity if it exists and adds
-    /// a flag to signify whether there are multipel server spans or not.
+    /// a flag to signify whether there are multiple server spans or not.
     /// </summary>
     /// <param name="activity"><see cref="Activity"/> to configure</param>
     public override void OnStart(Activity activity)
     {
-        Console.WriteLine($"Hello, this is source name = {activity.Source.Name}");
-
-        // this processor will only be hooked in for lambda. Question would be how does this affect perf?
-        // think about merging the times as well. We can merge the start but for the end, since once the lambda ends,
-        // we can't guarentee that the children didn't end as well.
         if (activity.Source.Name.Equals("OpenTelemetry.Instrumentation.AWSLambda"))
         {
             this.lambdaActivity = activity;
         }
 
-        if (activity.Source.Name.Equals("Microsoft.AspNetCore") && activity.ParentId != null && activity.ParentId.Equals(this.lambdaActivity?.SpanId))
+        if (activity.Source.Name.Equals("Microsoft.AspNetCore") && activity.ParentId != null && 
+            (activity.ParentId.Equals(this.lambdaActivity?.SpanId) || activity.ParentId.Equals(this.lambdaActivity?.Id)))
         {
             this.lambdaActivity.SetTag(AttributeAWSTraceLambdaFlagMultipleServer, "true");
         }
