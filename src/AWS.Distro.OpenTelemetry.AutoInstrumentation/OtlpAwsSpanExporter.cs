@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using Amazon;
@@ -14,6 +15,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
+using OpenTelemetry.Proto.Collector.Trace.V1;
 using OpenTelemetry.Resources;
 
 /// <summary>
@@ -41,8 +44,8 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
     private readonly HttpClient client = new HttpClient();
     private readonly Uri endpoint;
     private readonly string region;
+    private readonly int timeout;
     private readonly Resource processResource;
-    private readonly CancellationTokenSource token;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OtlpAwsSpanExporter"/> class.
@@ -52,7 +55,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
     public OtlpAwsSpanExporter(OtlpExporterOptions options, Resource processResource)
     {
         this.endpoint = options.Endpoint;
-        this.token = new CancellationTokenSource(options.TimeoutMilliseconds);
+        this.timeout = options.TimeoutMilliseconds;
 
         // Verified in Plugin.cs that the endpoint matches the XRay endpoint format.
         this.region = this.endpoint.AbsoluteUri.Split('.')[1];
@@ -75,31 +78,13 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
 
         try
         {
-            IRequest sigV4Headers = Task.Run(() =>
+           HttpResponseMessage message = Task.Run(() =>
             {
-                return this.GetSignedSigV4Request(serializedSpans);
+                // The retry delay cannot exceed the configured timeout period for otlp exporter.
+                // If the backend responds with `RetryAfter` duration that would result in exceeding the configured timeout period
+                // we would fail and drop the data.
+                return RetryHelper.ExecuteWithRetryAsync(() => this.InjectSigV4AndSendAsync(httpRequest, serializedSpans), TimeSpan.FromMilliseconds(this.timeout));
             }).GetAwaiter().GetResult();
-
-            sigV4Headers.Headers.Remove("content-type");
-            sigV4Headers.Headers.Add("User-Agent", GetUserAgentString());
-
-            foreach (var header in sigV4Headers.Headers)
-            {
-                httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            }
-
-            var content = new ByteArrayContent(serializedSpans);
-            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(ContentType);
-
-            httpRequest.Method = HttpMethod.Post;
-            httpRequest.Content = content;
-
-            var response = this.client.SendAsync(httpRequest).Result;
-
-            if (!response.IsSuccessStatusCode) {
-                Logger.LogError("Failed to export spans: " + response.ReasonPhrase);
-                return ExportResult.Failure;
-            }
         }
         catch (Exception ex)
         {
@@ -113,7 +98,6 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
     /// <inheritdoc/>
     protected override bool OnShutdown(int timeoutMilliseconds)
     {
-        this.token.Cancel();
         return base.OnShutdown(timeoutMilliseconds);
     }
 
@@ -167,7 +151,172 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
         return request;
     }
 
+    private async Task<HttpResponseMessage> InjectSigV4AndSendAsync(HttpRequestMessage httpRequest, byte[] serializedSpans)
+    {
+        IRequest sigV4Request = await this.GetSignedSigV4Request(serializedSpans);
+
+        sigV4Request.Headers.Remove("content-type");
+        sigV4Request.Headers.Add("User-Agent", GetUserAgentString());
+
+        foreach (var header in sigV4Request.Headers)
+        {
+            httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        var content = new ByteArrayContent(serializedSpans);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(ContentType);
+
+        httpRequest.Method = HttpMethod.Post;
+        httpRequest.Content = content;
+
+        return await this.client.SendAsync(httpRequest);
+    }
+
     private class EmptyAmazonWebServiceRequest : AmazonWebServiceRequest
     {
+    }
+}
+
+// Implementation based on:
+// https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L41
+internal class RetryHelper
+{
+    private const int InitialBackoffMilliseconds = 1000;
+    private const int MaxBackoffMilliseconds = 5000;
+    private const double BackoffMultiplier = 1.5;
+    private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+    private static readonly ILogger Logger = Factory.CreateLogger<RetryHelper>();
+
+#if !NET6_0_OR_GREATER
+    private static readonly Random Randomizer = new Random();
+#endif
+
+    // A helper method to continuously retry the given HttpRequest function sender until it:
+    // 1. There is a success status code
+    // 2. Fails with an unretryable status code.
+    // 3. Hits the given deadline time
+    // Implementation is based on upstream's ExportClient retryable code:
+    // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L130
+    public static async Task<HttpResponseMessage> ExecuteWithRetryAsync(
+        Func<Task<HttpResponseMessage>> sendRequestFunc,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        int currentDelay = InitialBackoffMilliseconds;
+        while (true)
+        {
+            try
+            {
+                // Attempt to send the http request
+                var response = await sendRequestFunc();
+
+                // Stop and return the response if the status code is success or there is an unretryable status code.
+                if (response.IsSuccessStatusCode || !IsRetryableStatusCode(response.StatusCode))
+                {
+                    string loggingMessage = response.IsSuccessStatusCode ? $"Spans successfully exported with status code {response.StatusCode}" : $"Spans were not exported with unretryable status code: {response.StatusCode}";
+                    Logger.LogInformation(loggingMessage);
+                    return response;
+                }
+
+                // First check if the backend responds with a retry delay
+                TimeSpan? retryAfterDelay = response.Headers.RetryAfter != null ? response.Headers.RetryAfter.Delta : null;
+
+                TimeSpan delayDuration;
+
+                // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L54
+                if (retryAfterDelay.HasValue)
+                {
+                    delayDuration = retryAfterDelay.Value;
+
+                    try
+                    {
+                        currentDelay = Convert.ToInt32(retryAfterDelay.Value.TotalMilliseconds);
+                    }
+                    catch (OverflowException)
+                    {
+                        currentDelay = MaxBackoffMilliseconds;
+                    }
+                }
+                else
+                {
+                    // If no response for delay from backend we add our own jitter delay
+                    delayDuration = TimeSpan.FromMilliseconds(GetRandomNumber(0, currentDelay));
+                }
+
+                Logger.LogInformation("Spans were not exported with status code: {StatusCode}. Retrying again after: {DelayMilliseconds} ms", response.StatusCode, delayDuration.Milliseconds);
+
+                // If delay exceeds deadline. We drop the http requesst completely.
+                if (DateTime.UtcNow + delayDuration > deadline)
+                {
+                    Logger.LogInformation("Timeout reached. Dropping Spans with status code {StatusCode}.", response.StatusCode);
+                    return response;
+                }
+
+                currentDelay = CalculateNextRetryDelay(currentDelay);
+                await Task.Delay(delayDuration);
+            }
+            catch (Exception e)
+            {
+                // Handling exceptions. Same logic, we retry with custom jitter delay until it succeeds. If it fails by the time deadline is reached we drop
+                // the request completely.
+                if (DateTime.UtcNow >= deadline)
+                {
+                    var delay = TimeSpan.FromMilliseconds(GetRandomNumber(0, currentDelay));
+                    currentDelay = CalculateNextRetryDelay(currentDelay);
+                    if (DateTime.UtcNow + delay <= deadline)
+                    {
+                        Logger.LogInformation("Exception caught {@ExceptionMessage}. Retrying again after {@Delay}", e.Message, delay);
+
+                        await Task.Delay(delay);
+                        continue;
+                    }
+                }
+
+                Logger.LogInformation("Exception caught {@ExceptionMessage} and timeout was reached. Dropping spans with exception: {@ExceptionMessage}", e.Message, e.Message);
+                throw;
+            }
+        }
+    }
+
+    // Gets a random number to calculate the next delay before retrying.
+    // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L246
+    private static int GetRandomNumber(int min, int max)
+    {
+#if NET6_0_OR_GREATER
+        return Random.Shared.Next(min, max);
+#else
+        lock (Random)
+        {
+            return Random.Next(min, max);
+        }
+#endif
+    }
+
+   // Is the status code a retryable request?
+   // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L228
+    private static bool IsRetryableStatusCode(HttpStatusCode statusCode)
+    {
+        switch (statusCode)
+        {
+#if NETSTANDARD2_1_OR_GREATER || NET
+                case HttpStatusCode.TooManyRequests:
+#else
+                case (HttpStatusCode)429:
+#endif
+                case HttpStatusCode.BadGateway:
+                case HttpStatusCode.ServiceUnavailable:
+                case HttpStatusCode.GatewayTimeout:
+                    return true;
+                default:
+                    return false;
+        }
+    }
+
+    // Calculates the next delay before retrying to send the request again using the BackoffMultiplier
+    // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/ExportClient/OtlpRetry.cs#L192
+    private static int CalculateNextRetryDelay(int currentDelayMs)
+    {
+        var nextDelay = currentDelayMs * BackoffMultiplier;
+        return Convert.ToInt32(Math.Min(nextDelay, MaxBackoffMilliseconds));
     }
 }
