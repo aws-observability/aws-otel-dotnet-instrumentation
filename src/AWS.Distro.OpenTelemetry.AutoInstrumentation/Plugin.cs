@@ -108,21 +108,6 @@ public class Plugin
 
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
-            // We want to be adding the exporter as the last processor in the traceProvider since processors
-            // are executed in the order they were added to the provider.
-            if (AwsSpanProcessingUtil.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
-            {
-                Resource processResource = tracerProvider.GetResource();
-
-                // UDP exporter for sampled spans
-                var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
-                tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
-
-                // UDP exporter for unsampled spans
-                var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
-                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
-            }
-
             // Disable Application Metrics for Lambda environment
             if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
             {
@@ -150,6 +135,25 @@ public class Plugin
                 Resource resource = provider.GetResource();
                 BaseProcessor<Activity> spanMetricsProcessor = AwsSpanMetricsProcessorBuilder.Create(resource, provider).Build();
                 tracerProvider.AddProcessor(spanMetricsProcessor);
+            }
+        }
+
+        // We want to be adding the exporter as the last processor in the traceProvider since processors
+        // are executed in the order they were added to the provider.
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
+        {
+            Resource processResource = tracerProvider.GetResource();
+
+            // UDP exporter for sampled spans
+            var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+            tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+
+            if (this.IsApplicationSignalsEnabled())
+            {
+                // Register UDP Exporter to export unsampled traces in Lambda
+                // only when Application Signals enabled
+                var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
             }
         }
     }
@@ -445,7 +449,10 @@ public class Plugin
 
         // We should sample the parent span only as any trace flags set on the parent
         // automatically propagates to all child spans (the X-Ray sampler is wrapped by ParentBasedSampler).
-        if (activity.Parent != null)
+        // An activity can still have a parent even if the parent object is null. This is the case if the
+        // parent is remote. In this case, the child span will inherit the sampling decision from the parent context
+        // but won't have a Parent object.
+        if (activity.Parent != null || activity.HasRemoteParent || activity.ParentId != null)
         {
             return;
         }
