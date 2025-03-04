@@ -3,13 +3,10 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Reflection;
-using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
-using OpenTelemetry.Extensions.AWS.Trace;
 #if !NETFRAMEWORK
 using Microsoft.AspNetCore.Http;
 using OpenTelemetry.Instrumentation.AspNetCore;
@@ -18,6 +15,7 @@ using OpenTelemetry.Instrumentation.AWSLambda;
 using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
+using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
@@ -25,7 +23,6 @@ using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
-using System.Text.RegularExpressions;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
