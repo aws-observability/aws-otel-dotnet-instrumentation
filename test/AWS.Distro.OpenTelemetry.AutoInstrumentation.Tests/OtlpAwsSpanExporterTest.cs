@@ -187,13 +187,15 @@ public class OtlpAwsSpanExporterTest
                 StatusCode = HttpStatusCode.OK,
                 Content = new StringContent(string.Empty),
             };
-
+            this.options.TimeoutMilliseconds = 5000;
             BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
             (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
             Assert.Equal(ExportResult.Failure, execute.result);
-            Assert.True(mockAuth.CallCount > 1);
+            Assert.True(mockAuth.CallCount > 1); // The delay is random for exceptions. Hard to tell how times it retries.
             Assert.Null(execute.capturedRequest);
         }
+
+        this.options.TimeoutMilliseconds = 1000;
     }
 
     private static void ValidateSigV4Headers(HttpRequestMessage? capturedRequest, string expectedAuth, string expectedAmzDate, string expectedAmzContentSha256)
