@@ -90,11 +90,6 @@ public class Plugin
     /// <param name="tracerProvider"><see cref="TracerProvider"/> Provider to configure</param>
     public void TracerProviderInitialized(TracerProvider tracerProvider)
     {
-        if (AwsSpanProcessingUtil.IsLambdaEnvironment())
-        {
-            tracerProvider.AddProcessor(new AwsLambdaSpanProcessor());
-        }
-
         if (this.IsApplicationSignalsEnabled())
         {
             // setting the default propagators to be W3C tracecontext, b3, b3multi and xray
@@ -145,20 +140,24 @@ public class Plugin
 
         // We want to be adding the exporter as the last processor in the traceProvider since processors
         // are executed in the order they were added to the provider.
-        if (AwsSpanProcessingUtil.IsLambdaEnvironment() && !this.HasCustomTracesEndpoint())
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
-            Resource processResource = tracerProvider.GetResource();
+            tracerProvider.AddProcessor(new AwsLambdaSpanProcessor());
 
-            // UDP exporter for sampled spans
-            var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
-            tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
-
-            if (this.IsApplicationSignalsEnabled())
+            if (!this.HasCustomTracesEndpoint())
             {
-                // Register UDP Exporter to export unsampled traces in Lambda
-                // only when Application Signals enabled
-                var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
-                tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+                Resource processResource = tracerProvider.GetResource();
+
+                // UDP exporter for sampled spans
+                var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+                tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+                if (this.IsApplicationSignalsEnabled())
+                {
+                    // Register UDP Exporter to export unsampled traces in Lambda
+                    // only when Application Signals enabled
+                    var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                    tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
+                }
             }
         }
     }
