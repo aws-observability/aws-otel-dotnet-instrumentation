@@ -3,10 +3,13 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Reflection;
+using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Extensions.AWS.Trace;
 #if !NETFRAMEWORK
 using Microsoft.AspNetCore.Http;
 using OpenTelemetry.Instrumentation.AspNetCore;
@@ -167,7 +170,7 @@ public class Plugin
             OtlpExporterOptions options = new OtlpExporterOptions();
 #pragma warning disable CS8604 // Possible null reference argument.
 
-            // This is already checked in isSigV4Enabled predicate.
+            // This is already checked in isSigV4Enabled predicate
             options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
 #pragma warning restore CS8604 // Possible null reference argument.
             options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
