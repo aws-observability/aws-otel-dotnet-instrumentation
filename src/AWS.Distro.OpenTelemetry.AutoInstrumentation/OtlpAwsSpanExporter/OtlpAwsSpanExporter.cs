@@ -309,9 +309,9 @@ internal class RetryHelper
 #if NET6_0_OR_GREATER
         return Random.Shared.Next(min, max);
 #else
-        lock (Random)
+        lock (Randomizer)
         {
-            return Random.Next(min, max);
+            return Randomizer.Next(min, max);
         }
 #endif
     }
