@@ -325,7 +325,7 @@ internal class RetryHelper
 #if NETSTANDARD2_1_OR_GREATER || NET
             case HttpStatusCode.TooManyRequests:
 #else
-                case (HttpStatusCode)429:
+            case (HttpStatusCode)429:
 #endif
             case HttpStatusCode.BadGateway:
             case HttpStatusCode.ServiceUnavailable:

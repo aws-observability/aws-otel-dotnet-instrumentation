@@ -25,8 +25,8 @@ using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
-using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 using System.Text.RegularExpressions;
+using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -168,7 +168,11 @@ public class Plugin
         if (isSigV4AuthEnabled)
         {
             OtlpExporterOptions options = new OtlpExporterOptions();
+#pragma warning disable CS8604 // Possible null reference argument.
+
+            // This is already checked in isSigV4Enabled predicate.
             options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
+#pragma warning restore CS8604 // Possible null reference argument.
             options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
             var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options, tracerProvider.GetResource());
 
