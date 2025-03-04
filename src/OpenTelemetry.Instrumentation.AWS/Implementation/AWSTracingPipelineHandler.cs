@@ -252,26 +252,6 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
         }
     }
 
-    private static void AddBedrockAgentResponseAttribute(Activity activity, AmazonWebServiceResponse response, string parameter)
-    {
-        var responseObject = response.GetType().GetProperty(Utils.RemoveSuffix(parameter, "Id"));
-        if (responseObject != null)
-        {
-            var attributeObject = responseObject.GetValue(response);
-            if (attributeObject != null)
-            {
-                var property = attributeObject.GetType().GetProperty(parameter);
-                if (property != null)
-                {
-                    if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
-                    {
-                        activity.SetTag(attribute, property.GetValue(attributeObject));
-                    }
-                }
-            }
-        }
-    }
-
     private static void AddStatusCodeToActivity(Activity activity, int status_code)
     {
         activity.SetTag(AWSSemanticConventions.AttributeHttpStatusCode, status_code);
