@@ -115,16 +115,16 @@ internal sealed class AwsSpanProcessingUtil
             return InternalOperation;
         }
 
-        // There is the case where we can run an ASP.NET application in a lambda environment.
-        // In this case, we need to decide which takes precedence for the aws.local.operation
-        // between functionName/FunctionHandler or the route template.
-        else if (IsLambdaEnvironment())
-        {
-            return AwsLambdaFunctionName + "/FunctionHandler";
-        }
+        // this takes precedence over the FunctionHandler path. Basically, if HttpContextWeakRef exists,
+        // this means the the span is coming from ASP.NET Core instrumentation and we want the
+        // operation name to be the API Route
         else if (span.GetCustomProperty("HttpContextWeakRef") != null)
         {
             return GetRouteTemplate(span);
+        }
+        else if (IsLambdaEnvironment())
+        {
+            return AwsLambdaFunctionName + "/FunctionHandler";
         }
 
         return RouteFallback(span);
