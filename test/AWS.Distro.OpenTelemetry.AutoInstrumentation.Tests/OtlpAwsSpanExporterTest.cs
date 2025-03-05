@@ -19,7 +19,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class OtlpAwsSpanExporterTest
 {
-    private const string XrayOtlpEndpoint = "https://xray.us-eat-1.amazonaws.com/v1/traces";
+    private const string XrayOtlpEndpoint = "https://xray.us-east-1.amazonaws.com/v1/traces";
     private const string AuthorizationHeader = "Authorization";
     private const string XAmzDateHeader = "X-Amz-Date";
     private const string XAmzContentSha256Header = "X-Amz-Content-Sha256";
