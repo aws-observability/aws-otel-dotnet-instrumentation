@@ -13,6 +13,8 @@ using OpenTelemetry.Proto.Trace.V1;
 using OpenTelemetry.Resources;
 using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
+namespace AWS.OpenTelemetry.Exporter.Otlp.Udp;
+
 public class OtlpExporterUtils
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
