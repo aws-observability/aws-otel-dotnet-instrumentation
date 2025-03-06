@@ -49,6 +49,9 @@
   <ItemGroup>
     <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" PrivateAssets="All" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/AWS.OpenTelemetry.Exporter.Otlp.Udp.csproj" PrivateAssets="All" />
+  </ItemGroup>
 
   <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
     <!-- NuGet packages -->
