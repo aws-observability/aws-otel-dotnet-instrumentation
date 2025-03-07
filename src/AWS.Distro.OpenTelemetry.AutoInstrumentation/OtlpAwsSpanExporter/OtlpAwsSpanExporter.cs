@@ -1,10 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modifications Copyright The OpenTelemetry Authors. Licensed under the Apache License 2.0 License.
 
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
@@ -35,7 +37,8 @@ using OpenTelemetry.Resources;
 /// <remarks>
 /// For more information, see AWS documentation on CloudWatch OTLP Endpoint.
 /// </remarks>
-public class OtlpAwsSpanExporter : BaseExporter<Activity>
+
+[assembly: InternalsVisibleTo("AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests, PublicKey=6ba7de5ce46d6af3")]public class OtlpAwsSpanExporter : BaseExporter<Activity>
 {
     private static readonly string ServiceName = "XRay";
     private static readonly string ContentType = "application/x-protobuf";
@@ -53,8 +56,18 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
     /// </summary>
     /// <param name="options">OpenTelemetry Protocol (OTLP) exporter options.</param>
     /// <param name="processResource">Otel Resource Object</param>
+    public OtlpAwsSpanExporter(OtlpExporterOptions options, Resource processResource)
+        : this(options, processResource, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OtlpAwsSpanExporter"/> class.
+    /// </summary>
+    /// <param name="options">OpenTelemetry Protocol (OTLP) exporter options.</param>
+    /// <param name="processResource">Otel Resource Object</param>
     /// <param name="authenticator">The authentication used to sign the request with SigV4</param>
-    public OtlpAwsSpanExporter(OtlpExporterOptions options, Resource processResource, IAwsAuthenticator? authenticator = null)
+    internal OtlpAwsSpanExporter(OtlpExporterOptions options, Resource processResource, IAwsAuthenticator? authenticator = null)
     {
         this.endpoint = options.Endpoint;
         this.timeout = options.TimeoutMilliseconds;
