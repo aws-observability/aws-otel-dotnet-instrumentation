@@ -21,6 +21,9 @@ using OpenTelemetry.Internal;
 using OpenTelemetry.Proto.Collector.Trace.V1;
 using OpenTelemetry.Resources;
 
+#pragma warning disable CS1700 // Assembly reference is invalid and cannot be resolved
+[assembly: InternalsVisibleTo("AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests, PublicKey=6ba7de5ce46d6af3")]
+
 /// <summary>
 /// This exporter OVERRIDES the Export functionality of the http/protobuf OtlpTraceExporter to allow spans to be exported
 /// to the XRay OTLP endpoint https://xray.[AWSRegion].amazonaws.com/v1/traces. Utilizes the AWSSDK
@@ -37,8 +40,8 @@ using OpenTelemetry.Resources;
 /// <remarks>
 /// For more information, see AWS documentation on CloudWatch OTLP Endpoint.
 /// </remarks>
-
-[assembly: InternalsVisibleTo("AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests, PublicKey=6ba7de5ce46d6af3")]public class OtlpAwsSpanExporter : BaseExporter<Activity>
+public class OtlpAwsSpanExporter : BaseExporter<Activity>
+#pragma warning restore CS1700 // Assembly reference is invalid and cannot be resolved
 {
     private static readonly string ServiceName = "XRay";
     private static readonly string ContentType = "application/x-protobuf";
