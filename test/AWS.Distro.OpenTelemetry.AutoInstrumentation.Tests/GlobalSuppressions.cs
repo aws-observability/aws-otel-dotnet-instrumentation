@@ -8,3 +8,4 @@
 using System.Diagnostics.CodeAnalysis;
 
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Reviewed", Scope = "type", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.AwsSpanProcessingUtilTest")]
+[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1010:Opening square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.OtlpAwsSpanExporterTest")]
