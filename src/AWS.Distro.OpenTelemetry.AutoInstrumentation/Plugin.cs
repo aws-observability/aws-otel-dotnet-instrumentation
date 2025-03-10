@@ -18,6 +18,7 @@ using OpenTelemetry.Instrumentation.AWSLambda;
 using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
+using AWS.OpenTelemetry.Exporter.Otlp.Udp;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using OpenTelemetry.Instrumentation.Http;
