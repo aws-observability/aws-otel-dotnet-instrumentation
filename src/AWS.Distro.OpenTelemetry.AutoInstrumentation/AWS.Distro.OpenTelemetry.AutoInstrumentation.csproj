@@ -88,6 +88,16 @@
         <Pack>true</Pack>
         <PackagePath>lib\net462</PackagePath>
     </Content>
+    <!-- Add AWS.OpenTelemetry.Exporter.Otlp.Udp DLLs -->
+    <!-- TODO: Remove once UDP Exporter is published to NuGet -->
+    <Content Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net6.0/AWS.OpenTelemetry.Exporter.Otlp.Udp.dll">
+        <Pack>true</Pack>
+        <PackagePath>lib\net6.0</PackagePath>
+    </Content>
+    <Content Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net462/AWS.OpenTelemetry.Exporter.Otlp.Udp.dll">
+        <Pack>true</Pack>
+        <PackagePath>lib\net462</PackagePath>
+    </Content>
   </ItemGroup>
 
 </Project>
