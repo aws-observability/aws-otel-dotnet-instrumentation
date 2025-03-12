@@ -352,6 +352,7 @@ jobs:
         run: |
           .\buildtools\sign_files.ps1 -Filters AWS.Distro.OpenTelemetry.AutoInstrumentation.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
           .\buildtools\sign_files.ps1 -Filters OpenTelemetry.Instrumentation.AWS.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
+          .\buildtools\sign_files.ps1 -Filters AWS.OpenTelemetry.Exporter.Otlp.Udp.dll -Recurse -Path .\exporters\AWS.OpenTelemetry.Exporter.Otlp.Udp\bin\Release
           
       - name: Pack nugets
         run: >
