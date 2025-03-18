@@ -13,7 +13,7 @@ using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
 using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
-using AWS.OpenTelemetry.Exporter.Otlp.Udp;
+using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;

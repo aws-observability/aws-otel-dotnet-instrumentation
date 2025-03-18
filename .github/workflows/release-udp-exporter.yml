@@ -1,6 +1,9 @@
 name: Release ADOT OTLP UDP Exporter
 
 on:
+  push:
+    branches:
+      - "rename-udp-exporter"
   workflow_dispatch:
     inputs:
       version:
@@ -35,7 +38,7 @@ jobs:
           <configuration>
             <packageSources>
               <clear />
-              <add key="local-udp-exporter" value="$GITHUB_WORKSPACE/exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/bin/Release" />
+              <add key="local-udp-exporter" value="$GITHUB_WORKSPACE/exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release" />
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
             </packageSources>
           </configuration>
@@ -46,7 +49,7 @@ jobs:
 
 
       - name: Build & Package the UDP exporter locally
-        working-directory: exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp
+        working-directory: exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
         run: |
           dotnet pack -c Release
 
@@ -54,7 +57,7 @@ jobs:
         working-directory: sample-applications/udp-exporter-test-app
         run: |
           # Install the locally built version of the UDP exporter
-          dotnet add package AWS.OpenTelemetry.Exporter.Otlp.Udp
+          dotnet add package AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
           # Start validation app
           dotnet run &
           # Wait for validation app to initialize

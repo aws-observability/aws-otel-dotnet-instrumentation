@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
 
-namespace AWS.OpenTelemetry.Exporter.Otlp.Udp;
+namespace AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 
 /// <summary>
 /// OTLP UDP Exporter class. This class is used to build an OtlpUdpExporter to registered as in exporter
