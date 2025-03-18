@@ -218,7 +218,7 @@ internal class RetryHelper
     // This is to ensure there is no flakiness with the number of times spans are exported in the retry window. Not part of the upstream's implementation
     private const int BufferWindow = 20;
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
-    private static readonly ILogger Logger = Factory.CreateLogger<RetryHelper>();
+    private static readonly ILogger Logger = Factory.CreateLogger<OtlpAwsSpanExporter>();
 
 #if !NET6_0_OR_GREATER
     private static readonly Random Randomizer = new Random();
@@ -243,7 +243,7 @@ internal class RetryHelper
             {
                 if (HasDeadlinePassed(deadline, 0))
                 {
-                    Logger.LogInformation("Timeout of {Deadline}ms reached, stopping retries", deadline.Millisecond);
+                    Logger.LogDebug("Timeout of {Deadline}ms reached, stopping retries", deadline.Millisecond);
                     return response;
                 }
 
@@ -283,12 +283,12 @@ internal class RetryHelper
                     delayDuration = TimeSpan.FromMilliseconds(GetRandomNumber(0, currentDelay));
                 }
 
-                Logger.LogInformation("Spans were not exported with status code: {StatusCode}. Checking to see if retryable again after: {DelayMilliseconds} ms", response.StatusCode, delayDuration.Milliseconds);
+                Logger.LogDebug("Spans were not exported with status code: {StatusCode}. Checking to see if retryable again after: {DelayMilliseconds} ms", response.StatusCode, delayDuration.Milliseconds);
 
                 // If delay exceeds deadline. We drop the http requesst completely.
                 if (HasDeadlinePassed(deadline, delayDuration.Milliseconds))
                 {
-                    Logger.LogInformation("Timeout will be reached after {Delay}ms delay. Dropping Spans with status code {StatusCode}.", delayDuration.Milliseconds, response.StatusCode);
+                    Logger.LogDebug("Timeout will be reached after {Delay}ms delay. Dropping Spans with status code {StatusCode}.", delayDuration.Milliseconds, response.StatusCode);
                     return response;
                 }
 
@@ -306,14 +306,14 @@ internal class RetryHelper
                     currentDelay = CalculateNextRetryDelay(currentDelay);
                     if (!HasDeadlinePassed(deadline, delayDuration.Milliseconds))
                     {
-                        Logger.LogInformation("{@ExceptionMessage}. Retrying again after {@Delay}ms", exceptionName, delayDuration.Milliseconds);
+                        Logger.LogDebug("{@ExceptionMessage}. Retrying again after {@Delay}ms", exceptionName, delayDuration.Milliseconds);
 
                         await Task.Delay(delayDuration);
                         continue;
                     }
                 }
 
-                Logger.LogInformation("Timeout will be reached after {Delay}ms delay. Dropping spans with exception: {@ExceptionMessage}", delayDuration.Milliseconds, e);
+                Logger.LogDebug("Timeout will be reached after {Delay}ms delay. Dropping spans with exception: {@ExceptionMessage}", delayDuration.Milliseconds, e);
                 throw;
             }
         }
