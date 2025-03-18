@@ -51,7 +51,7 @@
     <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" PrivateAssets="All" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/AWS.OpenTelemetry.Exporter.Otlp.Udp.csproj" PrivateAssets="All" />
+    <ProjectReference Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp.csproj" PrivateAssets="All" />
   </ItemGroup>
 
   <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
@@ -88,13 +88,13 @@
         <Pack>true</Pack>
         <PackagePath>lib\net462</PackagePath>
     </Content>
-    <!-- Add AWS.OpenTelemetry.Exporter.Otlp.Udp DLLs -->
+    <!-- Add AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp DLLs -->
     <!-- TODO: Remove once UDP Exporter is published to NuGet -->
-    <Content Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net6.0/AWS.OpenTelemetry.Exporter.Otlp.Udp.dll">
+    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net6.0/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp.dll">
         <Pack>true</Pack>
         <PackagePath>lib\net6.0</PackagePath>
     </Content>
-    <Content Include="../../exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net462/AWS.OpenTelemetry.Exporter.Otlp.Udp.dll">
+    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp/bin/Release/net462/AWS.Distro.OpenTelemetry.Exporter.Otlp.Udp.dll">
         <Pack>true</Pack>
         <PackagePath>lib\net462</PackagePath>
     </Content>
