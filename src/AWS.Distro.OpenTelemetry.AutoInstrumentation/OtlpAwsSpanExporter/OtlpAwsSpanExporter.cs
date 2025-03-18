@@ -174,12 +174,8 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
             HttpMethod = "POST",
             ContentStream = new MemoryStream(content),
             Endpoint = this.endpoint,
+            SignatureVersion = SignatureVersion.SigV4,
         };
-
-        request.Headers.Add("Host", this.endpoint.Host);
-        request.Headers.Add("content-type", ContentType);
-
-        ImmutableCredentials credentials = await this.authenticator.GetCredentialsAsync();
 
         AmazonXRayConfig config = new AmazonXRayConfig()
         {
@@ -188,6 +184,18 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
             ServiceURL = this.endpoint.AbsoluteUri,
             RegionEndpoint = RegionEndpoint.GetBySystemName(this.region),
         };
+
+        ImmutableCredentials credentials = await this.authenticator.GetCredentialsAsync();
+
+        // Need to explictily add this for using temporary security credentials from AWS STS.
+        // SigV4 signing library does not automatically add this header.
+        if (credentials.UseToken && credentials.Token != null)
+        {
+            request.Headers.Add("x-amz-security-token", credentials.Token);
+        }
+
+        request.Headers.Add("Host", this.endpoint.Host);
+        request.Headers.Add("content-type", ContentType);
 
         this.authenticator.Sign(request, config, credentials);
 
