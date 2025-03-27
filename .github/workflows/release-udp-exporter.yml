@@ -1,9 +1,6 @@
 name: Release ADOT OTLP UDP Exporter
 
 on:
-  push:
-    branches:
-      - "rename-udp-exporter"
   workflow_dispatch:
     inputs:
       version:
