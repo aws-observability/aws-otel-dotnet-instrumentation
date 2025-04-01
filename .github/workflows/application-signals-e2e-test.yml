@@ -164,7 +164,7 @@ jobs:
     secrets: inherit
     with:
       caller-workflow-name: 'main-build'
-      staging_distro_name: ${{ inputs.ec2-windows-image-name }}
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
 
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]

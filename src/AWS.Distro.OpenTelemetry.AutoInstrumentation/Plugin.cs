@@ -20,7 +20,7 @@ using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
-using AWS.OpenTelemetry.Exporter.Otlp.Udp;
+using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.ResourceDetectors.AWS;

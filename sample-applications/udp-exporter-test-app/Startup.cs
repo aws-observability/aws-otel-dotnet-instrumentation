@@ -11,7 +11,7 @@ using OpenTelemetry.Metrics;
 using System;
 using System.Diagnostics;
 using dotnet_sample_app.Controllers;
-using AWS.OpenTelemetry.Exporter.Otlp.Udp;
+using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 
 
 namespace dotnet_sample_app

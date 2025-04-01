@@ -13,7 +13,7 @@ using OpenTelemetry.Proto.Trace.V1;
 using OpenTelemetry.Resources;
 using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
-namespace AWS.OpenTelemetry.Exporter.Otlp.Udp;
+namespace AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 
 public class OtlpExporterUtils
 {
