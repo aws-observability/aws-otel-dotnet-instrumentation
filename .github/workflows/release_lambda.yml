@@ -98,7 +98,7 @@ jobs:
             aws lambda publish-layer-version \
               --layer-name ${{ env.LAYER_NAME }} \
               --content S3Bucket=${{ env.BUCKET_NAME }},S3Key=aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip \
-              --compatible-runtimes dotnet6 dotnet8 \
+              --compatible-runtimes dotnet8 \
               --compatible-architectures "x86_64" \
               --license-info "Apache-2.0" \
               --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime v${{ github.event.inputs.version }}" \

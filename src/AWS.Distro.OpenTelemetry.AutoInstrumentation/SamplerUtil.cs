@@ -31,6 +31,7 @@ public class SamplerUtil
     // https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/sampler/aws_xray_remote_sampler.py#L23-L24
     private static readonly double DefaultRulesPollingIntervalSeconds = 300;
     private static readonly string DefaultSamplingProxyEndpoint = "http://127.0.0.1:2000";
+    private static readonly string? TracesSampler = System.Environment.GetEnvironmentVariable(OtelTracesSampler);
 
     /// <summary>
     /// This function is based on an internal function in Otel:
@@ -41,10 +42,9 @@ public class SamplerUtil
     /// <returns>Sampler to wrap AlwaysRecordSampler around</returns>
     public static Sampler GetSampler(Resource resource)
     {
-        string? tracesSampler = System.Environment.GetEnvironmentVariable(OtelTracesSampler);
         string? tracesSamplerArg = System.Environment.GetEnvironmentVariable(OtelTracesSamplerArg);
         double samplerProbability = 1.0;
-        if (tracesSampler != null)
+        if (TracesSampler != null)
         {
             try
             {
@@ -61,7 +61,7 @@ public class SamplerUtil
         // Currently, this is the only way to get the sampler as there is no factory and we can't get the sampler
         // that was already set in the TracerProviderBuilder
         // TODO: Add case for X-Ray Sampler when implemented and tested
-        switch (tracesSampler)
+        switch (TracesSampler)
         {
             case "xray":
                 return ConfigureXraySampler(tracesSamplerArg, resource);
@@ -84,7 +84,12 @@ public class SamplerUtil
         }
     }
 
-    private static AWSXRayRemoteSampler ConfigureXraySampler(string? tracesSamplerArg, Resource resource)
+    internal static bool IsXraySampler()
+    {
+        return TracesSampler != null && TracesSampler.Equals("xray");
+    }
+
+    private static Sampler ConfigureXraySampler(string? tracesSamplerArg, Resource resource)
     {
         // Example env var value
         // OTEL_TRACES_SAMPLER_ARG=endpoint=http://localhost:2000,polling_interval=360

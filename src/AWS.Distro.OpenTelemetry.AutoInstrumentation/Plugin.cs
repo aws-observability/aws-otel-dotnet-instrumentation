@@ -23,7 +23,6 @@ using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.ResourceDetectors.AWS;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
@@ -231,7 +230,7 @@ public class Plugin
         // sdk logic. In this case, we hook up the alwaysOnSampler to that all the activities go through before running
         // them against the xray sampler. Without this, the sampler will be run twice, once by the sdk and a second time
         // after http instrumentation happens which messes up the frontend sampler graphs.
-        if (BackupSamplerEnabled == "true" && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+        if (BackupSamplerEnabled == "true" && SamplerUtil.IsXraySampler())
         {
             var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
             if (this.IsApplicationSignalsEnabled())
@@ -318,7 +317,7 @@ public class Plugin
 
         options.EnrichWithHttpRequestMessage = (activity, request) =>
         {
-            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            if (this.sampler != null && SamplerUtil.IsXraySampler())
             {
                 this.ShouldSampleParent(activity);
             }
@@ -338,7 +337,7 @@ public class Plugin
 
         options.EnrichWithHttpWebRequest = (activity, request) =>
         {
-            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            if (this.sampler != null && SamplerUtil.IsXraySampler())
             {
                 this.ShouldSampleParent(activity);
             }
@@ -365,7 +364,7 @@ public class Plugin
             //      3. We then use this HttpContext object to access the now available route data.
             activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(request.HttpContext));
 
-            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            if (this.sampler != null && SamplerUtil.IsXraySampler())
             {
                 this.ShouldSampleParent(activity);
             }
@@ -401,7 +400,7 @@ public class Plugin
                 activity.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(currentContext));
             }
 
-            if (this.sampler != null && this.sampler.GetType() == typeof(AWSXRayRemoteSampler))
+            if (this.sampler != null && SamplerUtil.IsXraySampler())
             {
                 this.ShouldSampleParent(activity);
             }
@@ -540,11 +539,11 @@ public class Plugin
         // The current version of the AWS Resource Detectors doesn't build the EKS and ECS resource detectors
         // for NETFRAMEWORK. More details are found here: https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/1177#discussion_r1193329666
         // We need to work with upstream to support these detectors for windows.
-        builder.AddDetector(new AWSEC2ResourceDetector());
+        builder.AddAWSEC2Detector();
 #if !NETFRAMEWORK
         builder
-            .AddDetector(new AWSEKSResourceDetector())
-            .AddDetector(new AWSECSResourceDetector());
+            .AddAWSEKSDetector()
+            .AddAWSECSDetector();
 #endif
 
         return builder;
