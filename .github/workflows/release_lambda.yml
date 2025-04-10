@@ -179,10 +179,12 @@ jobs:
           echo "}" >> layer_arns.tf
           terraform fmt layer_arns.tf
           cat layer_arns.tf
-      - name: download layer.zip
+      - name: Download Linux x64 Artifact
         uses: actions/download-artifact@v4
         with:
-          name: layer.zip
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+      - name: Change name to layer.zip
+        run: mv aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip layer.zip
       - name: Get commit hash
         id: commit
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT

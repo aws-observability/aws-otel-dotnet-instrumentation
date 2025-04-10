@@ -106,6 +106,7 @@ jobs:
         run: |
           gh release create --target "$GITHUB_REF_NAME" \
              --title "Release v${{ github.event.inputs.version }}" \
+             --draft \
              "v${{ github.event.inputs.version }}" \
               --notes "Release Verions v${{ github.event.inputs.version }}"
 

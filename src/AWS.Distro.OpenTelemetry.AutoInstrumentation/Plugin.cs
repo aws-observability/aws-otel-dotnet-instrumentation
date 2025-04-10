@@ -97,8 +97,6 @@ public class Plugin
     /// <param name="tracerProvider"><see cref="TracerProvider"/> Provider to configure</param>
     public void TracerProviderInitialized(TracerProvider tracerProvider)
     {
-        bool isSigV4AuthEnabled = this.IsSigV4AuthEnabled();
-
         if (this.IsApplicationSignalsEnabled())
         {
             // setting the default propagators to be W3C tracecontext, b3, b3multi and xray
@@ -118,7 +116,7 @@ public class Plugin
             tracerProvider.AddProcessor(AttributePropagatingSpanProcessorBuilder.Create().Build());
 
             // Disable Application Metrics for Lambda environment
-            if (!AwsSpanProcessingUtil.IsLambdaEnvironment() || isSigV4AuthEnabled)
+            if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
             {
                 // https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/README.md#enable-metric-exporter
                 // for setting the temporatityPref.
@@ -170,7 +168,7 @@ public class Plugin
             }
         }
 
-        if (isSigV4AuthEnabled)
+        if (this.IsSigV4AuthEnabled())
         {
             OtlpExporterOptions options = new OtlpExporterOptions();
 #pragma warning disable CS8604 // Possible null reference argument.
