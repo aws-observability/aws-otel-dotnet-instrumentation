@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - "release/v*"
+      - "dotnet6Drop"
 
 permissions:
   id-token: write
