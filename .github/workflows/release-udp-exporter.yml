@@ -152,3 +152,45 @@ jobs:
           .\Deployment\nuget-packages\*.nupkg
           -Source https://api.nuget.org/v3/index.json
           -ApiKey $nugetKey.Key
+
+      - name: Create Release Notes
+        run: |
+          @"
+          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}
+
+          ## Overview
+          This release contains the AWS Distro for OpenTelemetry X-Ray UDP Exporter for .NET.
+
+          ## Package Information
+          - Package Name: AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          - Version: ${{ github.event.inputs.version }}
+          - Commit: ${{ steps.commit.outputs.sha_short }}
+
+          ## NuGet Package
+          The package is available on NuGet.org:
+          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/${{ github.event.inputs.version }}
+
+          ## Release Notes
+          - This exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP
+          - Compatible with OpenTelemetry .NET SDK
+          "@ | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Create release package
+        run: |
+          New-Item -Path .\Deployment\release-assets -ItemType Directory -Force
+          Copy-Item -Path .\Deployment\nuget-packages\* -Destination .\Deployment\release-assets\
+          Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ github.event.inputs.version }}.zip
+
+      - name: Create GH release (draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create `
+            --target "$env:GITHUB_REF_NAME" `
+            --title "ADOT OTLP UDP Exporter v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
+            --notes-file release_notes.md `
+            --draft `
+            "v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
+            .\udp-exporter-${{ github.event.inputs.version }}.zip
+
+          Remove-Item -Path release_notes.md -Force
