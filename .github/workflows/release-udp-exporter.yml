@@ -182,6 +182,12 @@ jobs:
           Copy-Item -Path .\Deployment\nuget-packages\* -Destination .\Deployment\release-assets\
           Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ github.event.inputs.version }}.zip
 
+      - name: Create SHA256 hash for release package
+        run: |
+          # Create SHA256 hash file
+          $hash = Get-FileHash -Path .\udp-exporter-${{ github.event.inputs.version }}.zip -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256 -Encoding utf8
+
       - name: Create GH release (draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -193,5 +199,6 @@ jobs:
             --draft `
             "v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
             .\udp-exporter-${{ github.event.inputs.version }}.zip
+            .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256
 
           Remove-Item -Path release_notes.md -Force
