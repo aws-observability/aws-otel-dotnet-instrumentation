@@ -1,12 +1,19 @@
 name: Release ADOT OTLP UDP Exporter
 
 on:
+  push:
+    branches:
+      - 'test-udp-exporter-release'
   workflow_dispatch:
     inputs:
       version:
         description: 'Version number for deployment e.g. 0.1.0'
         required: true
         type: string
+
+permissions:
+  id-token: write
+  contents: write
 
 env:
   AWS_SIGNING_KEY_REGION: us-west-2
@@ -123,7 +130,7 @@ jobs:
         run: >
           dotnet pack
           .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
-          /p:Version=${{github.event.inputs.version}}
+          /p:Version=${{github.event.inputs.version || '0.1.0'}}
           --no-build
           -c Release
           -o .\Deployment\nuget-packages
@@ -140,19 +147,6 @@ jobs:
           role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
           aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
 
-      - name: Push packages to Nuget
-        run: >
-          $nugetKey = aws secretsmanager get-secret-value
-          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
-          --region ${{ env.AWS_SIGNING_KEY_REGION }}
-          --output text
-          --query SecretString | ConvertFrom-Json
-
-          nuget push
-          .\Deployment\nuget-packages\*.nupkg
-          -Source https://api.nuget.org/v3/index.json
-          -ApiKey $nugetKey.Key
-
       - name: Create Release Notes
         run: |
           @"
@@ -164,7 +158,6 @@ jobs:
           ## Package Information
           - Package Name: AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
           - Version: ${{ github.event.inputs.version }}
-          - Commit: ${{ steps.commit.outputs.sha_short }}
 
           ## NuGet Package
           The package is available on NuGet.org:
@@ -172,7 +165,7 @@ jobs:
 
           ## Release Notes
           - This exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP
-          - Compatible with OpenTelemetry .NET SDK
+          - Compatible with ADOT .NET SDK
           "@ | Out-File -FilePath release_notes.md -Encoding utf8
 
       - name: Create release package
