@@ -144,6 +144,18 @@ jobs:
           role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
           aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
 
+      - name: Push packages to Nuget
+        run: >
+          $nugetKey = aws secretsmanager get-secret-value
+          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
+          --region ${{ env.AWS_SIGNING_KEY_REGION }}
+          --output text
+          --query SecretString | ConvertFrom-Json
+          nuget push
+          .\Deployment\nuget-packages\*.nupkg
+          -Source https://api.nuget.org/v3/index.json
+          -ApiKey $nugetKey.Key
+
       - name: Create Release Notes
         run: |
           @"
