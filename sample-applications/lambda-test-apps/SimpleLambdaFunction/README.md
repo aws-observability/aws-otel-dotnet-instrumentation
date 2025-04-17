@@ -1,10 +1,10 @@
 # AWS Lambda Layer for OpenTelemetry .NET
 
-This package provides support for **Application Signals** in AWS Lambda environment.
+This package provides support for **OpenTelemetry .NET** in AWS Lambda environment.
 
 ## Features
 
-- Supports Application Signals, including traces and metrics, for AWS Lambda .NET Runtimes.
+- Supports traces, metrics, logs and AWS Application Signals for AWS Lambda .NET Runtimes.
 - Automates the deployment process, including the creation of the Application .NET Lambda Layer and a sample Lambda function.
 
 ## Prerequisites
