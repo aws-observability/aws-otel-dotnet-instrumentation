@@ -1,4 +1,4 @@
-# AWS Lambda Application Signals Support
+# AWS Lambda Layer for OpenTelemetry .NET
 
 This package provides support for **Application Signals** in AWS Lambda environment.
 
