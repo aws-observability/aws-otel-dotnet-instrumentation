@@ -1,4 +1,4 @@
-name: Release ADOT OTLP UDP Exporter
+name: Release ADOT X-Ray UDP Exporter
 
 on:
   workflow_dispatch:
@@ -16,82 +16,16 @@ env:
   AWS_SIGNING_KEY_REGION: us-west-2
 
 jobs:
-  build-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up .NET CLI
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Download and run X-Ray Daemon
-        run: |
-          mkdir xray-daemon
-          cd xray-daemon
-          wget https://s3.us-west-2.amazonaws.com/aws-xray-assets.us-west-2/xray-daemon/aws-xray-daemon-linux-3.x.zip
-          unzip aws-xray-daemon-linux-3.x.zip
-          ./xray -o -n us-west-2 -f ./daemon-logs.log --log-level debug &
-
-      - name: Create NuGet.Config with multiple sources
-        working-directory: sample-applications/udp-exporter-test-app
-        run: |
-          cat > NuGet.Config << EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="local-udp-exporter" value="$GITHUB_WORKSPACE/exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-          </configuration>
-          EOF
-          
-          # Show the created config
-          cat NuGet.Config
-
-
-      - name: Build & Package the UDP exporter locally
-        working-directory: exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
-        run: |
-          dotnet pack -c Release
-
-      - name: Run Sample App in Background
-        working-directory: sample-applications/udp-exporter-test-app
-        run: |
-          # Install the locally built version of the UDP exporter
-          dotnet add package AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
-          # Start validation app
-          dotnet run &
-          # Wait for validation app to initialize
-          sleep 5
-
-      - name: Call Sample App Endpoint
-        run: |
-          curl localhost:8080/test
-
-      - name: Verify X-Ray daemon received traces
-        run: |
-          sleep 10
-          echo "X-Ray daemon logs:"
-          cat xray-daemon/daemon-logs.log
-
-          # Check if the daemon received and processed some data
-          if grep -q "sending.*batch" xray-daemon/daemon-logs.log; then
-            echo "✅ X-Ray daemon processed trace data (AWS upload errors are expected)"
-            exit 0
-          elif grep -q "processor:.*segment" xray-daemon/daemon-logs.log; then
-            echo "✅ X-Ray daemon processed segment data (AWS upload errors are expected)"
-            exit 0
-          else
-            echo "❌ No evidence of traces being received by X-Ray daemon"
-            exit 1
-          fi
+  validate-udp-exporter-e2e-test:
+    name: "Validate X-Ray UDP Exporter E2E Test Succeeds"
+    uses: ./.github/workflows/udp-exporter-e2e-test.yml
+    secrets: inherit
+    permissions:
+      id-token: write
 
   build-release-udp-exporter-nuget:
     # Only release if previous e2e test succeeds
-    needs: build-test
+    needs: validate-udp-exporter-e2e-test
     runs-on: windows-latest
 
     strategy:
@@ -197,7 +131,7 @@ jobs:
             --title "ADOT OTLP UDP Exporter v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
             --notes-file release_notes.md `
             --draft `
-            "v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
+            "Exporter.Xray.Udp-${{ github.event.inputs.version }}" `
             .\udp-exporter-${{ github.event.inputs.version }}.zip
             .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256
 
