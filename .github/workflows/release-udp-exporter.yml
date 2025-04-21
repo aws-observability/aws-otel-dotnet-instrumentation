@@ -80,16 +80,9 @@ jobs:
 
       - name: Push packages to Nuget
         run: >
-          $nugetKey = aws secretsmanager get-secret-value
-          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
-          --region ${{ env.AWS_SIGNING_KEY_REGION }}
-          --output text
-          --query SecretString | ConvertFrom-Json
+          $nugetKey = aws secretsmanager get-secret-value --secret-id ${{ secrets.NUGET_SECRETS_ID }} --region ${{ env.AWS_SIGNING_KEY_REGION }} --output text --query SecretString | ConvertFrom-Json
 
-          nuget push
-          .\Deployment\nuget-packages\*.nupkg
-          -Source https://api.nuget.org/v3/index.json
-          -ApiKey $nugetKey.Key
+          dotnet nuget push .\Deployment\nuget-packages\*.nupkg --api-key $nugetKey.Key --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create Release Notes
         run: |
