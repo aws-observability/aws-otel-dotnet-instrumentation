@@ -85,6 +85,7 @@ jobs:
           --region ${{ env.AWS_SIGNING_KEY_REGION }}
           --output text
           --query SecretString | ConvertFrom-Json
+
           nuget push
           .\Deployment\nuget-packages\*.nupkg
           -Source https://api.nuget.org/v3/index.json
