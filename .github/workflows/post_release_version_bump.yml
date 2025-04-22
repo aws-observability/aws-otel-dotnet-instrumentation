@@ -94,14 +94,15 @@ jobs:
           git checkout -b "prepare-main-for-next-dev-cycle-${VERSION}" origin/$RELEASE_BRANCH
 
       - name: Update version to next development version in main
-        # TODO update version in daily_scan.yml
         run: |
           DEV_VERSION="${{ github.event.inputs.version }}.dev0"
           sed -i "s/public static string version = \".*\";/public static string version = \"${DEV_VERSION}\";/" src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           sed -i "s/private readonly string version = \".*\";/private readonly string version = \"${DEV_VERSION}\";/" build/Build.InstallationScripts.cs
           VERSION="${{ github.event.inputs.version }}"
+          sed -i -e 's/dotnet:v.*"/dotnet:v'$VERSION'"/' .github/workflows/daily_scan.yml
           git add src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           git add build/Build.InstallationScripts.cs
+          git add .github/workflows/daily_scan.yml
           git commit -m "Prepare main for next development cycle: Update version to $DEV_VERSION"
           git push --set-upstream origin "prepare-main-for-next-dev-cycle-${VERSION}"
 

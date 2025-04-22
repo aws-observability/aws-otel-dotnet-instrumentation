@@ -18,8 +18,6 @@ namespace dotnet_sample_app
 {
     public class Startup
     {        
-        public static MetricEmitter metricEmitter = new MetricEmitter();
-
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -93,8 +91,6 @@ namespace dotnet_sample_app
             {
                 endpoints.MapControllers();
             });
-
-            metricEmitter.UpdateRandomMetrics();
         }
     }
 
