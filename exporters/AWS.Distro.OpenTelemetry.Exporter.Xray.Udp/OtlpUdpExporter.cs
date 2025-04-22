@@ -32,7 +32,15 @@ public class OtlpUdpExporter : BaseExporter<Activity>
     /// <param name="processResource">Otel Resource object</param>
     public OtlpUdpExporter(Resource processResource, string? endpoint = null, string? signalPrefix = null)
     {
-        endpoint = endpoint ?? UdpExporter.DefaultEndpoint;
+        // Check if running in AWS Lambda environment
+        if (endpoint == null && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME")))
+        {
+            endpoint = Environment.GetEnvironmentVariable("AWS_XRAY_DAEMON_ADDRESS") ?? UdpExporter.DefaultEndpoint;
+        }
+        else
+        {
+            endpoint = endpoint ?? UdpExporter.DefaultEndpoint;
+        }
         this.udpExporter = new UdpExporter(endpoint);
         this.signalPrefix = signalPrefix ?? UdpExporter.DefaultFormatOtelTracesBinaryPrefix;
         this.processResource = processResource;
