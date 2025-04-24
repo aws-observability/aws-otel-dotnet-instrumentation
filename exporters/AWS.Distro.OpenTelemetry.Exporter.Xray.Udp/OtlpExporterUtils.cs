@@ -37,15 +37,16 @@ public class OtlpExporterUtils
         WriteTraceDataMethod = otlpSerializerType.GetMethod(
             "WriteTraceData",
             BindingFlags.NonPublic | BindingFlags.Static,
-            binder: null,
-            [
+            null,
+            new[] 
+            {
                 typeof(byte[]).MakeByRefType(),    // ref byte[] buffer
                 typeof(int),                       // int writePosition
                 sdkLimitOptionsType,           // SdkLimitOptions
                 typeof(Resource),                  // Resource?
                 typeof(Batch<Activity>).MakeByRefType() // in Batch<Activity>
-            ],
-            modifiers: null)
+            },
+            null)
             ?? throw new MissingMethodException("WriteTraceData not found");  // :contentReference[oaicite:1]{index=1}
 
         SdkLimitOptions = GetSdkLimitOptions();
