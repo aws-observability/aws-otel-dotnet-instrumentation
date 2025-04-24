@@ -24,7 +24,9 @@ public class SamplerUtil
     /// </summary>
     public static readonly string OtelTracesSamplerArg = "OTEL_TRACES_SAMPLER_ARG";
 
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<SamplerUtil>();
 
     // These default values are based on values from the python implementation:

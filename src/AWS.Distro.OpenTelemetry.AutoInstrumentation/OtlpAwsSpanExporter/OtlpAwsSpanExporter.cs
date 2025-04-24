@@ -41,7 +41,9 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
 {
     private static readonly string ServiceName = "XRay";
     private static readonly string ContentType = "application/x-protobuf";
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpAwsSpanExporter>();
     private readonly HttpClient client = new HttpClient();
     private readonly Uri endpoint;
@@ -213,7 +215,9 @@ internal class RetryHelper
 
     // This is to ensure there is no flakiness with the number of times spans are exported in the retry window. Not part of the upstream's implementation
     private const int BufferWindow = 20;
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpAwsSpanExporter>();
 
 #if !NET6_0_OR_GREATER

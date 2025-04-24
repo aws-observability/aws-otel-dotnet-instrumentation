@@ -17,7 +17,9 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// </summary>
 public class ScopeBasedOtlpMetricExporter : OtlpMetricExporter
 {
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<ScopeBasedOtlpMetricExporter>();
 
     private readonly HashSet<string> registeredScopedNames;

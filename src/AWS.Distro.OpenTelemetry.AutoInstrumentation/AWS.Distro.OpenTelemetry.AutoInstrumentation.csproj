@@ -34,17 +34,11 @@
     <PackageReference Include="OpenTelemetry.Sampler.AWS" Version="0.1.0-alpha.3" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.28.2" />
-    <PackageReference Include="Grpc.Tools" Version="2.65.0" PrivateAssets="all" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Protobuf Include="opentelemetry\**\*.proto" GrpcServices="none" ProtoCompile="true" />
   </ItemGroup>
 
   <!-- TODO: Once upstream release is done, move the dependency to use upstream version -->
