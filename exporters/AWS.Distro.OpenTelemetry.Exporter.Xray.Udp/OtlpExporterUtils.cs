@@ -20,6 +20,66 @@ public class OtlpExporterUtils
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpExporterUtils>();
 
+    private static readonly MethodInfo? WriteTraceDataMethod;
+    private static readonly object? SdkLimitOptions;
+
+    static OtlpExporterUtils() {
+        Type? otlpSerializerType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer.ProtobufOtlpTraceSerializer, OpenTelemetry.Exporter.OpenTelemetryProtocol");
+        Type? sdkLimitOptionsType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.SdkLimitOptions, OpenTelemetry.Exporter.OpenTelemetryProtocol");
+
+        if (sdkLimitOptionsType == null)
+        {
+            Logger.LogTrace("SdkLimitOptions Type was not found");
+            return;
+        }
+
+        if (otlpSerializerType == null)
+        {
+            Logger.LogTrace("OtlpSerializer Type was not found");
+            return;
+        }
+
+        WriteTraceDataMethod = otlpSerializerType.GetMethod(
+            "WriteTraceData",
+            BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            [
+                typeof(byte[]).MakeByRefType(),    // ref byte[] buffer
+                typeof(int),                       // int writePosition
+                sdkLimitOptionsType,           // SdkLimitOptions
+                typeof(Resource),                  // Resource?
+                typeof(Batch<Activity>).MakeByRefType() // in Batch<Activity>
+            ],
+            modifiers: null)
+            ?? throw new MissingMethodException("WriteTraceData not found");  // :contentReference[oaicite:1]{index=1}
+
+        SdkLimitOptions = GetSdkLimitOptions();
+    }
+
+    public static int WriteTraceData(
+        ref byte[] buffer,
+        int writePosition,
+        Resource? resource,
+        in Batch<Activity> batch)
+    {
+        if (SdkLimitOptions == null)
+        {
+            Logger.LogTrace("SdkLimitOptions Object was not found/created properly using the default parameterless constructor");
+            return -1;
+        }
+        
+        // Pack arguments (ref/in remain by-ref in the args array)
+        object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
+
+        // Invoke static method (null target) :contentReference[oaicite:2]{index=2}
+        var result = (int)WriteTraceDataMethod?.Invoke(obj: null, parameters: args)!;
+
+        // Unpack ref-buffer
+        buffer = (byte[])args[0];
+
+        return result;
+    }
+
     // The SerializeSpans function builds a ExportTraceServiceRequest object by calling private "ToOtlpSpan" function
     // using reflection. "ToOtlpSpan" converts an Activity object into an OpenTelemetry.Proto.Trace.V1.Span object.
     // With the conversion above, the Activity object is converted to an Otel span object to be exported using the
