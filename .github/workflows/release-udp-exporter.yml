@@ -26,6 +26,7 @@ jobs:
   build-release-udp-exporter-nuget:
     # Only release if previous e2e test succeeds
     needs: validate-udp-exporter-e2e-test
+    environment: Release
     runs-on: windows-latest
 
     strategy:
@@ -45,7 +46,7 @@ jobs:
           --no-restore
 
       - name: Assume signer role
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ARTIFACT_ACCESS_ROLE_ARN }}
           aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
@@ -73,7 +74,7 @@ jobs:
           path: Deployment/nuget-packages/
 
       - name: Assume nuget role
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
           aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
