@@ -4,14 +4,17 @@
 
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
+using Amazon.Runtime.Internal.Auth;
 using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
