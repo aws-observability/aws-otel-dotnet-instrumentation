@@ -49,7 +49,8 @@ public class OtlpUdpExporter : BaseExporter<Activity>
     /// <inheritdoc/>
     public override ExportResult Export(in Batch<Activity> batch)
     {
-        byte[] serializedData = new byte[65535];
+        // Chose 65,527 because this is the max size of the data in UDP Datagram
+        byte[] serializedData = new byte[65527];
 
         int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
         

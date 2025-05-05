@@ -87,6 +87,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
     {
         using IDisposable scope = SuppressInstrumentationScope.Begin();
 
+        // Inheriting the size from upstream: https://github.com/open-telemetry/opentelemetry-dotnet/blob/24a13ab91c9c152d03fd0871bbb94e8f6ef08698/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/OtlpLogExporter.cs#L28-L31
         byte[] serializedData = new byte[750000];
         int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
 

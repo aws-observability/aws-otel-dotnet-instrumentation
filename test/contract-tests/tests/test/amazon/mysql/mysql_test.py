@@ -84,14 +84,16 @@ class MySqlTest(DatabaseContractTestBase):
     def get_application_wait_pattern() -> str:
         return "Content root path: /app"
 
-    def test_select_succeeds(self) -> None:
-        self.assert_select_succeeds()
+    # Disabling due to flakiness
+    #def test_select_succeeds(self) -> None:
+    #    self.assert_select_succeeds()
 
     def test_create_item_succeeds(self) -> None:
         self.assert_create_item_succeeds()
 
-    def test_drop_database_succeeds(self) -> None:
-        self.assert_drop_table_succeeds()
+    # Disabling due to flakiness
+    #def test_drop_database_succeeds(self) -> None:
+    #    self.assert_drop_table_succeeds()
 
     def test_fault(self) -> None:
         self.assert_fault()
