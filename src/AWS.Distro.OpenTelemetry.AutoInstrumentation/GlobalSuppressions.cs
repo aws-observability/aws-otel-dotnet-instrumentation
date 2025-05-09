@@ -16,12 +16,12 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Reviewed", Scope = "member", Target = "~M:AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsMetricAttributesSpanExporterBuilder.Create(OpenTelemetry.BaseExporter{System.Diagnostics.Activity},OpenTelemetry.Resources.Resource)~AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsMetricAttributesSpanExporterBuilder")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:ByteStringConverter")]
 [assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Reviewed", Scope = "type", Target = "~T:ByteStringConverter")]
-[assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Reviewed", Scope = "type", Target = "~T:OtlpUdpExporter")]
+[assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Reviewed", Scope = "type", Target = "~T:XrayUdpExporter")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:SpanKindConverter")]
 [assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Reviewed", Scope = "type", Target = "~T:SpanKindConverter")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:UdpExporter")]
 [assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Reviewed", Scope = "type", Target = "~T:UdpExporter")]
-[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpUdpExporter.Export(OpenTelemetry.Batch{System.Diagnostics.Activity}@)~OpenTelemetry.ExportResult")]
+[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:XrayUdpExporter.Export(OpenTelemetry.Batch{System.Diagnostics.Activity}@)~OpenTelemetry.ExportResult")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:StatusCodeConverter")]
 [assembly: SuppressMessage("StyleCop.CSharp.NamingRules", "SA1307:Accessible fields should begin with upper-case letter", Justification = "Reviewed", Scope = "member", Target = "~F:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version.version")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1400:Access modifier should be declared", Justification = "Reviewed", Scope = "type", Target = "~T:AWS.Distro.OpenTelemetry.AutoInstrumentation.Version")]
@@ -29,6 +29,6 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1636:File header copyright text should match", Justification = "Reviewed")]
 [assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpExporterUtils.SerializeSpans(OpenTelemetry.Batch{System.Diagnostics.Activity},OpenTelemetry.Resources.Resource)~System.Byte[]")]
 [assembly: SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Reviewed", Scope = "type", Target = "~T:RetryHelper")]
-[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpAwsSpanExporter.Export(OpenTelemetry.Batch{System.Diagnostics.Activity}@)~OpenTelemetry.ExportResult,~M:OtlpUdpExporter.SerializeSpans(OpenTelemetry.Batch{System.Diagnostics.Activity})~System.Byte[]")]
+[assembly: SuppressMessage("StyleCop.CSharp.SpacingRules", "SA1011:Closing square brackets should be spaced correctly", Justification = "Reviewed", Scope = "member", Target = "~M:OtlpAwsSpanExporter.Export(OpenTelemetry.Batch{System.Diagnostics.Activity}@)~OpenTelemetry.ExportResult,~M:XrayUdpExporter.SerializeSpans(OpenTelemetry.Batch{System.Diagnostics.Activity})~System.Byte[]")]
 
 // TODO, review these suppressions.

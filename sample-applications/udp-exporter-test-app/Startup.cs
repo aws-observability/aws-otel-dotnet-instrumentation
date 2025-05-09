@@ -44,7 +44,7 @@ namespace dotnet_sample_app
                     {
                         options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
                     })
-                    .AddOtlpUdpExporter(resourceBuilder.Build(), "localhost:2000")
+                    .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000")
                     .Build();
             }
             else {
@@ -61,7 +61,7 @@ namespace dotnet_sample_app
                     {
                         options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
                     })
-                    .AddOtlpUdpExporter(resourceBuilder.Build(), "localhost:2000")
+                    .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000")
                     .Build();
             }
 
@@ -96,14 +96,14 @@ namespace dotnet_sample_app
 
     public static class TracerProviderBuilderExtensions
     {
-        public static TracerProviderBuilder AddOtlpUdpExporter(
+        public static TracerProviderBuilder AddXrayUdpExporter(
             this TracerProviderBuilder builder, 
             Resource resource, 
             string endpoint)
         {
             return builder.AddProcessor(
                 new BatchActivityExportProcessor(
-                    new OtlpUdpExporter(resource, endpoint)
+                    new XrayUdpExporter(resource, endpoint)
                 )
             );
         }

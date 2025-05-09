@@ -157,13 +157,13 @@ public class Plugin
                 Resource processResource = tracerProvider.GetResource();
 
                 // UDP exporter for sampled spans
-                var sampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
+                var sampledSpanExporter = new XrayUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelSampledTracesBinaryPrefix);
                 tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: sampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
                 if (this.IsApplicationSignalsEnabled())
                 {
                     // Register UDP Exporter to export unsampled traces in Lambda
                     // only when Application Signals enabled
-                    var unsampledSpanExporter = new OtlpUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                    var unsampledSpanExporter = new XrayUdpExporter(processResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
                     tracerProvider.AddProcessor(new AwsBatchUnsampledSpanExportProcessor(exporter: unsampledSpanExporter, maxExportBatchSize: LambdaSpanExportBatchSize));
                 }
             }
