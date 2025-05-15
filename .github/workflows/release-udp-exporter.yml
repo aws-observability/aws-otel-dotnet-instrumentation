@@ -95,7 +95,7 @@ jobs:
       - name: Create Release Notes
         run: |
           @"
-          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}
+          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ github.event.inputs.version }}
 
           ## Overview
           This release contains the AWS Distro for OpenTelemetry X-Ray UDP Exporter for .NET.
@@ -130,7 +130,7 @@ jobs:
         run: |
           gh release create `
             --target "$env:GITHUB_REF_NAME" `
-            --title "ADOT OTLP UDP Exporter v${{ github.event.inputs.version }}-${{ steps.commit.outputs.sha_short }}" `
+            --title "Release ADOT X-Ray UDP Exporter v${{ github.event.inputs.version }}" `
             --notes-file release_notes.md `
             --draft `
             "Exporter.Xray.Udp-${{ github.event.inputs.version }}" `
