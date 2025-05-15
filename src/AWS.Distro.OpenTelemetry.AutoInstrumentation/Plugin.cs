@@ -128,7 +128,7 @@ public class Plugin
 
                 MeterProvider provider = Sdk.CreateMeterProviderBuilder()
                 .AddReader(metricReader)
-                .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder))
+                .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder, tracerProvider.GetResource()))
                 .AddMeter("AwsSpanMetricsProcessor")
                 .AddView(instrument =>
                 {
@@ -515,8 +515,15 @@ public class Plugin
                !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
     }
 
-    private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder)
+    private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)
     {
+        // base case: If there is an already existing resource passed as a parameter, we will copy
+        // those resource attributes into the resource builder.
+        if (existingResource != null)
+        {
+            builder.AddAttributes(existingResource.Attributes);
+        }
+
         builder.AddAttributes(DistroAttributes);
         var resource = builder.Build();
         var serviceName = (string?)resource.Attributes.FirstOrDefault(attr => attr.Key == ResourceSemanticConventions.AttributeServiceName).Value;
