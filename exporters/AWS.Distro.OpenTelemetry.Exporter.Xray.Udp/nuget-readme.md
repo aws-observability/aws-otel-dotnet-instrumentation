@@ -19,7 +19,7 @@ Sdk.CreateTracerProviderBuilder()
     .AddAspNetCoreInstrumentation()
     .AddHttpClientInstrumentation()
     // Add the X-Ray UDP Exporter
-    .AddOtlpUdpExporter(resourceBuilder.Build(), "localhost:2000")
+    .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000")
     .Build();
 ```
 
@@ -36,7 +36,7 @@ builder.Services.AddOpenTelemetry()
          builder
          .SetResourceBuilder(resourceBuilder)
          .AddAspNetCoreInstrumentation()
-         .AddOtlpUdpExporter(resourceBuilder.Build(), "localhost:2000");
+         .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000");
      });
 ```
 
