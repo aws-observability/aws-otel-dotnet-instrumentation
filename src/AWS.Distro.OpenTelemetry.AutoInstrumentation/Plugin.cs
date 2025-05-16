@@ -541,7 +541,7 @@ public class Plugin
         {
             // service.name was not configured yet use the fallback.
             Logger.Log(LogLevel.Warning, "No valid service name provided. Using fallback logic of using assembly name!");
-            builder.AddAttributes([new (ResourceSemanticConventions.AttributeServiceName, this.GetFallbackServiceName())]);
+            builder.AddAttributes(new Dictionary<string, object> { { ResourceSemanticConventions.AttributeServiceName, this.GetFallbackServiceName() } });
         }
 
         // Incase the above logic failed to get assembly or process name for any reason
