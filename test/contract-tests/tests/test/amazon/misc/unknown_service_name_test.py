@@ -15,6 +15,5 @@ class UnknownServiceNameTest(ResourceAttributesTest):
             pairlist.append(key + "=" + value)
         return ",".join(pairlist)
 
-    # TODO: metric service.name is set correctly, but span service.name is being set to AppSignals.NetCore.
     def test_service(self) -> None:
         self.do_test_resource_attributes("AppSignals.NetCore")
