@@ -50,6 +50,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSDynamoTableName = "aws.table_name";
     internal static readonly string AttributeAWSSQSQueueUrl = "aws.queue_url";
 
+    internal static readonly string AttributeAWSLambdaFunctionArn = "aws.lambda.function.arn";
     internal static readonly string AttributeAWSLambdaFunctionName = "aws.lambda.function.name";
     internal static readonly string AttributeAWSLambdaResourceMappingId = "aws.lambda.resource_mapping.id";
     internal static readonly string AttributeAWSS3Bucket = "aws.s3.bucket";
@@ -58,6 +59,7 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSStepFunctionsActivityArn = "aws.stepfunctions.activity.arn";
     internal static readonly string AttributeAWSStepFunctionsStateMachineArn = "aws.stepfunctions.state_machine.arn";
 
+    internal static readonly string AttributeAWSBedrockGuardrailArn = "aws.bedrock.guardrail.arn";
     internal static readonly string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";
     internal static readonly string AttributeAWSBedrockAgentId = "aws.bedrock.agent.id";
     internal static readonly string AttributeAWSBedrockKnowledgeBaseId = "aws.bedrock.knowledge_base.id";

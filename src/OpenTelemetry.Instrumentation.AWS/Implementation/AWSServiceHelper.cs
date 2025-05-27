@@ -26,7 +26,7 @@ internal class AWSServiceHelper
     {
         { AWSServiceType.SecretsManagerService, new List<string> { "ARN" } },
         { AWSServiceType.SQSService, new List<string> { "QueueUrl" } },
-        { AWSServiceType.BedrockService, new List<string> { "GuardrailId" } },
+        { AWSServiceType.BedrockService, new List<string> { "GuardrailArn", "GuardrailId" } },
         { AWSServiceType.BedrockAgentService, new List<string> { "AgentId", "DataSourceId" } },
     };
 
@@ -45,6 +45,7 @@ internal class AWSServiceHelper
         { "FunctionName", AWSSemanticConventions.AttributeAWSLambdaFunctionName },
         { "UUID", AWSSemanticConventions.AttributeAWSLambdaResourceMappingId },
         { "ModelId", AWSSemanticConventions.AttributeGenAiModelId },
+        { "GuardrailArn", AWSSemanticConventions.AttributeAWSBedrockGuardrailArn },
         { "GuardrailId", AWSSemanticConventions.AttributeAWSBedrockGuardrailId },
         { "AgentId", AWSSemanticConventions.AttributeAWSBedrockAgentId },
         { "KnowledgeBaseId", AWSSemanticConventions.AttributeAWSBedrockKnowledgeBaseId },
