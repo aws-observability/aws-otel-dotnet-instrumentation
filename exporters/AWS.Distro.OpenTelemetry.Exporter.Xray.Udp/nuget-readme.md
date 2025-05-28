@@ -1,5 +1,5 @@
 # AWS Distro for OpenTelemetry X-Ray UDP Exporter
-The AWS Distro for OpenTelemetry X-Ray UDP Exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP.
+The AWS Distro for OpenTelemetry X-Ray UDP Exporter allows you to send OpenTelemetry traces to the AWS X-Ray Daemon endpoint in Lambda environments over UDP.
 
 ## Installation
 ```console
@@ -7,37 +7,27 @@ dotnet add package AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
 ```
 
 ## Prerequisites
-- .NET 6.0 or higher
+- .NET 8.0 or higher
 
 ## Usage Example
-```c
-var resourceBuilder = ResourceBuilder.CreateDefault().AddTelemetrySdk();
+```c#
+    // AWS_LAMBDA_FUNCTION_NAME Environment Variable will be defined in AWS Lambda Environment
+    private static String serviceName = Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME");
+    private static ResourceBuilder resourceBuilder = ResourceBuilder
+        .CreateDefault()
+        .AddService(serviceName);
 
-Sdk.CreateTracerProviderBuilder()
-    .AddSource("dotnet-sample-app")
-    .SetResourceBuilder(resourceBuilder)
-    .AddAspNetCoreInstrumentation()
-    .AddHttpClientInstrumentation()
-    // Add the X-Ray UDP Exporter
-    .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000")
-    .Build();
-```
-
-## ASP.NET Core Integration
-```c
-// In Program.cs
-builder.Services.AddOpenTelemetry()
-    .WithTracing(builder =>
-     {
-         var resourceBuilder = ResourceBuilder.CreateDefault()
-         .AddService("my-service")
-         .AddTelemetrySdk();
-
-         builder
-         .SetResourceBuilder(resourceBuilder)
-         .AddAspNetCoreInstrumentation()
-         .AddXrayUdpExporter(resourceBuilder.Build(), "localhost:2000");
-     });
+    TracerProvider tracerProvider = Sdk.CreateTracerProviderBuilder()
+        .AddAWSLambdaConfigurations()
+        .SetSampler(new ParentBasedSampler(new AlwaysOnSampler()))
+        .AddAWSInstrumentation()
+        .AddProcessor(
+            new SimpleActivityExportProcessor(
+                // Add the X-Ray UDP Exporter
+                new XrayUdpExporter(resourceBuilder.Build())
+            )
+        )
+        .Build();
 ```
 
 ## License
