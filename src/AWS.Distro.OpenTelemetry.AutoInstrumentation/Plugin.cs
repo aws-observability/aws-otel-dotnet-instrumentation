@@ -671,7 +671,7 @@ public class Plugin
         }
         catch
         {
-            return "unknown_service";
+            return OtelUnknownServicePrefix;
         }
     }
 
