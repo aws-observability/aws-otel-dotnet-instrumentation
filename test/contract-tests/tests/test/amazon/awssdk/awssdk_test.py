@@ -544,10 +544,10 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            cloudformation_primary_identifier="arn:aws:bedrock:us-west-2:123456789012:guardrail/test-guardrail",
+            cloudformation_primary_identifier="arn:aws:bedrock:us-west-2:12345678901:guardrail/test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
-                _AWS_BEDROCK_GUARDRAIL_ARN: "arn:aws:bedrock:us-west-2:123456789012:guardrail/test-guardrail",
+                _AWS_BEDROCK_GUARDRAIL_ARN: "arn:aws:bedrock:us-west-2:12345678901:guardrail/test-guardrail",
             },
             span_name="Bedrock.GetGuardrail",
         )
