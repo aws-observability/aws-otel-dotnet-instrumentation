@@ -12,25 +12,25 @@ using OpenTelemetry.Resources;
 namespace AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 
 /// <summary>
-/// OTLP UDP Exporter class. This class is used to build an OtlpUdpExporter to registered as in exporter
+/// OTLP UDP Exporter class. This class is used to build an XrayUdpExporter to registered as in exporter
 /// during the instrumentation initialization phase
 /// </summary>
-public class OtlpUdpExporter : BaseExporter<Activity>
+public class XrayUdpExporter : BaseExporter<Activity>
 {
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
-    private static readonly ILogger Logger = Factory.CreateLogger<OtlpUdpExporter>();
+    private static readonly ILogger Logger = Factory.CreateLogger<XrayUdpExporter>();
 
     private UdpExporter udpExporter;
     private string signalPrefix;
     private Resource processResource;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="OtlpUdpExporter"/> class.
+    /// Initializes a new instance of the <see cref="XrayUdpExporter"/> class.
     /// </summary>
     /// <param name="endpoint">Endpoint to export requests to</param>
     /// <param name="signalPrefix">Sampled vs UnSampled signal prefix</param>
     /// <param name="processResource">Otel Resource object</param>
-    public OtlpUdpExporter(Resource processResource, string? endpoint = null, string? signalPrefix = null)
+    public XrayUdpExporter(Resource processResource, string? endpoint = null, string? signalPrefix = null)
     {
         // Check if running in AWS Lambda environment
         if (endpoint == null && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME")))
