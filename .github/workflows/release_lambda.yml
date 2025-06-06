@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   build-and-upload:
+    environment: Release
     strategy:
       fail-fast: false
       matrix:
