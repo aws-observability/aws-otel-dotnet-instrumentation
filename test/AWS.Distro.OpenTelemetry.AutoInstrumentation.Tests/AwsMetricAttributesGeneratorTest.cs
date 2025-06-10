@@ -1051,6 +1051,71 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
+    public void TestCloudformationPrimaryIdentifierFallbackToRemoteResourceIdentifier()
+    {
+        // Test case 1: S3 Bucket (no ARN available, should use bucket name for both)
+        Dictionary<string, object> attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "S3" },
+            { AttributeAWSS3Bucket, "my-test-bucket" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "my-test-bucket", "my-test-bucket");
+
+        // Test S3 Bucket with speicial characters
+        attributesCombination[AttributeAWSS3Bucket] = "my-test|bucket^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "my-test^|bucket^^name", "my-test^|bucket^^name");
+
+        // Test case 2: SQS Queue (no ARN, should use queue name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "SQS" },
+            { AttributeAWSSQSQueueName, "my-test-queue" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "my-test-queue", "my-test-queue");
+
+        // Test SQS Queue with special characters
+        attributesCombination[AttributeAWSSQSQueueName] = "my^queue|name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "my^^queue^|name", "my^^queue^|name");
+
+        // Test case 3: DynamoDB Table (no ARN, should use table name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "DynamoDB" },
+            { AttributeAWSDynamoTableName, "my-test-table" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "my-test-table", "my-test-table");
+
+        // Test DynamoDB Table with special characters
+        attributesCombination[AttributeAWSDynamoTableName] = "my|table^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "my^|table^^name", "my^|table^^name");
+
+        // Test case 4: Kinesis Stream (no ARN, should use stream name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "Kinesis" },
+            { AttributeAWSKinesisStreamName, "my-test-stream" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "my-test-stream", "my-test-stream");
+
+        // Test Kinesis Stream with special characters
+        attributesCombination[AttributeAWSKinesisStreamName] = "my|stream^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "my^|stream^^name", "my^|stream^^name");
+
+        // Test case 5: Lambda Function (non-invoke operation, no ARN)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "Lambda" },
+            { AttributeRpcMethod, "GetFunction" },
+            { AttributeAWSLambdaFunctionName, "my-test-function" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "my-test-function", "my-test-function");
+
+        // Test Lambda Function with special characters
+        attributesCombination[AttributeAWSLambdaFunctionName] = "my|lambda^function";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "my^|lambda^^function", "my^|lambda^^function");
+    }
+
+    [Fact]
     public void TestNormalizeRemoteServiceName_NoNormalization()
     {
         string serviceName = "non aws service";
