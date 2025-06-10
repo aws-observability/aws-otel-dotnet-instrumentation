@@ -879,6 +879,13 @@ public class AwsMetricAttributesGeneratorTest
         attributesCombination[AttributeAWSSQSQueueUrl] = "invalidUrl";
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "invalidUrl");
 
+        // Validate SQS behavior when QueueName isn't available
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSQSQueueUrl, "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "MyQueue", "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue");
+
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSKinesisStreamName, "aws_stream_name" },
