@@ -54,6 +54,10 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DbConnectionResourceType = "DB::Connection";
 
+    // Constants for Lambda operations
+    private static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
+    private static readonly string LambdaInvokeOperation = "Invoke";
+
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
@@ -364,8 +368,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonKinesis": // AWS SDK v1
                 case "Kinesis": // AWS SDK v2
                     return NormalizedKinesisServiceName;
-                case "Lambda":
-                    return NormalizedLambdaServiceName;
                 case "Amazon S3": // AWS SDK v1
                 case "S3": // AWS SDK v2
                     return NormalizedS3ServiceName;
@@ -384,6 +386,21 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                     return NormalizedBedrockServiceName;
                 case "Bedrock Runtime":
                     return NormalizedBedrockRuntimeServiceName;
+                case "Lambda":
+                    if (IsLambdaInvokeOperation(span))
+                    {
+                        string? lambdaFunctionName = (string?)span.GetTagItem(AttributeAWSLambdaFunctionName);
+                        // if Lambda function name is not present, use UnknownRemoteService
+                        // This is intentional - we want to clearly indicate when the Lambda function name
+                        // is missing rather than falling back to a generic service name
+                        return lambdaFunctionName != null
+                            ? lambdaFunctionName
+                            : UnknownRemoteService;
+                    }
+                    else
+                    {
+                        return NormalizedLambdaServiceName;
+                    }
                 default:
                     return "AWS::" + serviceName;
             }
@@ -414,23 +431,9 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             }
             else if (IsKeyPresent(span, AttributeAWSLambdaFunctionName))
             {
-                // Handling downstream Lambda as a service vs. an AWS resource:
-                // - If the method call is "Invoke", we treat downstream Lambda as a service.
-                // - Otherwise, we treat it as an AWS resource.
-                //
-                // This addresses a Lambda topology issue in Application Signals.
-                // More context in PR: https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
-                //
-                // NOTE: The env var LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT was introduced as part of this fix.
-                // It is optional and allow users to override the default value if needed.
-                if (GetRemoteOperation(span, AttributeRpcMethod) == "Invoke")
-                {
-                    attributes[AttributeAWSRemoteService] = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
-
-                    string lambdaRemoteEnv = Environment.GetEnvironmentVariable("LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT") ?? "default";
-                    attributes.Add(AttributeAWSRemoteEnvironment, $"lambda:{lambdaRemoteEnv}");
-                }
-                else
+                // For non-invoke Lambda operations, treat Lambda as a resource.
+                // see NormalizeRemoteServiceName for more information.
+                if (!IsLambdaInvokeOperation(span))
                 {
                     remoteResourceType = NormalizedLambdaServiceName + "::Function";
                     remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
@@ -538,6 +541,24 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         if (IsDBSpan(span) && IsKeyPresent(span, AttributeDBUser))
         {
             attributes.Add(AttributeAWSRemoteDBUser, (string?)span.GetTagItem(AttributeDBUser));
+        }
+    }
+
+    // Remote environment is used to identify the environment of downstream services.
+    // Currently only set to "lambda:default" for Lambda Invoke operations when aws-api system is detected.
+    private static void setRemoteEnvironment(Activity span, ActivityTagsCollection attributes)
+    {
+        // We want to treat downstream Lambdas as a service rather than a resource because
+        // Application Signals topology map gets disconnected due to conflicting Lambda Entity definitions
+        // Additional context can be found in https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
+        if (IsLambdaInvokeOperation(span))
+        {
+            string remoteEnvironment = Environment.GetEnvironmentVariable(LambdaApplicationSignalsRemoteEnvironment).Trim();
+            if (string.IsNullOrEmpty(remoteEnvironment))
+            {
+                remoteEnvironment = "default";
+            }
+            attributes.Add(AttributeAWSRemoteEnvironment, "lambda:" + remoteEnvironment);
         }
     }
 
@@ -707,5 +728,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         }
 
         return input.Replace("^", "^^").Replace("|", "^|");
+    }
+
+    // Check if the span represents a Lambda Invoke operation.
+    private static bool IsLambdaInvokeOperation(Activity span)
+    {
+        if (!IsAwsSDKSpan(span))
+        {
+            return false;
+        }
+        string rpcService = GetRemoteService(span, AttributeRpcService);
+        return rpcService.Equals("Lambda") && span.GetTagItem(AttributeRpcMethod)?.ToString().Equals(LambdaInvokeOperation);
     }
 }
