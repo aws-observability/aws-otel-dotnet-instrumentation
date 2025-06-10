@@ -1116,6 +1116,63 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
+    public void TestSetRemoteEnvironmentForLambdaInvoke()
+    {
+        // Test 1: Setting remote environment when all relevant attributes are present
+        Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+        spanDataMock.SetTag(AttributeRpcService, "Lambda");
+        spanDataMock.SetTag(AttributeRpcMethod, "Invoke");
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, "testFunction");
+
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out var remoteEnvironment);
+        Assert.Equal(remoteEnvironment, "lambda:default");
+
+        // Test 2: NOT setting remote environment when rpc.system is missing
+        spanDataMock.SetTag(AttributeRpcSystem, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+
+        // Test 3: NOT setting remote environment when rpc.method is missing
+        spanDataMock.SetTag(AttributeRpcMethod, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+        spanDataMock.SetTag(AttributeRpcMethod, "Invoke");
+
+        // Test 4: setting remote environment to lambda:default when FunctionName is missing
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Equal(remoteEnvironment, "lambda:default");
+
+        // Test 5: NOT setting remote environment for non-Lambda services
+        spanDataMock.SetTag(AttributeRpcService, "S3");
+        spanDataMock.SetTag(AttributeRpcMethod, "GetObject");
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+
+        // Test 6: NOT setting remote environment for Lambda non-Invoke operations
+        spanDataMock.SetTag(AttributeRpcService, "Lambda");
+        spanDataMock.SetTag(AttributeRpcMethod, "GetFunction");
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+
+        spanDataMock.Dispose();
+    }
+
+    [Fact]
     public void TestNormalizeRemoteServiceName_NoNormalization()
     {
         string serviceName = "non aws service";
