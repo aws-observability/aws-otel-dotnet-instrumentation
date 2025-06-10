@@ -93,6 +93,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         ActivityTagsCollection attributes = new ActivityTagsCollection();
         SetService(resource, span, attributes);
         SetEgressOperation(span, attributes);
+        SetRemoteEnvironment(span, attributes);
         SetRemoteServiceAndOperation(span, attributes);
         SetRemoteResourceTypeAndIdentifier(span, attributes);
         SetSpanKindForDependency(span, attributes);
@@ -390,6 +391,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                     if (IsLambdaInvokeOperation(span))
                     {
                         string? lambdaFunctionName = (string?)span.GetTagItem(AttributeAWSLambdaFunctionName);
+
                         // if Lambda function name is not present, use UnknownRemoteService
                         // This is intentional - we want to clearly indicate when the Lambda function name
                         // is missing rather than falling back to a generic service name
@@ -401,6 +403,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                     {
                         return NormalizedLambdaServiceName;
                     }
+
                 default:
                     return "AWS::" + serviceName;
             }
@@ -546,19 +549,20 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     // Remote environment is used to identify the environment of downstream services.
     // Currently only set to "lambda:default" for Lambda Invoke operations when aws-api system is detected.
-    private static void setRemoteEnvironment(Activity span, ActivityTagsCollection attributes)
+    private static void SetRemoteEnvironment(Activity span, ActivityTagsCollection attributes)
     {
         // We want to treat downstream Lambdas as a service rather than a resource because
         // Application Signals topology map gets disconnected due to conflicting Lambda Entity definitions
         // Additional context can be found in https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
         if (IsLambdaInvokeOperation(span))
         {
-            string remoteEnvironment = Environment.GetEnvironmentVariable(LambdaApplicationSignalsRemoteEnvironment).Trim();
+            var remoteEnvironment = Environment.GetEnvironmentVariable(LambdaApplicationSignalsRemoteEnvironment);
             if (string.IsNullOrEmpty(remoteEnvironment))
             {
                 remoteEnvironment = "default";
             }
-            attributes.Add(AttributeAWSRemoteEnvironment, "lambda:" + remoteEnvironment);
+
+            attributes.Add(AttributeAWSRemoteEnvironment, "lambda:" + remoteEnvironment.Trim());
         }
     }
 
@@ -737,7 +741,9 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         {
             return false;
         }
+
         string rpcService = GetRemoteService(span, AttributeRpcService);
-        return rpcService.Equals("Lambda") && span.GetTagItem(AttributeRpcMethod)?.ToString().Equals(LambdaInvokeOperation);
+        string rpcMethod = GetRemoteOperation(span, AttributeRpcMethod);
+        return rpcService.Equals("Lambda") && rpcMethod.Equals(LambdaInvokeOperation);
     }
 }
