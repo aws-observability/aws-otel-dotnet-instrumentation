@@ -879,6 +879,13 @@ public class AwsMetricAttributesGeneratorTest
         attributesCombination[AttributeAWSSQSQueueUrl] = "invalidUrl";
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "invalidUrl");
 
+        // Validate SQS behavior when QueueName isn't available
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSQSQueueUrl, "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "MyQueue", "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue");
+
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSKinesisStreamName, "aws_stream_name" },
@@ -1044,6 +1051,128 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
+    public void TestCloudformationPrimaryIdentifierFallbackToRemoteResourceIdentifier()
+    {
+        // Test case 1: S3 Bucket (no ARN available, should use bucket name for both)
+        Dictionary<string, object> attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "S3" },
+            { AttributeAWSS3Bucket, "my-test-bucket" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "my-test-bucket", "my-test-bucket");
+
+        // Test S3 Bucket with speicial characters
+        attributesCombination[AttributeAWSS3Bucket] = "my-test|bucket^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "my-test^|bucket^^name", "my-test^|bucket^^name");
+
+        // Test case 2: SQS Queue (no ARN, should use queue name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "SQS" },
+            { AttributeAWSSQSQueueName, "my-test-queue" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "my-test-queue", "my-test-queue");
+
+        // Test SQS Queue with special characters
+        attributesCombination[AttributeAWSSQSQueueName] = "my^queue|name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "my^^queue^|name", "my^^queue^|name");
+
+        // Test case 3: DynamoDB Table (no ARN, should use table name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "DynamoDB" },
+            { AttributeAWSDynamoTableName, "my-test-table" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "my-test-table", "my-test-table");
+
+        // Test DynamoDB Table with special characters
+        attributesCombination[AttributeAWSDynamoTableName] = "my|table^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "my^|table^^name", "my^|table^^name");
+
+        // Test case 4: Kinesis Stream (no ARN, should use stream name for both)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "Kinesis" },
+            { AttributeAWSKinesisStreamName, "my-test-stream" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "my-test-stream", "my-test-stream");
+
+        // Test Kinesis Stream with special characters
+        attributesCombination[AttributeAWSKinesisStreamName] = "my|stream^name";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "my^|stream^^name", "my^|stream^^name");
+
+        // Test case 5: Lambda Function (non-invoke operation, no ARN)
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeRpcService, "Lambda" },
+            { AttributeRpcMethod, "GetFunction" },
+            { AttributeAWSLambdaFunctionName, "my-test-function" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "my-test-function", "my-test-function");
+
+        // Test Lambda Function with special characters
+        attributesCombination[AttributeAWSLambdaFunctionName] = "my|lambda^function";
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "my^|lambda^^function", "my^|lambda^^function");
+    }
+
+    [Fact]
+    public void TestSetRemoteEnvironmentForLambdaInvoke()
+    {
+        // Test 1: Setting remote environment when all relevant attributes are present
+        Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+        spanDataMock.SetTag(AttributeRpcService, "Lambda");
+        spanDataMock.SetTag(AttributeRpcMethod, "Invoke");
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, "testFunction");
+
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out var remoteEnvironment);
+        Assert.Equal(remoteEnvironment, "lambda:default");
+
+        // Test 2: NOT setting remote environment when rpc.system is missing
+        spanDataMock.SetTag(AttributeRpcSystem, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+
+        // Test 3: NOT setting remote environment when rpc.method is missing
+        spanDataMock.SetTag(AttributeRpcMethod, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+        spanDataMock.SetTag(AttributeRpcMethod, "Invoke");
+
+        // Test 4: setting remote environment to lambda:default when FunctionName is missing
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, null);
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Equal(remoteEnvironment, "lambda:default");
+
+        // Test 5: NOT setting remote environment for non-Lambda services
+        spanDataMock.SetTag(AttributeRpcService, "S3");
+        spanDataMock.SetTag(AttributeRpcMethod, "GetObject");
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+
+        // Test 6: NOT setting remote environment for Lambda non-Invoke operations
+        spanDataMock.SetTag(AttributeRpcService, "Lambda");
+        spanDataMock.SetTag(AttributeRpcMethod, "GetFunction");
+        this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource)
+            .TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteEnvironment, out remoteEnvironment);
+        Assert.Null(remoteEnvironment);
+
+        spanDataMock.Dispose();
+    }
+
+    [Fact]
     public void TestNormalizeRemoteServiceName_NoNormalization()
     {
         string serviceName = "non aws service";
@@ -1062,6 +1191,12 @@ public class AwsMetricAttributesGeneratorTest
         this.TestAwsSdkServiceNormalization("Bedrock", "AWS::Bedrock");
         this.TestAwsSdkServiceNormalization("Bedrock Agent", "AWS::Bedrock");
         this.TestAwsSdkServiceNormalization("Bedrock Agent Runtime", "AWS::Bedrock");
+
+        // Test Lambda
+        // For Invoke operations, remote service should be Lambda function name or UnknownRemoteService
+        this.TestAwsSdkServiceNormalization("Lambda", "AWS::Lambda");
+        this.TestAwsSdkServiceNormalization("Lambda", "testFunction", "Invoke", "testFunction");
+        this.TestAwsSdkServiceNormalization("Lambda", "UnknownRemoteService", "Invoke", null);
 
         // AWS SDK V2
         this.TestAwsSdkServiceNormalization("AmazonDynamoDBv2", "AWS::DynamoDB");
@@ -1100,11 +1235,19 @@ public class AwsMetricAttributesGeneratorTest
         Assert.Equal(2, attributeMap.Count);
     }
 
-    private void TestAwsSdkServiceNormalization(string serviceName, string expectedRemoteService)
+    private void TestAwsSdkServiceNormalization(string serviceName, string expectedRemoteService, string? rpcMethod = null, string? lambdaFunctionName = null)
     {
         Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
         spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
         spanDataMock.SetTag(AttributeRpcService, serviceName);
+
+        // For Lambda, if rpc.method is Invoke, depend on function name for remote service
+        if (serviceName == "Lambda")
+        {
+            spanDataMock.SetTag(AttributeRpcMethod, rpcMethod);
+            spanDataMock.SetTag(AttributeAWSLambdaFunctionName, lambdaFunctionName);
+        }
+
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource);
         attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric);
         dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
