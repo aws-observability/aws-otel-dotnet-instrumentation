@@ -36,7 +36,9 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     public static readonly string AttributeServerSocketPort = "server.socket.port";
     public static readonly string AttributeDBUser = "db.user";
 
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<AwsMetricAttributeGenerator>();
 
     // Normalized remote service names for supported AWS services
@@ -412,9 +414,18 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             }
             else if (IsKeyPresent(span, AttributeAWSLambdaFunctionName))
             {
+                // Handling downstream Lambda as a service vs. an AWS resource:
+                // - If the method call is "Invoke", we treat downstream Lambda as a service.
+                // - Otherwise, we treat it as an AWS resource.
+                //
+                // This addresses a Lambda topology issue in Application Signals.
+                // More context in PR: https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
+                //
+                // NOTE: The env var LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT was introduced as part of this fix.
+                // It is optional and allow users to override the default value if needed.
                 if (GetRemoteOperation(span, AttributeRpcMethod) == "Invoke")
                 {
-                    attributes[AttributeAWSRemoteService] = GetLambdaFunctionNameFromArn(EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName)));
+                    attributes[AttributeAWSRemoteService] = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
 
                     string lambdaRemoteEnv = Environment.GetEnvironmentVariable("LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT") ?? "default";
                     attributes.Add(AttributeAWSRemoteEnvironment, $"lambda:{lambdaRemoteEnv}");
@@ -422,8 +433,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 else
                 {
                     remoteResourceType = NormalizedLambdaServiceName + "::Function";
-                    remoteResourceIdentifier = GetLambdaFunctionNameFromArn(EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName)));
-                    cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
+                    remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
+                    cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionArn));
                 }
             }
             else if (IsKeyPresent(span, AttributeAWSLambdaResourceMappingId))
@@ -476,6 +487,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::Guardrail";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockGuardrailId));
+                cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockGuardrailArn));
             }
             else if (IsKeyPresent(span, AttributeGenAiModelId))
             {
@@ -519,22 +531,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             attributes.Add(AttributeAWSRemoteResourceIdentifier, remoteResourceIdentifier);
             attributes.Add(AttributeAWSCloudformationPrimaryIdentifier, cloudformationPrimaryIdentifier);
         }
-    }
-
-    private static string? GetLambdaFunctionNameFromArn(string? stringArn)
-    {
-        if (stringArn == null)
-        {
-            return null;
-        }
-
-        if (stringArn.StartsWith("arn:aws:lambda:", StringComparison.Ordinal))
-        {
-            string[] parts = stringArn.Split(':');
-            return parts.Length > 0 ? parts[parts.Length - 1] : null;
-        }
-
-        return stringArn;
     }
 
     private static void SetRemoteDbUser(Activity span, ActivityTagsCollection attributes)

@@ -906,6 +906,20 @@ public class AwsMetricAttributesGeneratorTest
 
         attributesCombination = new Dictionary<string, object>
         {
+            { AttributeAWSLambdaFunctionName, "aws_lambda_function_name" },
+            { AttributeAWSLambdaFunctionArn, "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSLambdaFunctionName, "aws_lambda_function_^name" },
+            { AttributeAWSLambdaFunctionArn, "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_^arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_^^name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_^^arn");
+
+        attributesCombination = new Dictionary<string, object>
+        {
             { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_id" },
         };
         this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_id", "aws_event_source_mapping_id");
@@ -967,14 +981,16 @@ public class AwsMetricAttributesGeneratorTest
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" },
+            { AttributeAWSBedrockGuardrailArn, "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_arn" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id", "aws_guardrail_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_arn");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_^id" },
+            { AttributeAWSBedrockGuardrailArn, "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_^arn" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id", "aws_guardrail_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_^^arn");
 
         attributesCombination = new Dictionary<string, object>
         {

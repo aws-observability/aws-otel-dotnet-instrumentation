@@ -1,0 +1,140 @@
+name: Release ADOT X-Ray UDP Exporter
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number for deployment e.g. 0.1.0'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  AWS_SIGNING_KEY_REGION: us-west-2
+
+jobs:
+  validate-udp-exporter-e2e-test:
+    name: "Validate X-Ray UDP Exporter E2E Test Succeeds"
+    uses: ./.github/workflows/udp-exporter-e2e-test.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+
+  build-release-udp-exporter-nuget:
+    # Only release if previous e2e test succeeds
+    needs: validate-udp-exporter-e2e-test
+    environment: Release
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: dotnet restore .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp /p:_IsPacking=true
+
+      - name: Build solution
+        run: >
+          dotnet build .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          /p:Configuration=Release
+          --no-restore
+
+      - name: Assume signer role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ARTIFACT_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Invoke Signing script
+        env:
+          UNSIGNED_BUCKET: ${{ secrets.AWS_UNSIGNED_BUCKET_NAME }}
+          SIGNED_BUCKET: ${{ secrets.AWS_SIGNED_BUCKET_NAME }}
+        run: |
+          .\buildtools\sign_files.ps1 -Filters AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll -Recurse -Path .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp\bin\Release
+
+      - name: Pack nugets
+        run: >
+          dotnet pack
+          .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          /p:Version=${{github.event.inputs.version}}
+          --no-build
+          -c Release
+          -o .\Deployment\nuget-packages
+
+      - name: Upload nugets to this GitHub Action run as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: udp-exporter-nuget-packages.zip
+          path: Deployment/nuget-packages/
+
+      - name: Assume nuget role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Push packages to Nuget
+        run: >
+          $nugetKey = aws secretsmanager get-secret-value
+          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
+          --region ${{ env.AWS_SIGNING_KEY_REGION }}
+          --output text
+          --query SecretString | ConvertFrom-Json
+
+          nuget push
+          .\Deployment\nuget-packages\*.nupkg
+          -Source https://api.nuget.org/v3/index.json
+          -ApiKey $nugetKey.Key
+
+      - name: Create Release Notes
+        run: |
+          @"
+          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ github.event.inputs.version }}
+
+          ## Overview
+          This release contains the AWS Distro for OpenTelemetry X-Ray UDP Exporter for .NET.
+
+          ## Package Information
+          - Package Name: AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          - Version: ${{ github.event.inputs.version }}
+
+          ## NuGet Package
+          The package is available on NuGet.org:
+          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/${{ github.event.inputs.version }}
+
+          ## Release Notes
+          - This exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP
+          "@ | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Create release package
+        run: |
+          New-Item -Path .\Deployment\release-assets -ItemType Directory -Force
+          Copy-Item -Path .\Deployment\nuget-packages\* -Destination .\Deployment\release-assets\
+          Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ github.event.inputs.version }}.zip
+
+      - name: Create SHA256 hash for release package
+        run: |
+          # Create SHA256 hash file
+          $hash = Get-FileHash -Path .\udp-exporter-${{ github.event.inputs.version }}.zip -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256 -Encoding utf8
+
+      - name: Create GH release (draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create `
+            --target "$env:GITHUB_REF_NAME" `
+            --title "Release ADOT X-Ray UDP Exporter v${{ github.event.inputs.version }}" `
+            --notes-file release_notes.md `
+            --draft `
+            "Exporter.Xray.Udp-${{ github.event.inputs.version }}" `
+            .\udp-exporter-${{ github.event.inputs.version }}.zip
+            .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256
+
+          Remove-Item -Path release_notes.md -Force

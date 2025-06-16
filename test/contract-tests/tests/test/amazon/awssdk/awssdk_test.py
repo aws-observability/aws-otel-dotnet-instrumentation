@@ -32,6 +32,7 @@ _AWS_SECRETSMANAGER_SECRET_ARN: str = "aws.secretsmanager.secret.arn"
 _AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
 _AWS_STEPFUNCTIONS_ACTIVITY_ARN: str = "aws.stepfunctions.activity.arn"
 _AWS_STEPFUNCTIONS_STATE_MACHINE_ARN: str = "aws.stepfunctions.state_machine.arn"
+_AWS_BEDROCK_GUARDRAIL_ARN: str = "aws.bedrock.guardrail.arn"
 _AWS_BEDROCK_GUARDRAIL_ID: str = "aws.bedrock.guardrail.id"
 _AWS_BEDROCK_AGENT_ID: str = "aws.bedrock.agent.id"
 _AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
@@ -543,9 +544,10 @@ class AWSSdkTest(ContractTestBase):
             remote_operation="GetGuardrail",
             remote_resource_type="AWS::Bedrock::Guardrail",
             remote_resource_identifier="test-guardrail",
-            cloudformation_primary_identifier="test-guardrail",
+            cloudformation_primary_identifier="arn:aws:bedrock:us-west-2:12345678901:guardrail/test-guardrail",
             request_response_specific_attributes={
                 _AWS_BEDROCK_GUARDRAIL_ID: "test-guardrail",
+                _AWS_BEDROCK_GUARDRAIL_ARN: "arn:aws:bedrock:us-west-2:12345678901:guardrail/test-guardrail",
             },
             span_name="Bedrock.GetGuardrail",
         )

@@ -106,6 +106,7 @@ jobs:
         run: |
           gh release create --target "$GITHUB_REF_NAME" \
              --title "Release v${{ github.event.inputs.version }}" \
+             --draft \
              "v${{ github.event.inputs.version }}" \
               --notes "Release Verions v${{ github.event.inputs.version }}"
 
@@ -133,6 +134,15 @@ jobs:
           gh release upload "v${{ github.event.inputs.version }}" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
             AWS.Otel.DotNet.Auto.psm1.sha256 \
+            --clobber
+          # Download layer.zip from existing latest tagged SDK release note
+          LATEST_SDK_VERSION=$(gh release list --repo "aws-observability/aws-otel-dotnet-instrumentation" --json tagName,isLatest -q 'map(select(.isLatest==true)) | .[0].tagName')
+          mkdir -p layer_artifact
+          gh release download "$LATEST_SDK_VERSION" --repo "aws-observability/aws-otel-dotnet-instrumentation" --pattern "layer.zip" --dir layer_artifact
+          shasum -a 256 layer_artifact/layer.zip > layer_artifact/layer.zip.sha256
+          gh release upload "v${{ github.event.inputs.version }}" \
+            layer_artifact/layer.zip \
+            layer_artifact/layer.zip.sha256 \
             --clobber
 
   release-image:
@@ -343,6 +353,7 @@ jobs:
         run: |
           .\buildtools\sign_files.ps1 -Filters AWS.Distro.OpenTelemetry.AutoInstrumentation.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
           .\buildtools\sign_files.ps1 -Filters OpenTelemetry.Instrumentation.AWS.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
+          .\buildtools\sign_files.ps1 -Filters AWS.OpenTelemetry.Exporter.Otlp.Udp.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
           
       - name: Pack nugets
         run: >

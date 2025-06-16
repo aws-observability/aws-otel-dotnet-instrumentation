@@ -17,8 +17,9 @@ public class TracerConfigurerTest
 
     public TracerConfigurerTest()
     {
-        Environment.SetEnvironmentVariable(SamplerUtil.OtelTracesSampler, "traceidratio");
-        Environment.SetEnvironmentVariable(SamplerUtil.OtelTracesSamplerArg, "0.01");
+        Environment.SetEnvironmentVariable("OTEL_TRACES_SAMPLER", "traceidratio");
+        Environment.SetEnvironmentVariable("OTEL_TRACES_SAMPLER_ARG", "0.01");
+        Environment.SetEnvironmentVariable("RESOURCE_DETECTORS_ENABLED", "false");
         Plugin plugin = new Plugin();
         TracerProviderBuilder tracerProviderBuilder = new TracerProviderBuilderBase();
         var listener = new ActivityListener

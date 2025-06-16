@@ -178,6 +178,23 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                             }
                         }
 
+                        // for Lambda, FunctionName can be passed as arn, partial arn, or name. Standardize to name.
+                        if (AWSServiceType.IsLambdaService(service) && parameter == "FunctionName")
+                        {
+                            var functionName = property.GetValue(request);
+                            if (functionName != null)
+                            {
+                                var functionNameString = functionName.ToString();
+                                if (functionNameString != null)
+                                {
+                                    string[] parts = functionNameString.Split(':');
+                                    functionNameString = parts.Length > 0 ? parts[parts.Length - 1] : null;
+                                    activity.SetTag(AWSSemanticConventions.AttributeAWSLambdaFunctionName, functionNameString);
+                                    continue;
+                                }
+                            }
+                        }
+
                         if (AWSServiceHelper.ParameterAttributeMap.TryGetValue(parameter, out var attribute))
                         {
                             activity.SetTag(attribute, property.GetValue(request));
@@ -247,6 +264,23 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                 if (modelString != null)
                 {
                     AWSLlmModelProcessor.ProcessGenAiAttributes(activity, responseContext.Response, modelString, false);
+                }
+            }
+        }
+        // for Lambda, extract function ARN from response Configuration object.
+        if (AWSServiceType.IsLambdaService(service))
+        {
+            var configuration = response.GetType().GetProperty("Configuration");
+            if (configuration != null)
+            {
+                var configObject = configuration.GetValue(response);
+                if (configObject != null)
+                {
+                    var functionArn = configObject.GetType().GetProperty("FunctionArn");
+                    if (functionArn != null)
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeAWSLambdaFunctionArn, functionArn.GetValue(configObject));
+                    }
                 }
             }
         }
