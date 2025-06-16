@@ -55,7 +55,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string DbConnectionResourceType = "DB::Connection";
 
     // Constants for Lambda operations
-    private static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
     private static readonly string LambdaInvokeOperation = "Invoke";
 
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
@@ -556,7 +555,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         // Additional context can be found in https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
         if (IsLambdaInvokeOperation(span))
         {
-            var remoteEnvironment = Environment.GetEnvironmentVariable(LambdaApplicationSignalsRemoteEnvironment);
+            var remoteEnvironment = Environment.GetEnvironmentVariable(Plugin.LambdaApplicationSignalsRemoteEnvironment);
             if (string.IsNullOrEmpty(remoteEnvironment))
             {
                 remoteEnvironment = "default";

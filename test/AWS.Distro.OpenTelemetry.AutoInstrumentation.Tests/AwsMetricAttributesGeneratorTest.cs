@@ -1116,7 +1116,7 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
-    public void TestSetRemoteEnvironmentForLambdaInvoke()
+    public void TestSetRemoteEnvironment()
     {
         // Test 1: Setting remote environment when all relevant attributes are present
         Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
@@ -1192,12 +1192,6 @@ public class AwsMetricAttributesGeneratorTest
         this.TestAwsSdkServiceNormalization("Bedrock Agent", "AWS::Bedrock");
         this.TestAwsSdkServiceNormalization("Bedrock Agent Runtime", "AWS::Bedrock");
 
-        // Test Lambda
-        // For Invoke operations, remote service should be Lambda function name or UnknownRemoteService
-        this.TestAwsSdkServiceNormalization("Lambda", "AWS::Lambda");
-        this.TestAwsSdkServiceNormalization("Lambda", "testFunction", "Invoke", "testFunction");
-        this.TestAwsSdkServiceNormalization("Lambda", "UnknownRemoteService", "Invoke", null);
-
         // AWS SDK V2
         this.TestAwsSdkServiceNormalization("AmazonDynamoDBv2", "AWS::DynamoDB");
         this.TestAwsSdkServiceNormalization("AmazonKinesis", "AWS::Kinesis");
@@ -1209,6 +1203,31 @@ public class AwsMetricAttributesGeneratorTest
         this.TestAwsSdkServiceNormalization("Kinesis", "AWS::Kinesis");
         this.TestAwsSdkServiceNormalization("S3", "AWS::S3");
         this.TestAwsSdkServiceNormalization("Sqs", "AWS::SQS");
+
+        // Lambda: non-Invoke operations
+        this.TestAwsSdkServiceNormalization("Lambda", "AWS::Lambda");
+
+        // Lambda: Invoke with function name
+        Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
+        spanDataMock.SetTag(AttributeRpcService, "Lambda");
+
+        spanDataMock.SetTag(AttributeRpcMethod, "Invoke");
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, "testFunction");
+
+        var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteService, out var actualServiceName);
+        Assert.Equal("testFunction", actualServiceName);
+
+        // Lambda: Invoke without function name - should fall back to UnknownRemoteService
+        spanDataMock.SetTag(AttributeAWSLambdaFunctionName, null);
+        attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource);
+        attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out dependencyMetric);
+        dependencyMetric.TryGetValue(AttributeAWSRemoteService, out actualServiceName);
+        Assert.Equal(AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService, actualServiceName);
+
+        spanDataMock.Dispose();
     }
 
     [Fact]
@@ -1235,18 +1254,11 @@ public class AwsMetricAttributesGeneratorTest
         Assert.Equal(2, attributeMap.Count);
     }
 
-    private void TestAwsSdkServiceNormalization(string serviceName, string expectedRemoteService, string? rpcMethod = null, string? lambdaFunctionName = null)
+    private void TestAwsSdkServiceNormalization(string serviceName, string expectedRemoteService)
     {
         Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
         spanDataMock.SetTag(AttributeRpcSystem, "aws-api");
         spanDataMock.SetTag(AttributeRpcService, serviceName);
-
-        // For Lambda, if rpc.method is Invoke, depend on function name for remote service
-        if (serviceName == "Lambda")
-        {
-            spanDataMock.SetTag(AttributeRpcMethod, rpcMethod);
-            spanDataMock.SetTag(AttributeAWSLambdaFunctionName, lambdaFunctionName);
-        }
 
         var attributeMap = this.generator.GenerateMetricAttributeMapFromSpan(spanDataMock, this.resource);
         attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric);
