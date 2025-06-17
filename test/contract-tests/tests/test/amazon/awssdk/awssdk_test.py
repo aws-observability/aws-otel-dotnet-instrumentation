@@ -12,7 +12,10 @@ from amazon.utils.application_signals_constants import (
     AWS_LOCAL_SERVICE,
     AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER,
     AWS_REMOTE_OPERATION,
+    AWS_REMOTE_RESOURCE_ACCESS_KEY,
+    AWS_REMOTE_RESOURCE_ACCOUNT_ID,
     AWS_REMOTE_RESOURCE_IDENTIFIER,
+    AWS_REMOTE_RESOURCE_REGION,
     AWS_REMOTE_RESOURCE_TYPE,
     AWS_REMOTE_SERVICE,
     AWS_SPAN_KIND,
@@ -27,6 +30,7 @@ _logger.setLevel(INFO)
 
 _AWS_SQS_QUEUE_URL: str = "aws.queue_url"
 _AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue_name"
+_AWS_KINESIS_STREAM_ARN: str = "aws.kinesis.stream.arn"
 _AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream_name"
 _AWS_SECRETSMANAGER_SECRET_ARN: str = "aws.secretsmanager.secret.arn"
 _AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
@@ -45,7 +49,7 @@ _GEN_AI_REQUEST_MAX_TOKENS: str = "gen_ai.request.max_tokens"
 _GEN_AI_USAGE_INPUT_TOKENS: str = "gen_ai.usage.input_tokens"
 _GEN_AI_USAGE_OUTPUT_TOKENS: str = "gen_ai.usage.output_tokens"
 _GEN_AI_RESPONSE_FINISH_REASONS: str = "gen_ai.response.finish_reasons"
-
+_AWS_DYNAMODB_TABLE_ARN: str = "aws.dynamodb.table.arn"
 
 # pylint: disable=too-many-public-methods
 class AWSSdkTest(ContractTestBase):
@@ -197,6 +201,29 @@ class AWSSdkTest(ContractTestBase):
             span_name="DynamoDB.PutItem",
         )
 
+    def test_dynamodb_describe_table(self):
+        self.do_test_requests(
+            "ddb/describetable/some-table",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::DynamoDB",
+            remote_operation="DescribeTable",
+            remote_resource_type="AWS::DynamoDB::Table",
+            remote_resource_identifier="test-table",
+            remote_resource_account_id="000000000000",
+            remote_resource_region="us-east-1",
+            cloudformation_primary_identifier="test-table",
+            request_response_specific_attributes={
+                "aws.table_name": ["test-table"],
+            },
+            response_specific_attributes={
+                _AWS_DYNAMODB_TABLE_ARN: r"arn:aws:dynamodb:us-east-1:000000000000:table/test-table",
+            },
+            span_name="DynamoDB.DescribeTable",
+        )
+
     def test_sqs_create_queue(self):
         self.do_test_requests(
             "sqs/createqueue/some-queue",
@@ -288,6 +315,27 @@ class AWSSdkTest(ContractTestBase):
             span_name="Kinesis.PutRecord",
         )
 
+    def test_kinesis_describe_stream(self):
+        self.do_test_requests(
+            "kinesis/describestream/my-stream",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::Kinesis",
+            remote_operation="DescribeStream",
+            remote_resource_type="AWS::Kinesis::Stream",
+            remote_resource_identifier="test-stream",
+            cloudformation_primary_identifier="test-stream",
+            remote_resource_account_id="000000000000",
+            remote_resource_region="us-east-1",
+            request_response_specific_attributes={
+                _AWS_KINESIS_STREAM_NAME: "test-stream",
+                _AWS_KINESIS_STREAM_ARN: r"arn:aws:kinesis:us-east-1:000000000000:stream/test-stream",
+            },
+            span_name="Kinesis.DescribeStream",
+        )
+
     def test_kinesis_error(self):
         self.do_test_requests(
             "kinesis/error",
@@ -342,7 +390,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Secrets Manager.CreateSecret",
         )
-    
+
     def test_secretsmanager_get_secret_value(self):
         self.do_test_requests(
             "secretsmanager/getsecretvalue/some-secret",
@@ -361,7 +409,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Secrets Manager.GetSecretValue",
         )
-    
+
     def test_secretsmanager_error(self):
         self.do_test_requests(
             "secretsmanager/error",
@@ -380,7 +428,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Secrets Manager.DescribeSecret",
         )
-    
+
     # TODO: https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/83
     # def test_secretsmanager_fault(self):
     #     self.do_test_requests(
@@ -418,7 +466,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="SNS.Publish",
         )
-    
+
     def test_sns_error(self):
         self.do_test_requests(
             "sns/error",
@@ -454,7 +502,7 @@ class AWSSdkTest(ContractTestBase):
     #            _AWS_SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:invalid-topic",},
     #         span_name="SNS.GetTopicAttributes"
     #     )
-    
+
     def test_stepfunctions_describe_state_machine(self):
         self.do_test_requests(
             "stepfunctions/describestatemachine/some-state-machine",
@@ -492,7 +540,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="SFN.DescribeActivity",
         )
-    
+
     def test_stepfunctions_error(self):
         self.do_test_requests(
             "stepfunctions/error",
@@ -603,7 +651,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
-    
+
     def test_bedrock_runtime_invoke_model_claude(self):
         self.do_test_requests(
             "bedrock/invokemodel/invoke-model-claude",
@@ -629,7 +677,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
-    
+
     def test_bedrock_runtime_invoke_model_llama(self):
         self.do_test_requests(
             "bedrock/invokemodel/invoke-model-llama",
@@ -655,7 +703,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
-    
+
     def test_bedrock_runtime_invoke_model_command(self):
         self.do_test_requests(
             "bedrock/invokemodel/invoke-model-command",
@@ -681,7 +729,7 @@ class AWSSdkTest(ContractTestBase):
             },
             span_name="Bedrock Runtime.InvokeModel",
         )
-    
+
     def test_bedrock_runtime_invoke_model_jamba(self):
         self.do_test_requests(
             "bedrock/invokemodel/invoke-model-jamba",
@@ -830,6 +878,26 @@ class AWSSdkTest(ContractTestBase):
             span_name="Bedrock Agent.GetDataSource",
         )
 
+    def test_cross_account(self):
+        self.do_test_requests(
+            "cross-account/createbucket/account_b",
+            "GET",
+            200,
+            0,
+            0,
+            remote_service="AWS::S3",
+            remote_operation="PutBucket",
+            remote_resource_type="AWS::S3::Bucket",
+            remote_resource_identifier="cross-account-bucket",
+            cloudformation_primary_identifier="cross-account-bucket",
+            request_specific_attributes={
+                SpanAttributes.AWS_S3_BUCKET: "cross-account-bucket",
+            },
+            remote_resource_access_key="account_b_access_key_id",
+            remote_resource_region="eu-central-1",
+            span_name="S3.PutBucket",
+        )
+
     # TODO: add contract test for Lambda event source mapping resource
 
     @override
@@ -848,7 +916,10 @@ class AWSSdkTest(ContractTestBase):
             "CLIENT",
             kwargs.get("remote_resource_type", "None"),
             kwargs.get("remote_resource_identifier", "None"),
-            kwargs.get("cloudformation_primary_identifier", "None")
+            kwargs.get("cloudformation_primary_identifier", "None"),
+            kwargs.get("remote_resource_account_id", "None"),
+            kwargs.get("remote_resource_access_key", "None"),
+            kwargs.get("remote_resource_region", "None")
         )
 
     def _assert_aws_attributes(
@@ -859,7 +930,10 @@ class AWSSdkTest(ContractTestBase):
         span_kind: str,
         remote_resource_type: str,
         remote_resource_identifier: str,
-        cloudformation_primary_identifier: str
+        cloudformation_primary_identifier: str,
+        remote_resource_account_id: str,
+        remote_resource_access_key: str,
+        remote_resource_region: str,      
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, AWS_LOCAL_SERVICE, self.get_application_otel_service_name())
@@ -871,7 +945,17 @@ class AWSSdkTest(ContractTestBase):
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_IDENTIFIER, remote_resource_identifier)
         if cloudformation_primary_identifier != "None":
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER, cloudformation_primary_identifier)
-        self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, span_kind)
+        if remote_resource_account_id != "None":
+            assert remote_resource_identifier != "None"
+            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
+            self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
+        if remote_resource_access_key != "None":
+            assert remote_resource_identifier != "None"
+            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
+            self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
+        if remote_resource_region != "None":
+            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
+            self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, span_kind)
 
     @override
     def _assert_semantic_conventions_span_attributes(
@@ -979,10 +1063,23 @@ class AWSSdkTest(ContractTestBase):
         
         remote_resource_type = kwargs.get("remote_resource_type", "None")
         remote_resource_identifier = kwargs.get("remote_resource_identifier", "None")
+        remote_resource_account_id = kwargs.get("remote_resource_account_id", "None")
+        remote_resource_access_key = kwargs.get("remote_resource_access_key", "None")
+        remote_resource_region = kwargs.get("remote_resource_region", "None")
         if remote_resource_type != "None":
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_TYPE, remote_resource_type)
         if remote_resource_identifier != "None":
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_IDENTIFIER, remote_resource_identifier)
+        if remote_resource_account_id != "None":
+            assert remote_resource_identifier != "None"
+            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
+            self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
+        if remote_resource_access_key != "None":
+            assert remote_resource_identifier != "None"
+            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
+            self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
+        if remote_resource_region != "None":
+            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
         
         self.check_sum(metric_name, dependency_dp.sum, expected_sum)
 

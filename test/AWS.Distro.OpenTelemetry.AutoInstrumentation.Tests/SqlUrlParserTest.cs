@@ -55,4 +55,49 @@ public class SqlUrlParserTest
     {
         Assert.Equal(SqsUrlParser.GetQueueName(url), expectedName);
     }
+
+    [Theory]
+
+    // testSqsClientSpanBasicUrl
+    [InlineData("https://sqs.us-east-1.amazonaws.com/123412341234/Queue", "123412341234")]
+
+    // testClientSpanSqsInvalidOrEmptyUrls
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData(" ", null)]
+    [InlineData("/", null)]
+    [InlineData("//", null)]
+    [InlineData("///", null)]
+    [InlineData("//asdf", null)]
+    [InlineData("/123412341234/as&df", null)]
+    [InlineData("invalidUrl", null)]
+    [InlineData("https://www.amazon.com", null)]
+    [InlineData("https://sqs.us-east-1.amazonaws.com/12341234/Queue", null)]
+    [InlineData("https://sqs.us-east-1.amazonaws.com/1234123412xx/Queue", null)]
+    [InlineData("https://sqs.us-east-1.amazonaws.com/1234123412xx", null)]
+    public void TestClientSpanSqsAccountId(string? url, string? expectedAccountId)
+    {
+        Assert.Equal(expectedAccountId, SqsUrlParser.GetAccountId(url));
+    }
+
+    [Theory]
+
+    // testSqsClientSpanBasicUrl
+    [InlineData("https://sqs.us-east-1.amazonaws.com/123412341234/Queue", "us-east-1")]
+
+    // testClientSpanSqsInvalidOrEmptyUrls
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData(" ", null)]
+    [InlineData("/", null)]
+    [InlineData("//", null)]
+    [InlineData("///", null)]
+    [InlineData("//asdf", null)]
+    [InlineData("/123412341234/as&df", null)]
+    [InlineData("invalidUrl", null)]
+    [InlineData("https://www.amazon.com", null)]
+    public void TestClientSpanSqsRegion(string? url, string? expectedRegion)
+    {
+        Assert.Equal(expectedRegion, SqsUrlParser.GetRegion(url));
+    }
 }

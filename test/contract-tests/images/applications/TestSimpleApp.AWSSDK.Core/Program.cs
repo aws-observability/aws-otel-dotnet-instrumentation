@@ -1,3 +1,4 @@
+using Amazon.Runtime;
 using Amazon.Bedrock;
 using Amazon.BedrockAgent;
 using Amazon.BedrockAgentRuntime;
@@ -47,6 +48,14 @@ builder.Services
     .AddKeyedSingleton<IAmazonSecretsManager>("error-secretsmanager", new AmazonSecretsManagerClient(new AmazonSecretsManagerConfig {ServiceURL = "http://localstack:4566" }))
     .AddKeyedSingleton<IAmazonSimpleNotificationService>("error-sns", new AmazonSimpleNotificationServiceClient(new AmazonSimpleNotificationServiceConfig { ServiceURL = "http://localstack:4566" }))
     .AddKeyedSingleton<IAmazonStepFunctions>("error-stepfunctions", new AmazonStepFunctionsClient(new AmazonStepFunctionsConfig { ServiceURL = "http://localstack:4566" }))
+    // cross account client - simulating STS assumed credentials for account B
+    .AddKeyedSingleton<IAmazonS3>("cross-account-s3", new AmazonS3Client(
+        new SessionAWSCredentials("account_b_access_key_id", "account_b_secret_access_key", "account_b_token"),
+        new AmazonS3Config { 
+            ServiceURL = "http://localstack:4566", 
+            ForcePathStyle = true, 
+            AuthenticationRegion = "eu-central-1"
+        }))
     .AddSingleton<S3Tests>()
     .AddSingleton<DynamoDBTests>()
     .AddSingleton<SQSTests>()
@@ -54,7 +63,8 @@ builder.Services
     .AddSingleton<SecretsManagerTests>()
     .AddSingleton<SNSTests>()
     .AddSingleton<StepFunctionsTests>()
-    .AddSingleton<BedrockTests>();
+    .AddSingleton<BedrockTests>()
+    .AddSingleton<CrossAccountTests>();
 
 var app = builder.Build();
 
@@ -93,6 +103,10 @@ app.MapGet("ddb/put-item/some-item", (DynamoDBTests ddb) => ddb.PutItem())
     .WithName("put-item")
     .WithOpenApi();
 
+app.MapGet("ddb/describetable/some-table", (DynamoDBTests ddb) => ddb.DescribeTable())
+    .WithName("describe-table")
+    .WithOpenApi();
+
 app.MapGet("ddb/deletetable/delete-table", (DynamoDBTests ddb) => ddb.DeleteTable())
     .WithName("delete-table")
     .WithOpenApi();
@@ -127,6 +141,10 @@ app.MapGet("kinesis/createstream/my-stream", (KinesisTests kinesis) => kinesis.C
 
 app.MapGet("kinesis/putrecord/my-stream", (KinesisTests kinesis) => kinesis.PutRecord())
     .WithName("put-record")
+    .WithOpenApi();
+
+app.MapGet("kinesis/describestream/my-stream", (KinesisTests Kinesis) => Kinesis.DescribeStream())
+    .WithName("describe-stream")
     .WithOpenApi();
 
 app.MapGet("kinesis/deletestream/my-stream", (KinesisTests kinesis) => kinesis.DeleteStream())
@@ -222,14 +240,27 @@ async Task PrepareAWSServer(IServiceProvider services)
 {
     var snsTests = services.GetRequiredService<SNSTests>();
     var stepfunctionsTests = services.GetRequiredService<StepFunctionsTests>();
-
+    var ddbTests = services.GetRequiredService<DynamoDBTests>();
+    var kinesisTests = services.GetRequiredService<KinesisTests>();
+    
     // Create a topic for the SNS tests
     await snsTests.CreateTopic("test-topic");
 
     // Create a state machine and activity for the Step Functions tests
     await stepfunctionsTests.CreateStateMachine("test-state-machine");
     await stepfunctionsTests.CreateActivity("test-activity");
+    
+    var existingTables = await ddbTests.ListTables();
+    if (!existingTables.TableNames.Contains("test-table"))
+    {
+        await ddbTests.CreateTable("test-table");
+    }
 
+    var existingStreams = await kinesisTests.ListStreams();
+    if (!existingStreams.StreamNames.Contains("test-stream"))
+    { 
+        await kinesisTests.CreateStream("test-stream");
+    }
     // TODO: create resources for Lambda event source mapping test
 }
 
@@ -249,6 +280,11 @@ app.MapGet("knowledgebases/test-knowledge-base", (BedrockTests bedrock) => bedro
 app.MapGet("knowledgebases/test-knowledge-base/datasources/test-data-source", (BedrockTests bedrock) => bedrock.GetDataSourceResponse());
 app.MapPost("agents/test-agent/agentAliases/test-agent-alias/sessions/test-session/text", (BedrockTests bedrock) => bedrock.InvokeAgentResponse());
 app.MapPost("knowledgebases/test-knowledge-base/retrieve", (BedrockTests bedrock) => bedrock.RetrieveResponse());
+
+// Add a route for cross-account bucket creation
+app.MapGet("cross-account/createbucket/account_b", (CrossAccountTests crossAccount) => crossAccount.CreateBucketCrossAccount())
+    .WithName("create-bucket-cross-account")
+    .WithOpenApi();
 
 await PrepareAWSServer(app.Services);
 

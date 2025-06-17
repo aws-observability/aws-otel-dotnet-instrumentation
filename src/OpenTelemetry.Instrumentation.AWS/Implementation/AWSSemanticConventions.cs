@@ -9,11 +9,15 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSOperationName = "aws.operation";
     public const string AttributeAWSRegion = "aws.region";
     public const string AttributeAWSRequestId = "aws.requestId";
+    public const string AttributeAWSAuthAccessKey = "aws.auth.account.access_key";
+    public const string AttributeAWSAuthRegion = "aws.auth.region";
 
+    public const string AttributeAWSDynamoTableArn = "aws.dynamodb.table.arn";
     public const string AttributeAWSDynamoTableName = "aws.table_name";
     public const string AttributeAWSSQSQueueUrl = "aws.queue_url";
     public const string AttributeAWSSQSQueueName = "aws.sqs.queue_name";
     public const string AttributeAWSS3BucketName = "aws.s3.bucket";
+    public const string AttributeAWSKinesisStreamArn = "aws.kinesis.stream.arn";
     public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
     public const string AttributeAWSLambdaFunctionArn = "aws.lambda.function.arn";
     public const string AttributeAWSLambdaFunctionName = "aws.lambda.function.name";

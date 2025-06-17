@@ -36,6 +36,8 @@ public class AwsMetricAttributesGeneratorTest
     private string awsRemoteServiceValue = "AWS remote service";
     private string awsRemoteOperationValue = "AWS remote operation";
     private string awsLocalOperationValue = "AWS local operation";
+    private string awsRemoteResourceRegion = "us-east-1";
+    private string awsRemoteResourceAccessKey = "Test access key";
 
     public AwsMetricAttributesGeneratorTest()
     {
@@ -865,182 +867,303 @@ public class AwsMetricAttributesGeneratorTest
         Dictionary<string, object> attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSS3Bucket, "aws_s3_bucket_name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name", "aws_s3_bucket_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name", "aws_s3_bucket_name", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         // when QueueName and QueueUrl are both available, QueueName is used as resource identifier. QueueUrl is always used as the CFN primary identifier.
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSQSQueueName, "aws_queue_name" },
             { AttributeAWSSQSQueueUrl, "https://sqs.us-east-2.amazonaws.com/123456789012/Queue" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "https://sqs.us-east-2.amazonaws.com/123456789012/Queue");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "https://sqs.us-east-2.amazonaws.com/123456789012/Queue", region: "us-east-2", accountId: "123456789012");
 
-        attributesCombination[AttributeAWSSQSQueueUrl] = "invalidUrl";
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "invalidUrl");
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSQSQueueName, "aws_queue_name" },
+            { AttributeAWSSQSQueueUrl,  "invalidUrl" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SQS::Queue", "aws_queue_name", "invalidUrl", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSKinesisStreamName, "aws_stream_name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name", "aws_stream_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name", "aws_stream_name", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSKinesisStreamArn, "arn:aws:kinesis:us-west-2:123456789012:stream/aws_stream_name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Kinesis::Stream", "aws_stream_name", "aws_stream_name", region: "us-west-2", accountId: "123456789012");
+
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSDynamoTableArn, "arn:aws:dynamodb:us-west-2:123456789012:table/aws_table_name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name", "aws_table_name", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table_name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name", "aws_table_name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table_name", "aws_table_name", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         // validate behavior of AttributeAWSDynamoTableName with special chars('|', '^')
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table|name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name", "aws_table^|name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^|name", "aws_table^|name", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSDynamoTableName, "aws_table^name" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name", "aws_table^^name");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::DynamoDB::Table", "aws_table^^name", "aws_table^^name", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSLambdaFunctionName, "aws_lambda_function_name" },
             { AttributeAWSLambdaFunctionArn, "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSLambdaFunctionName, "aws_lambda_function_^name" },
             { AttributeAWSLambdaFunctionArn, "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_^^name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::Function", "aws_lambda_function_^^name", "arn:aws:lambda:us-west-2:123456789012:function:aws_lambda_function_^^arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_id", "aws_event_source_mapping_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_id", "aws_event_source_mapping_id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSLambdaResourceMappingId, "aws_event_source_mapping_^id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_^^id", "aws_event_source_mapping_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Lambda::EventSourceMapping", "aws_event_source_mapping_^^id", "aws_event_source_mapping_^^id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSecretsManagerSecretArn, "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_^^arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SecretsManager::Secret", "aws_secret_^^arn", "arn:aws:secretsmanager:us-west-2:123456789012:secret:aws_secret_^^arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_^^arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_^^arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_^^arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSStepFunctionsActivityArn, "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_^^arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::Activity", "aws_activity_^^arn", "arn:aws:states:us-west-2:012345678901:activity:aws_activity_^^arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSStepFunctionsStateMachineArn, "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_^^arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::StepFunctions::StateMachine", "aws_state_machine_^^arn", "arn:aws:states:us-west-2:012345678901:stateMachine:aws_state_machine_^^arn", region: "us-west-2", accountId: "012345678901");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_id" },
             { AttributeAWSBedrockGuardrailArn, "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockGuardrailId, "aws_guardrail_^id" },
             { AttributeAWSBedrockGuardrailArn, "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_^arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_^^arn");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Guardrail", "aws_guardrail_^^id", "arn:aws:bedrock:us-west-2:123456789012:guardrail/aws_guardrail_^^arn", region: "us-west-2", accountId: "123456789012");
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeGenAiModelId, "gen_ai_model_id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id", "gen_ai_model_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_id", "gen_ai_model_id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeGenAiModelId, "gen_ai_model_^id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_^^id", "gen_ai_model_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Model", "gen_ai_model_^^id", "gen_ai_model_^^id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockAgentId, "aws_agent_id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_id", "aws_agent_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_id", "aws_agent_id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockAgentId, "aws_agent_^id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_^^id", "aws_agent_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::Agent", "aws_agent_^^id", "aws_agent_^^id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id", "aws_knowledge_base_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_id", "aws_knowledge_base_id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_^id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_^^id", "aws_knowledge_base_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::KnowledgeBase", "aws_knowledge_base_^^id", "aws_knowledge_base_^^id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockDataSourceId, "aws_data_source_id" },
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id", "aws_knowledge_base_id|aws_data_source_id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_id", "aws_knowledge_base_id|aws_data_source_id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
 
         attributesCombination = new Dictionary<string, object>
         {
             { AttributeAWSBedrockDataSourceId, "aws_data_source_^id" },
             { AttributeAWSBedrockKnowledgeBaseId, "aws_knowledge_base_^id" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_^^id", "aws_knowledge_base_^^id|aws_data_source_^^id");
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::Bedrock::DataSource", "aws_data_source_^^id", "aws_knowledge_base_^^id|aws_data_source_^^id", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
+
+        // Cross account support
+        // Both account access key and account id are not available
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSS3Bucket, "aws_s3_bucket_name" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::S3::Bucket", "aws_s3_bucket_name", "aws_s3_bucket_name");
+
+        // Account access key is not available
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:012345678901:aws_topic_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:us-west-2:012345678901:aws_topic_arn", region: "us-west-2", accountId: "012345678901");
+
+        // Arn with invalid account id
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:invalid_account_id:aws_topic_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:us-west-2:invalid_account_id:aws_topic_arn");
+
+        // Arn with invalid region
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "arn:aws:sns:invalid_region:012345678901:aws_topic_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "aws_topic_arn", "arn:aws:sns:invalid_region:012345678901:aws_topic_arn", region: "invalid_region", accountId: "012345678901");
+
+        // Invalid arn and no account access key
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "invalid_arn" },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "invalid_arn", "invalid_arn");
+
+        // Invalid arn but account access key is available
+        attributesCombination = new Dictionary<string, object>
+        {
+            { AttributeAWSSNSTopicArn, "invalid_arn" },
+            { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
+            { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
+        };
+        this.ValidateRemoteResourceAttributes(attributesCombination, "AWS::SNS::Topic", "invalid_arn", "invalid_arn", region: this.awsRemoteResourceRegion, accountAccessKey: this.awsRemoteResourceAccessKey);
     }
 
     [Fact]
@@ -1228,7 +1351,7 @@ public class AwsMetricAttributesGeneratorTest
         this.resource = new Resource(resourceAttributes);
     }
 
-    private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, string cfnIdentifier, bool isAwsServiceTest = true)
+    private void ValidateRemoteResourceAttributes(Dictionary<string, object> attributesCombination, string type, string identifier, string cfnIdentifier, bool isAwsServiceTest = true, string? region = null, string? accountId = null, string? accountAccessKey = null)
     {
         Activity? spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
         foreach (var attribute in attributesCombination)
@@ -1249,6 +1372,40 @@ public class AwsMetricAttributesGeneratorTest
         Assert.Equal(type, actualAWSRemoteResourceType);
         Assert.Equal(identifier, actualAWSRemoteResourceIdentifier);
         Assert.Equal(cfnIdentifier, actualAWSCloudformationPrimaryIdentifier);
+
+        // Cross account support
+        if (region != null)
+        {
+            dependencyMetric.TryGetValue(AttributeAWSRemoteResourceRegion, out var actualAWSRemoteResourceRegion);
+            Assert.Equal(region, actualAWSRemoteResourceRegion);
+        }
+        else
+        {
+            Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceRegion));
+        }
+
+        if (accountId != null)
+        {
+            dependencyMetric.TryGetValue(AttributeAWSRemoteResourceAccountId, out var actualAWSRemoteResourceAccountId);
+            Assert.Equal(accountId, actualAWSRemoteResourceAccountId);
+            Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceAccessKey));
+        }
+        else
+        {
+            Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceAccountId));
+        }
+
+        if (accountAccessKey != null)
+        {
+            dependencyMetric.TryGetValue(AttributeAWSRemoteResourceAccessKey, out var actualAWSRemoteResourceAccountAccessKey);
+            Assert.Equal(accountAccessKey, actualAWSRemoteResourceAccountAccessKey);
+            Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceAccountId));
+        }
+        else
+        {
+            Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceAccessKey));
+        }
+
         spanDataMock.Dispose();
     }
 }

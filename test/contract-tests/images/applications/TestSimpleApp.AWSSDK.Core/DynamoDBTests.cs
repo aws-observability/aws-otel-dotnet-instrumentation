@@ -12,12 +12,22 @@ public class DynamoDBTests(
 {
     public Task<CreateTableResponse> CreateTable()
     {
+        return CreateTable("test_table");
+    }
+
+    public Task<CreateTableResponse> CreateTable(string tableName)
+    {
         return ddb.CreateTableAsync(new CreateTableRequest
         {
-            TableName = "test_table", AttributeDefinitions = [new AttributeDefinition { AttributeName = "Id", AttributeType = ScalarAttributeType.S }],
+            TableName = tableName, AttributeDefinitions = [new AttributeDefinition { AttributeName = "Id", AttributeType = ScalarAttributeType.S }],
             KeySchema = [new KeySchemaElement { AttributeName = "Id", KeyType = KeyType.HASH }],
             BillingMode = BillingMode.PAY_PER_REQUEST
         });
+    }
+
+    public Task<ListTablesResponse> ListTables()
+    {
+        return ddb.ListTablesAsync(new ListTablesRequest());
     }
 
     public Task<PutItemResponse> PutItem()
@@ -29,6 +39,11 @@ public class DynamoDBTests(
                 { "Id", new AttributeValue("my-id") }
             }
         });
+    }
+    
+    public Task<DescribeTableResponse> DescribeTable()
+    {
+        return ddb.DescribeTableAsync(new DescribeTableRequest { TableName = "test-table" });
     }
 
     public Task<DeleteTableResponse> DeleteTable()

@@ -12,7 +12,7 @@ internal class AWSServiceHelper
         { AWSServiceType.DynamoDbService, new List<string> { "TableName" } },
         { AWSServiceType.SQSService, new List<string> { "QueueUrl", "QueueName" } },
         { AWSServiceType.S3Service, new List<string> { "BucketName" } },
-        { AWSServiceType.KinesisService, new List<string> { "StreamName" } },
+        { AWSServiceType.KinesisService, new List<string> { "StreamName", "StreamARN" } },
         { AWSServiceType.LambdaService, new List<string> { "UUID", "FunctionName" } },
         { AWSServiceType.SecretsManagerService, new List<string> { "SecretId" } },
         { AWSServiceType.SNSService, new List<string> { "TopicArn" } },
@@ -32,11 +32,13 @@ internal class AWSServiceHelper
 
     internal static IReadOnlyDictionary<string, string> ParameterAttributeMap = new Dictionary<string, string>()
     {
+        { "TableArn", AWSSemanticConventions.AttributeAWSDynamoTableArn },
         { "TableName", AWSSemanticConventions.AttributeAWSDynamoTableName },
         { "QueueUrl", AWSSemanticConventions.AttributeAWSSQSQueueUrl },
         { "QueueName", AWSSemanticConventions.AttributeAWSSQSQueueName },
         { "BucketName", AWSSemanticConventions.AttributeAWSS3BucketName },
         { "StreamName", AWSSemanticConventions.AttributeAWSKinesisStreamName },
+        { "StreamARN", AWSSemanticConventions.AttributeAWSKinesisStreamArn },
         { "TopicArn", AWSSemanticConventions.AttributeAWSSNSTopicArn },
         { "ARN", AWSSemanticConventions.AttributeAWSSecretsManagerSecretArn },
         { "SecretId", AWSSemanticConventions.AttributeAWSSecretsManagerSecretArn },

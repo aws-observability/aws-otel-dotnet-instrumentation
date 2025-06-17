@@ -39,6 +39,54 @@ public class SqsUrlParser
         return null;
     }
 
+    public static string? GetAccountId(string? url)
+    {
+        if (url == null)
+        {
+            return null;
+        }
+
+        url = url.Replace(HttpSchema, string.Empty).Replace(HttpsSchema, string.Empty);
+        if (IsValidSqsUrl(url))
+        {
+            string[] splitUrl = url.Split('/');
+            return splitUrl[1];
+        }
+
+        return null;
+    }
+
+    public static string? GetRegion(string? url)
+    {
+        if (url == null)
+        {
+            return null;
+        }
+
+        url = url.Replace(HttpSchema, string.Empty).Replace(HttpsSchema, string.Empty);
+        if (IsValidSqsUrl(url))
+        {
+            string[] splitUrl = url.Split('/');
+            string domain = splitUrl[0];
+            string[] domainParts = domain.Split('.');
+            if (domainParts.Length == 4)
+            {
+                return domainParts[1];
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsValidSqsUrl(string url)
+    {
+        string[] splitUrl = url.Split('/');
+        return splitUrl.Length == 3 &&
+               splitUrl[0].StartsWith("sqs", StringComparison.OrdinalIgnoreCase) &&
+               IsAccountId(splitUrl[1]) &&
+               IsValidQueueName(splitUrl[2]);
+    }
+
     private static bool IsAccountId(string input)
     {
         if (input == null || input.Length != 12)
