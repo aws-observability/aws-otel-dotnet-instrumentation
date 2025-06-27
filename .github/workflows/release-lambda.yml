@@ -21,7 +21,6 @@ permissions:
 
 jobs:
   build-and-upload:
-    environment: Release
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +29,7 @@ jobs:
     secrets: inherit
     with:
       caller-workflow-name: 'release_lambda_workflow'
+      environment: 'Release'
 
   setup-regions-matrix:
     runs-on: ubuntu-latest
