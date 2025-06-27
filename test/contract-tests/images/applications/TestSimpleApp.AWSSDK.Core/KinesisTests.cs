@@ -12,9 +12,19 @@ public class KinesisTests(
 {
     public Task<CreateStreamResponse> CreateStream()
     {
-        return kinesis.CreateStreamAsync(new CreateStreamRequest { StreamName = "test_stream" });
+        return CreateStream("test_stream");
     }
 
+    public Task<CreateStreamResponse> CreateStream(string streamName)
+    {
+        return kinesis.CreateStreamAsync(new CreateStreamRequest { StreamName = streamName });
+    }
+
+    public Task<ListStreamsResponse> ListStreams()
+    {
+        return kinesis.ListStreamsAsync(new ListStreamsRequest());
+    }
+    
     public Task<PutRecordResponse> PutRecord()
     {
         // kinesis.CreateStreamAsync(new CreateStreamRequest { StreamName = "test_stream" });
@@ -23,6 +33,11 @@ public class KinesisTests(
             StreamName = "test_stream", Data = new MemoryStream(Encoding.UTF8.GetBytes("test_data")), PartitionKey =
                 "partition_key"
         });
+    }
+    
+    public Task<DescribeStreamResponse> DescribeStream()
+    {
+        return kinesis.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "test-stream", StreamARN = "arn:aws:kinesis:us-east-1:000000000000:stream/test-stream" });
     }
 
     public Task<DeleteStreamResponse> DeleteStream()

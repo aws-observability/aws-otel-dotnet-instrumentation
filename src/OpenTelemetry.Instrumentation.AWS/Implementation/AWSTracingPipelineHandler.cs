@@ -105,6 +105,14 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 int statusCode = (int)httpResponse.StatusCode;
 
+                string? accessKey = requestContext.ImmutableCredentials.AccessKey;
+                string? determinedSigningRegion = requestContext.Request.DeterminedSigningRegion;
+                if (accessKey != null && determinedSigningRegion != null)
+                {
+                    activity.SetTag(AWSSemanticConventions.AttributeAWSAuthAccessKey, accessKey);
+                    activity.SetTag(AWSSemanticConventions.AttributeAWSAuthRegion, determinedSigningRegion);
+                }
+
                 AddStatusCodeToActivity(activity, statusCode);
                 activity.SetTag(AWSSemanticConventions.AttributeHttpResponseContentLength, httpResponse.ContentLength);
 
@@ -280,6 +288,32 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                     if (functionArn != null)
                     {
                         activity.SetTag(AWSSemanticConventions.AttributeAWSLambdaFunctionArn, functionArn.GetValue(configObject));
+                    }
+                }
+            }
+        }
+
+        // for DynamoDb, extract table ARN from response Table object. 
+        if (AWSServiceType.IsDynamoDbService(service))
+        {
+            AddDynamoTableArnAttribute(activity, response);
+        }
+    }
+
+    private static void AddDynamoTableArnAttribute(Activity activity, AmazonWebServiceResponse response)
+    {
+        var responseObject = response.GetType().GetProperty("Table");
+        if (responseObject != null)
+        {
+            var tableObject = responseObject.GetValue(response);
+            if (tableObject != null)
+            {
+                var property = tableObject.GetType().GetProperty("TableArn");
+                if (property != null)
+                {
+                    if (AWSServiceHelper.ParameterAttributeMap.TryGetValue("TableArn", out var attribute))
+                    {
+                        activity.SetTag(attribute, property.GetValue(tableObject));
                     }
                 }
             }
