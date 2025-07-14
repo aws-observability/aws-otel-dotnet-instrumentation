@@ -1,34 +1,25 @@
 version: "3.7"
 services:
 
-  cwagent:
-    image: amazon/cloudwatch-agent:latest
-    volumes:
-      - ./amazon-cloudwatch-agent.json:/opt/aws/amazon-cloudwatch-agent/bin/default_linux_config.json # agent config
-      - ./aws:/root/.aws # required for authentication
-    environment:
-      - AWS_REGION=us-west-2
-    ports:
-      - '4316:4316'
-      - '4317:4317'
-      - '2000:2000'
-
   app:
     image: aspnetapp:latest
     environment: 
-      - AWS_REGION=us-west-2
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN 
+      - AWS_REGION=us-east-1
       - INSTANCE_ID
       - LISTEN_ADDRESS=0.0.0.0:8080
       - OTEL_RESOURCE_ATTRIBUTES=service.name=aws-otel-integ-test
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://cwagent:4316 # TODO: workaround for trace exporter endpoint
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://cwagent:4316/v1/traces
-      - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://cwagent:4316/v1/metrics
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://cwagent:4316 # TODO: workaround for trace exporter endpoint
+      # - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://cwagent:4316/v1/traces
+      # - OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT=http://cwagent:4316/v1/metrics
       - ASPNETCORE_URLS=http://+:8080
       - OTEL_METRICS_EXPORTER=none
       - OTEL_AWS_APPLICATION_SIGNALS_ENABLED=true
       - OTEL_TRACES_SAMPLER=xray
-      - OTEL_TRACES_SAMPLER_ARG=endpoint=http://cwagent:2000,polling_interval=1
+      - RESOURCE_DETECTORS_ENABLED=false
     ports:
       - '8080:8080'     
     volumes:
-      - ~/.aws:/root/.aws:ro
+      - ./logs:/var/log/opentelemetry/dotnet
