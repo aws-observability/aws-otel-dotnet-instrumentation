@@ -25,3 +25,6 @@ AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER: str = "aws.remote.resource.cfn.pri
 AWS_SPAN_KIND: str = "aws.span.kind"
 HTTP_RESPONSE_STATUS: str = "http.response.status_code"
 HTTP_REQUEST_METHOD: str = "http.request.method"
+AWS_REMOTE_RESOURCE_ACCESS_KEY: str = "aws.remote.resource.account.access_key"
+AWS_REMOTE_RESOURCE_ACCOUNT_ID: str = "aws.remote.resource.account.id"
+AWS_REMOTE_RESOURCE_REGION: str = "aws.remote.resource.region"

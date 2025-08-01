@@ -5,6 +5,11 @@ on:
       caller-workflow-name:
         required: true
         type: string
+      environment:
+        required: false
+        type: string
+        default: Dev
+  
   push:
     branches:
       - main
@@ -17,6 +22,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    environment: ${{ inputs.environment }}
     strategy:
       matrix:
         include:
@@ -77,6 +83,7 @@ jobs:
   
   build-x64-musl:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.2
@@ -98,6 +105,7 @@ jobs:
   
   build-arm64:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v3
 
@@ -120,6 +128,7 @@ jobs:
 
   build-arm64-musl:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.2
