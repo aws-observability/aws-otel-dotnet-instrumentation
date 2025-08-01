@@ -84,7 +84,6 @@ internal partial class Build : NukeBuild
             case PlatformFamily.Windows:
                 fileName = "opentelemetry-dotnet-instrumentation-windows.zip";
                 break;
-            case PlatformFamily.OSX:
             case PlatformFamily.Linux:
                 var architecture = RuntimeInformation.ProcessArchitecture;
                 string architectureSuffix;
@@ -103,6 +102,9 @@ internal partial class Build : NukeBuild
                 fileName = Environment.GetEnvironmentVariable("IsAlpine") == "true"
                     ? $"opentelemetry-dotnet-instrumentation-linux-musl-{architectureSuffix}.zip"
                     : $"opentelemetry-dotnet-instrumentation-linux-glibc-{architectureSuffix}.zip";
+                break;
+            case PlatformFamily.OSX:
+                fileName = "opentelemetry-dotnet-instrumentation-macos.zip";
                 break;
             case PlatformFamily.Unknown:
                 throw new NotSupportedException();

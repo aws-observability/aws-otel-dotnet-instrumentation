@@ -1,4 +1,3 @@
-# Base configuration
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
 WORKDIR /app
 COPY . ./
@@ -10,43 +9,21 @@ EXPOSE 8080
 COPY --from=build-env /app/out .
 ENTRYPOINT ["dotnet", "integration-test-app.dll"]
 
-# ADOT Setup
 ARG INSTALL_DIR=/opt/aws/otel/dotnet
 RUN mkdir -p ${INSTALL_DIR}
 RUN ls ../../
 COPY ./OpenTelemetryDistribution/ ${INSTALL_DIR}
 RUN mkdir -p /var/log/opentelemetry/dotnet
 
-# Auto-instrumentation configuration
 ENV CORECLR_ENABLE_PROFILING=1
 ENV CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
-ENV CORECLR_PROFILER_PATH=${INSTALL_DIR}/linux-arm64/OpenTelemetry.AutoInstrumentation.Native.so
+ENV CORECLR_PROFILER_PATH=${INSTALL_DIR}/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
 ENV DOTNET_ADDITIONAL_DEPS=${INSTALL_DIR}/AdditionalDeps
 ENV DOTNET_SHARED_STORE=${INSTALL_DIR}/store
 ENV DOTNET_STARTUP_HOOKS=${INSTALL_DIR}/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
 ENV OTEL_DOTNET_AUTO_HOME=${INSTALL_DIR}
 ENV OTEL_DOTNET_AUTO_PLUGINS="AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"
-
-# OpenTelemetry configuration
 ENV OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
 ENV OTEL_TRACES_SAMPLER="always_on"
 ENV OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-ENV OTEL_RESOURCE_ATTRIBUTES=service.name=dotnet-sample-application
-ENV OTEL_AWS_SIG_V4_ENABLED=true
-
-# Exporter endpoints
 ENV OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://otel:4318/v1/metrics"
-ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://xray.us-east-1.amazonaws.com/v1/traces
-ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://logs.us-east-1.amazonaws.com/v1/logs
-
-# Exporter configuration
-ENV OTEL_METRICS_EXPORTER=none
-ENV OTEL_TRACES_EXPORTER=none
-ENV OTEL_LOGS_EXPORTER=otlp
-
-# CloudWatch Logs specific configuration
-ENV OTEL_EXPORTER_OTLP_LOGS_HEADERS="x-aws-log-group=otlp_logs,x-aws-log-stream=default"
-ENV OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="http/protobuf"
-
-# App configuration
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080

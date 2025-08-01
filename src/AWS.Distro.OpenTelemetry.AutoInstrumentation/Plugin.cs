@@ -26,7 +26,6 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
-using OpenTelemetry.Logs;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -40,20 +39,15 @@ public class Plugin
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
+    internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
     private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
-    private static readonly string LogsExporterConfig = "OTEL_LOGS_EXPORTER";
-    private static readonly string OtelExporterOtlpLogsProtocolConfig = "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL";
-    private static readonly string OtelExporterOtlpLogsHeadersConfig = "OTEL_EXPORTER_OTLP_LOGS_HEADERS";
-    private static readonly string OtelExporterOtlpLogsTimeout = "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT";
-    private static readonly int DefaultOtlpLogsTimeoutMilli = 10000;
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
     private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
-    #pragma warning disable CS0436 // Type conflicts with imported type
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
-    #pragma warning restore CS0436 // Type conflicts with imported type
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = Factory.CreateLogger<Plugin>();
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string ApplicationSignalsRuntimeEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED";
@@ -70,9 +64,6 @@ public class Plugin
 
     private static readonly string OtelExporterOtlpTracesEndpointConfig = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT";
     private static readonly string? OtelExporterOtlpTracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
-
-    private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
-    private static readonly string? OtelExporterOtlpLogsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
 
     private static readonly string OtelExporterOtlpEndpointConfig = "OTEL_EXPORTER_OTLP_ENDPOINT";
     private static readonly string? OtelExporterOtlpEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpEndpointConfig);
@@ -179,79 +170,19 @@ public class Plugin
             }
         }
 
-        if (this.IsSigV4AuthEnabled(OtelExporterOtlpTracesEndpoint, XRayOtlpEndpointPattern, "traces"))
+        if (this.IsSigV4AuthEnabled())
         {
             OtlpExporterOptions options = new OtlpExporterOptions();
-        #pragma warning disable CS8604 // Possible null reference argument.
+#pragma warning disable CS8604 // Possible null reference argument.
 
             // This is already checked in isSigV4Enabled predicate
             options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
-        #pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8604 // Possible null reference argument.
             options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
             var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options, tracerProvider.GetResource());
 
             tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
         }
-    }
-
-    /// <summary>
-    /// To access LoggerProvider right after LoggerProviderBuilder.Build() is executed.
-    /// </summary>
-    /// <param name="loggerProvider">Provider to configure</param>
-    public void LoggerProviderInitialized(global::OpenTelemetry.Logs.LoggerProvider loggerProvider)
-    {
-        Console.WriteLine($"Checking logs configuration:");
-        Console.WriteLine($"Logs Endpoint: {OtelExporterOtlpLogsEndpoint}");
-        Console.WriteLine($"Logs Headers: {System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsHeadersConfig)}");
-        Console.WriteLine($"Logs Exporter: {System.Environment.GetEnvironmentVariable(LogsExporterConfig)}");
-        Console.WriteLine($"SigV4 Enabled: {System.Environment.GetEnvironmentVariable(SigV4EnabledConfig)}");
-        if (this.IsSigV4AuthEnabled(OtelExporterOtlpLogsEndpoint, CloudWatchLogsEndpointPattern, "logs"))
-        {
-            try
-            {
-                OtlpExporterOptions options = new OtlpExporterOptions();
-                options.Endpoint = new Uri(OtelExporterOtlpLogsEndpoint!);
-                options.TimeoutMilliseconds = this.GetLogsOtlpTimeout();
-                
-                var resource = this.GetResourceFromProvider(loggerProvider);
-                var otlpAwsLogExporter = new OtlpAwsLogExporter(options, resource);
-                var processor = new BatchLogRecordExportProcessor(otlpAwsLogExporter);
-                
-                // Use reflection to add processor to LoggerProviderSdk
-                var loggerProviderSdkType = Type.GetType("OpenTelemetry.Logs.LoggerProviderSdk, OpenTelemetry");
-                if (loggerProviderSdkType != null && loggerProviderSdkType.IsInstanceOfType(loggerProvider))
-                {
-                    var addProcessorMethod = loggerProviderSdkType.GetMethod("AddProcessor", BindingFlags.NonPublic | BindingFlags.Instance);
-                    addProcessorMethod?.Invoke(loggerProvider, new object[] { processor });
-                }
-                
-                Logger.Log(LogLevel.Information, "CloudWatch Logs exporter configured successfully");
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to configure CloudWatch Logs exporter");
-            }
-        }
-    }
-
-    /// <summary>
-    /// To configure logging SDK after Auto Instrumentation configured SDK
-    /// </summary>
-    /// <param name="builder">The logger provider builder</param>
-    /// <returns>The configured logger provider builder</returns>
-    public global::OpenTelemetry.Logs.LoggerProviderBuilder AfterConfigureLoggerProvider(global::OpenTelemetry.Logs.LoggerProviderBuilder builder)
-    {
-        Console.WriteLine("AfterConfigureLoggerProvider called");
-        // Configure resource
-        builder.ConfigureResource(resourceBuilder => this.ResourceBuilderCustomizer(resourceBuilder));
-        
-        // If CloudWatch Logs is configured, we need to ensure the OTLP exporter is added
-        if (IsSigV4AuthEnabled(OtelExporterOtlpLogsEndpoint, CloudWatchLogsEndpointPattern, "logs"))
-        {
-            Logger.Log(LogLevel.Information, "CloudWatch Logs OTLP endpoint detected, SigV4 authentication will be configured");
-        }
-        
-        return builder;
     }
 
     /// <summary>
@@ -645,66 +576,33 @@ public class Plugin
     // The setup here requires OTEL_TRACES_EXPORTER to be set to none in order to avoid exporting the spans twice.
     // However that introduces the problem of overriding the default behavior of when OTEL_TRACES_EXPORTER is set to none which is
     // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
-    private bool IsSigV4AuthEnabled(string? endpoint = null, string pattern = "", string exporterType = "traces")
+    private bool IsSigV4AuthEnabled()
     {
-        if (endpoint == null)
-        {
-            endpoint = OtelExporterOtlpTracesEndpoint;
-            pattern = XRayOtlpEndpointPattern;
-        }
+        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
 
-        bool isAwsOtlpEndpoint = endpoint != null && new Regex(pattern, RegexOptions.Compiled).IsMatch(endpoint);
-
-        if (isAwsOtlpEndpoint)
+        if (isXrayOtlpEndpoint)
         {
-            string endpointType = exporterType == "traces" ? "XRay" : "CloudWatch Logs";
-            Logger.Log(LogLevel.Information, $"Detected using AWS OTLP {endpointType} Endpoint.");
-            string? sigV4EnabledConfig = System.Environment.GetEnvironmentVariable(SigV4EnabledConfig);
+            Logger.Log(LogLevel.Information, "Detected using AWS OTLP XRay Endpoint.");
+            string? sigV4EnabledConfig = System.Environment.GetEnvironmentVariable(Plugin.SigV4EnabledConfig);
 
             if (sigV4EnabledConfig == null || !sigV4EnabledConfig.Equals("true"))
             {
-                Logger.Log(LogLevel.Information, $"Please enable SigV4 authentication when exporting {exporterType} to OTLP {endpointType} Endpoint by setting {SigV4EnabledConfig}=true");
+                Logger.Log(LogLevel.Information, $"Please enable SigV4 authentication when exporting traces to OTLP XRay Endpoint by setting {SigV4EnabledConfig}=true");
                 return false;
             }
 
             Logger.Log(LogLevel.Information, $"SigV4 authentication is enabled");
 
-            if (exporterType == "traces")
-            {
-                string? tracesExporter = System.Environment.GetEnvironmentVariable(TracesExporterConfig);
-                if (tracesExporter == null || tracesExporter != "none")
-                {
-                    Logger.Log(LogLevel.Information, $"Please disable other tracing exporters by setting {TracesExporterConfig}=none");
-                    return false;
-                }
-            }
-            else if (exporterType == "logs")
-            {
-                string? logsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsHeadersConfig);
-                if (string.IsNullOrEmpty(logsHeaders) || 
-                    !logsHeaders.Contains("x-aws-log-group=") || 
-                    !logsHeaders.Contains("x-aws-log-stream="))
-                {
-                    Logger.Log(LogLevel.Information, $"Please set {OtelExporterOtlpLogsHeadersConfig} with x-aws-log-group and x-aws-log-stream headers");
-                    return false;
-                }
+            string? tracesExporter = System.Environment.GetEnvironmentVariable(Plugin.TracesExporterConfig);
 
-                string? logsExporter = System.Environment.GetEnvironmentVariable(LogsExporterConfig);
-                if (!string.IsNullOrEmpty(logsExporter) && logsExporter != "otlp")
-                {
-                    Logger.Log(LogLevel.Information, $"Please set {LogsExporterConfig}=otlp or leave it unset to use the default value");
-                    return false;
-                }
-
-                string? protocol = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsProtocolConfig);
-                if (!string.IsNullOrEmpty(protocol) && protocol != "http/protobuf")
-                {
-                    Logger.Log(LogLevel.Information, $"Please set {OtelExporterOtlpLogsProtocolConfig}=http/protobuf or leave it unset to use the default value");
-                    return false;
-                }
+            if (tracesExporter == null || tracesExporter != "none")
+            {
+                Logger.Log(LogLevel.Information, $"Please disable other tracing exporters by setting {TracesExporterConfig}=none");
+                return false;
             }
 
-            Logger.Log(LogLevel.Information, $"Proper configuration has been detected, now exporting {exporterType} to {endpoint}");
+            Logger.Log(LogLevel.Information, $"Proper configuration has been detected, now exporting spans to {OtelExporterOtlpTracesEndpoint}");
+
             return true;
         }
 
@@ -729,43 +627,5 @@ public class Plugin
         }
 
         return DefaultOtlpTracesTimeoutMilli;
-    }
-
-        private Resource GetResourceFromProvider(global::OpenTelemetry.Logs.LoggerProvider loggerProvider)
-    {
-        try
-        {
-            var resourceProperty = loggerProvider.GetType().GetProperty("Resource", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
-            return (Resource)(resourceProperty?.GetValue(loggerProvider) ?? Resource.Empty);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to get resource from LoggerProvider, using empty resource");
-            return Resource.Empty;
-        }
-    }
-
-    private int GetLogsOtlpTimeout()
-    {
-        string? timeout = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsTimeout);
-        
-        if (string.IsNullOrEmpty(timeout))
-        {
-            timeout = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesTimeout);
-        }
-
-        if (!string.IsNullOrEmpty(timeout))
-        {
-            try
-            {
-                return int.Parse(timeout);
-            }
-            catch (Exception)
-            {
-                return DefaultOtlpLogsTimeoutMilli;
-            }
-        }
-
-        return DefaultOtlpLogsTimeoutMilli;
     }
 }
