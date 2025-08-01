@@ -9,6 +9,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.RegionalResourceArnParser;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.SqsUrlParser;
 using static OpenTelemetry.Trace.TraceSemanticConventions;
 
@@ -54,6 +55,9 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     private static readonly string NormalizedBedrockRuntimeServiceName = "AWS::BedrockRuntime";
     private static readonly string DbConnectionResourceType = "DB::Connection";
 
+    // Constants for Lambda operations
+    private static readonly string LambdaInvokeOperation = "Invoke";
+
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
@@ -89,8 +93,18 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         ActivityTagsCollection attributes = new ActivityTagsCollection();
         SetService(resource, span, attributes);
         SetEgressOperation(span, attributes);
+        SetRemoteEnvironment(span, attributes);
         SetRemoteServiceAndOperation(span, attributes);
-        SetRemoteResourceTypeAndIdentifier(span, attributes);
+        bool isRemoteResourceIdentifierPresent = SetRemoteResourceTypeAndIdentifier(span, attributes);
+        if (isRemoteResourceIdentifierPresent)
+        {
+            bool isAccountIdAndRegionPresent = SetRemoteResourceAccountIdAndRegion(span, attributes);
+            if (!isAccountIdAndRegionPresent)
+            {
+                SetRemoteResourceAccessKeyAndRegion(span, attributes);
+            }
+        }
+
         SetSpanKindForDependency(span, attributes);
         SetRemoteDbUser(span, attributes);
 
@@ -364,8 +378,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 case "AmazonKinesis": // AWS SDK v1
                 case "Kinesis": // AWS SDK v2
                     return NormalizedKinesisServiceName;
-                case "Lambda":
-                    return NormalizedLambdaServiceName;
                 case "Amazon S3": // AWS SDK v1
                 case "S3": // AWS SDK v2
                     return NormalizedS3ServiceName;
@@ -384,6 +396,23 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                     return NormalizedBedrockServiceName;
                 case "Bedrock Runtime":
                     return NormalizedBedrockRuntimeServiceName;
+                case "Lambda":
+                    if (IsLambdaInvokeOperation(span))
+                    {
+                        string? lambdaFunctionName = (string?)span.GetTagItem(AttributeAWSLambdaFunctionName);
+
+                        // if Lambda function name is not present, use UnknownRemoteService
+                        // This is intentional - we want to clearly indicate when the Lambda function name
+                        // is missing rather than falling back to a generic service name
+                        return lambdaFunctionName != null
+                            ? lambdaFunctionName
+                            : UnknownRemoteService;
+                    }
+                    else
+                    {
+                        return NormalizedLambdaServiceName;
+                    }
+
                 default:
                     return "AWS::" + serviceName;
             }
@@ -394,8 +423,9 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     // This function is used to check for AWS specific attributes and set the RemoteResourceType
     // and RemoteResourceIdentifier accordingly. Right now, this sets it for DDB, S3, Kinesis,
-    // and SQS (using QueueName or QueueURL)
-    private static void SetRemoteResourceTypeAndIdentifier(Activity span, ActivityTagsCollection attributes)
+    // and SQS (using QueueName or QueueURL). Returns true if remote resource type and identifier
+    // are successfully set, false otherwise.
+    private static bool SetRemoteResourceTypeAndIdentifier(Activity span, ActivityTagsCollection attributes)
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
@@ -407,30 +437,26 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
                 remoteResourceType = NormalizedDynamoDBServiceName + "::Table";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSDynamoTableName));
             }
+            else if (IsKeyPresent(span, AttributeAWSDynamoTableArn))
+            {
+                remoteResourceType = NormalizedDynamoDBServiceName + "::Table";
+                remoteResourceIdentifier = EscapeDelimiters(RegionalResourceArnParser.ExtractDynamoDbTableNameFromArn((string?)span.GetTagItem(AttributeAWSDynamoTableArn)));
+            }
             else if (IsKeyPresent(span, AttributeAWSKinesisStreamName))
             {
                 remoteResourceType = NormalizedKinesisServiceName + "::Stream";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSKinesisStreamName));
             }
+            else if (IsKeyPresent(span, AttributeAWSKinesisStreamArn))
+            {
+                remoteResourceType = NormalizedKinesisServiceName + "::Stream";
+                remoteResourceIdentifier = EscapeDelimiters(RegionalResourceArnParser.ExtractKinesisStreamNameFromArn((string?)span.GetTagItem(AttributeAWSKinesisStreamArn)));
+            }
             else if (IsKeyPresent(span, AttributeAWSLambdaFunctionName))
             {
-                // Handling downstream Lambda as a service vs. an AWS resource:
-                // - If the method call is "Invoke", we treat downstream Lambda as a service.
-                // - Otherwise, we treat it as an AWS resource.
-                //
-                // This addresses a Lambda topology issue in Application Signals.
-                // More context in PR: https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
-                //
-                // NOTE: The env var LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT was introduced as part of this fix.
-                // It is optional and allow users to override the default value if needed.
-                if (GetRemoteOperation(span, AttributeRpcMethod) == "Invoke")
-                {
-                    attributes[AttributeAWSRemoteService] = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
-
-                    string lambdaRemoteEnv = Environment.GetEnvironmentVariable("LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT") ?? "default";
-                    attributes.Add(AttributeAWSRemoteEnvironment, $"lambda:{lambdaRemoteEnv}");
-                }
-                else
+                // For non-invoke Lambda operations, treat Lambda as a resource.
+                // see NormalizeRemoteServiceName for more information.
+                if (!IsLambdaInvokeOperation(span))
                 {
                     remoteResourceType = NormalizedLambdaServiceName + "::Function";
                     remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSLambdaFunctionName));
@@ -450,13 +476,13 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSSecretsManagerSecretArn))
             {
                 remoteResourceType = NormalizedSecretsManagerServiceName + "::Secret";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn))?.Split(':').Last();
+                remoteResourceIdentifier = EscapeDelimiters(RegionalResourceArnParser.ExtractResourceNameFromArn((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn)));
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSecretsManagerSecretArn));
             }
             else if (IsKeyPresent(span, AttributeAWSSNSTopicArn))
             {
                 remoteResourceType = NormalizedSNSServiceName + "::Topic";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn))?.Split(':').Last();
+                remoteResourceIdentifier = EscapeDelimiters(RegionalResourceArnParser.ExtractResourceNameFromArn((string?)span.GetTagItem(AttributeAWSSNSTopicArn)));
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSNSTopicArn));
             }
             else if (IsKeyPresent(span, AttributeAWSSQSQueueName))
@@ -474,13 +500,16 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             else if (IsKeyPresent(span, AttributeAWSStepFunctionsActivityArn))
             {
                 remoteResourceType = NormalizedStepFunctionsName + "::Activity";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn))?.Split(':').Last();
+                remoteResourceIdentifier =
+                    EscapeDelimiters(
+                        RegionalResourceArnParser.ExtractResourceNameFromArn(
+                            (string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn)));
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsActivityArn));
             }
             else if (IsKeyPresent(span, AttributeAWSStepFunctionsStateMachineArn))
             {
                 remoteResourceType = NormalizedStepFunctionsName + "::StateMachine";
-                remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn))?.Split(':').Last();
+                remoteResourceIdentifier = EscapeDelimiters(RegionalResourceArnParser.ExtractResourceNameFromArn((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn)));
                 cloudformationPrimaryIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSStepFunctionsStateMachineArn));
             }
             else if (IsKeyPresent(span, AttributeAWSBedrockGuardrailId))
@@ -530,6 +559,73 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             attributes.Add(AttributeAWSRemoteResourceType, remoteResourceType);
             attributes.Add(AttributeAWSRemoteResourceIdentifier, remoteResourceIdentifier);
             attributes.Add(AttributeAWSCloudformationPrimaryIdentifier, cloudformationPrimaryIdentifier);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Extracts and sets the remote resource account ID and region from either an SQS queue URL or various AWS ARN attributes.
+    private static bool SetRemoteResourceAccountIdAndRegion(Activity span, ActivityTagsCollection attributes)
+    {
+        string[] arnAttributes = new[]
+        {
+            AttributeAWSDynamoTableArn,
+            AttributeAWSKinesisStreamArn,
+            AttributeAWSSNSTopicArn,
+            AttributeAWSSecretsManagerSecretArn,
+            AttributeAWSStepFunctionsActivityArn,
+            AttributeAWSStepFunctionsStateMachineArn,
+            AttributeAWSBedrockGuardrailArn,
+            AttributeAWSLambdaFunctionArn,
+        };
+
+        string? remoteResourceAccountId = null;
+        string? remoteResourceRegion = null;
+
+        if (IsKeyPresent(span, AttributeAWSSQSQueueUrl))
+        {
+            string? url = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSSQSQueueUrl));
+            remoteResourceAccountId = SqsUrlParser.GetAccountId(url);
+            remoteResourceRegion = SqsUrlParser.GetRegion(url);
+        }
+        else
+        {
+            foreach (var attributeKey in arnAttributes)
+            {
+                if (IsKeyPresent(span, attributeKey))
+                {
+                    string? arn = (string?)span.GetTagItem(attributeKey);
+                    remoteResourceAccountId = RegionalResourceArnParser.GetAccountId(arn);
+                    remoteResourceRegion = RegionalResourceArnParser.GetRegion(arn);
+                    break;
+                }
+            }
+        }
+
+        if (remoteResourceAccountId != null && remoteResourceRegion != null)
+        {
+            attributes.Add(AttributeAWSRemoteResourceAccountId, remoteResourceAccountId);
+            attributes.Add(AttributeAWSRemoteResourceRegion, remoteResourceRegion);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Extracts and sets the remote resource account access key id and region from STS credentials.
+    private static void SetRemoteResourceAccessKeyAndRegion(Activity span, ActivityTagsCollection attributes)
+    {
+        if (IsKeyPresent(span, AttributeAWSAuthAccessKey))
+        {
+            string? remoteResourceAccessKey = (string?)span.GetTagItem(AttributeAWSAuthAccessKey);
+            attributes.Add(AttributeAWSRemoteResourceAccessKey, remoteResourceAccessKey);
+        }
+
+        if (IsKeyPresent(span, AttributeAWSAuthRegion))
+        {
+            string? remoteResourceRegion = (string?)span.GetTagItem(AttributeAWSAuthRegion);
+            attributes.Add(AttributeAWSRemoteResourceRegion, remoteResourceRegion);
         }
     }
 
@@ -538,6 +634,25 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         if (IsDBSpan(span) && IsKeyPresent(span, AttributeDBUser))
         {
             attributes.Add(AttributeAWSRemoteDBUser, (string?)span.GetTagItem(AttributeDBUser));
+        }
+    }
+
+    // Remote environment is used to identify the environment of downstream services.
+    // Currently only set to "lambda:default" for Lambda Invoke operations when aws-api system is detected.
+    private static void SetRemoteEnvironment(Activity span, ActivityTagsCollection attributes)
+    {
+        // We want to treat downstream Lambdas as a service rather than a resource because
+        // Application Signals topology map gets disconnected due to conflicting Lambda Entity definitions
+        // Additional context can be found in https://github.com/aws-observability/aws-otel-python-instrumentation/pull/319
+        if (IsLambdaInvokeOperation(span))
+        {
+            var remoteEnvironment = Environment.GetEnvironmentVariable(Plugin.LambdaApplicationSignalsRemoteEnvironment);
+            if (string.IsNullOrEmpty(remoteEnvironment))
+            {
+                remoteEnvironment = "default";
+            }
+
+            attributes.Add(AttributeAWSRemoteEnvironment, "lambda:" + remoteEnvironment.Trim());
         }
     }
 
@@ -707,5 +822,18 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         }
 
         return input.Replace("^", "^^").Replace("|", "^|");
+    }
+
+    // Check if the span represents a Lambda Invoke operation.
+    private static bool IsLambdaInvokeOperation(Activity span)
+    {
+        if (!IsAwsSDKSpan(span))
+        {
+            return false;
+        }
+
+        string rpcService = GetRemoteService(span, AttributeRpcService);
+        string rpcMethod = GetRemoteOperation(span, AttributeRpcMethod);
+        return rpcService.Equals("Lambda") && rpcMethod.Equals(LambdaInvokeOperation);
     }
 }
