@@ -18,6 +18,7 @@ using OpenTelemetry.Instrumentation.AWSLambda;
 using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
@@ -129,7 +130,7 @@ public class Plugin
 
                 MeterProvider provider = Sdk.CreateMeterProviderBuilder()
                 .AddReader(metricReader)
-                .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder))
+                .ConfigureResource(builder => this.ResourceBuilderCustomizer(builder, tracerProvider.GetResource()))
                 .AddMeter("AwsSpanMetricsProcessor")
                 .AddView(instrument =>
                 {
@@ -194,7 +195,12 @@ public class Plugin
     {
         if (this.IsApplicationSignalsEnabled())
         {
-            var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
+            var resourceBuilder = ResourceBuilder
+                .CreateEmpty() // Don't use CreateDefault because it puts service name unknown by default.
+                .AddEnvironmentVariableDetector()
+                .AddTelemetrySdk();
+
+            resourceBuilder = this.ResourceBuilderCustomizer(resourceBuilder);
             var resource = resourceBuilder.Build();
             var processor = AwsMetricAttributesSpanProcessorBuilder.Create(resource).Build();
             builder.AddProcessor(processor);
@@ -214,7 +220,12 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        var resourceBuilder = this.ResourceBuilderCustomizer(ResourceBuilder.CreateDefault());
+        var resourceBuilder = ResourceBuilder
+                .CreateEmpty() // Don't use CreateDefault because it puts service name unknown by default.
+                .AddEnvironmentVariableDetector()
+                .AddTelemetrySdk();
+
+        resourceBuilder = this.ResourceBuilderCustomizer(resourceBuilder);
         var resource = resourceBuilder.Build();
         this.sampler = SamplerUtil.GetSampler(resource);
 
@@ -516,14 +527,29 @@ public class Plugin
                !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
     }
 
-    private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder)
+    private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)
     {
+        // base case: If there is an already existing resource passed as a parameter, we will copy
+        // those resource attributes into the resource builder.
+        if (existingResource != null)
+        {
+            builder.AddAttributes(existingResource.Attributes);
+        }
+
         builder.AddAttributes(DistroAttributes);
         var resource = builder.Build();
+        if (!resource.Attributes.Any(kvp => kvp.Key == ResourceSemanticConventions.AttributeServiceName))
+        {
+            // service.name was not configured yet use the fallback.
+            Logger.Log(LogLevel.Warning, "No valid service name provided. Using fallback logic of using assembly name!");
+            builder.AddAttributes(new Dictionary<string, object> { { ResourceSemanticConventions.AttributeServiceName, this.GetFallbackServiceName() } });
+        }
+
+        // Incase the above logic failed to get assembly or process name for any reason
         var serviceName = (string?)resource.Attributes.FirstOrDefault(attr => attr.Key == ResourceSemanticConventions.AttributeServiceName).Value;
         if (serviceName == null || serviceName.StartsWith(OtelUnknownServicePrefix))
         {
-            Logger.Log(LogLevel.Warning, "No valid service name provided.");
+            Logger.Log(LogLevel.Warning, $"Fallback logic failed. Using {AwsSpanProcessingUtil.UnknownService} as service name!");
             serviceName = AwsSpanProcessingUtil.UnknownService;
         }
 
@@ -627,5 +653,44 @@ public class Plugin
         }
 
         return DefaultOtlpTracesTimeoutMilli;
+    }
+
+    private string GetFallbackServiceName()
+    {
+        try
+        {
+#if NETFRAMEWORK
+            // System.Web.dll is only available on .NET Framework
+            if (System.Web.Hosting.HostingEnvironment.IsHosted)
+            {
+                // if this app is an ASP.NET application, return "SiteName/ApplicationVirtualPath".
+                // note that ApplicationVirtualPath includes a leading slash.
+                return (System.Web.Hosting.HostingEnvironment.SiteName + System.Web.Hosting.HostingEnvironment.ApplicationVirtualPath).TrimEnd('/');
+            }
+#endif
+            return Assembly.GetEntryAssembly()?.GetName().Name ?? this.GetCurrentProcessName();
+        }
+        catch
+        {
+            return OtelUnknownServicePrefix;
+        }
+    }
+
+    /// <summary>
+    /// <para>Wrapper around <see cref="Process.GetCurrentProcess"/> and <see cref="Process.ProcessName"/></para>
+    /// <para>
+    /// On .NET Framework the <see cref="Process"/> class is guarded by a
+    /// LinkDemand for FullTrust, so partial trust callers will throw an exception.
+    /// This exception is thrown when the caller method is being JIT compiled, NOT
+    /// when Process.GetCurrentProcess is called, so this wrapper method allows
+    /// us to catch the exception.
+    /// </para>
+    /// </summary>
+    /// <returns>Returns the name of the current process.</returns>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private string GetCurrentProcessName()
+    {
+        using var currentProcess = Process.GetCurrentProcess();
+        return currentProcess.ProcessName;
     }
 }
