@@ -9,12 +9,17 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSOperationName = "aws.operation";
     public const string AttributeAWSRegion = "aws.region";
     public const string AttributeAWSRequestId = "aws.requestId";
+    public const string AttributeAWSAuthAccessKey = "aws.auth.account.access_key";
+    public const string AttributeAWSAuthRegion = "aws.auth.region";
 
+    public const string AttributeAWSDynamoTableArn = "aws.dynamodb.table.arn";
     public const string AttributeAWSDynamoTableName = "aws.table_name";
     public const string AttributeAWSSQSQueueUrl = "aws.queue_url";
     public const string AttributeAWSSQSQueueName = "aws.sqs.queue_name";
     public const string AttributeAWSS3BucketName = "aws.s3.bucket";
+    public const string AttributeAWSKinesisStreamArn = "aws.kinesis.stream.arn";
     public const string AttributeAWSKinesisStreamName = "aws.kinesis.stream_name";
+    public const string AttributeAWSLambdaFunctionArn = "aws.lambda.function.arn";
     public const string AttributeAWSLambdaFunctionName = "aws.lambda.function.name";
     public const string AttributeAWSLambdaResourceMappingId = "aws.lambda.resource_mapping.id";
     public const string AttributeAWSSecretsManagerSecretArn = "aws.secretsmanager.secret.arn";
@@ -23,6 +28,7 @@ internal static class AWSSemanticConventions
     public const string AttributeAWSStepFunctionsStateMachineArn = "aws.stepfunctions.state_machine.arn";
 
     // AWS Bedrock service attributes not yet defined in semantic conventions
+    public const string AttributeAWSBedrockGuardrailArn = "aws.bedrock.guardrail.arn";
     public const string AttributeAWSBedrockGuardrailId = "aws.bedrock.guardrail.id";
     public const string AttributeAWSBedrockAgentId = "aws.bedrock.agent.id";
     public const string AttributeAWSBedrockKnowledgeBaseId = "aws.bedrock.knowledge_base.id";
