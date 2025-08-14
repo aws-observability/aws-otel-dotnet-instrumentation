@@ -94,14 +94,6 @@ jobs:
           docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
-        if: ${{ runner.os == 'Linux' }}
-        with:
-          image-ref: 'mybuildimage'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
-
   contract-test:
     runs-on: ubuntu-latest
     steps:
@@ -123,28 +115,3 @@ jobs:
           bash ./build-and-install-distro.sh
           bash ./set-up-contract-tests.sh
           pytest contract-tests/tests
-
-  image-scan:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build artifacts
-        run: bash build.sh
-
-      - name: Build Docker image
-        run: docker build -t adot-dotnet-instrumentation:pr-${{ github.event.number }} -f Dockerfile.linux .
-
-      - name: Scan Docker image
-        uses: ./.github/actions/image_scan
-        with:
-          image-ref: "adot-dotnet-instrumentation:pr-${{ github.event.number }}"
-          severity: 'CRITICAL,HIGH'
-          logout: 'true'
