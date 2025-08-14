@@ -1,0 +1,7 @@
+# Ignore .NET SDK development dependencies
+usr/share/dotnet/sdk/
+usr/share/powershell/
+
+# Ignore specific package types
+dotnet-core
+nuget
