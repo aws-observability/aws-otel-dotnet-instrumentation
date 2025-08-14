@@ -37,3 +37,5 @@ runs:
       image-ref: ${{ inputs.image-ref }}
       severity: ${{ inputs.severity }}
       exit-code: '1'
+      skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+      skip-files: '*.deps.json'
