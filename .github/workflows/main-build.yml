@@ -97,6 +97,13 @@ jobs:
           docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
+      - name: Perform image scan
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "mybuildimage"
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          logout: 'true'
+
       - name: Upload Artifact on MUSL X64 Linux
         uses: actions/upload-artifact@v4
         with:
@@ -141,6 +148,13 @@ jobs:
           docker build -t mybuildimage -f "./docker/alpine.dockerfile" ./docker
           docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
+
+      - name: Perform image scan
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "mybuildimage"
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          logout: 'true'
 
       - name: Upload Artifact on MUSL arm64 Linux
         uses: actions/upload-artifact@v4
