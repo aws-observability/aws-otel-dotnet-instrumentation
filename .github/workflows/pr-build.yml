@@ -87,6 +87,7 @@ jobs:
           image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
+          skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
   build-arm-musl:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
@@ -111,6 +112,7 @@ jobs:
           image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
+          skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
   contract-test:
     runs-on: ubuntu-latest
