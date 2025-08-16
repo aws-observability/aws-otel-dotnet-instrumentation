@@ -16,6 +16,14 @@ inputs:
     description: |
       Whether to logout of public AWS ECR. Set to 'true' for PR workflows to avoid potential call failures,
       'false' for daily scans which has a higher bar for passing regularly and specifically wants to sign in.
+  skip-dirs:
+    required: false
+    description: "Directories to skip during scanning"
+    default: ''
+  skip-files:
+    required: false
+    description: "File patterns to skip during scanning"
+    default: ''
 
 runs:
   using: "composite"
@@ -37,5 +45,5 @@ runs:
       image-ref: ${{ inputs.image-ref }}
       severity: ${{ inputs.severity }}
       exit-code: '1'
-      skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
-      skip-files: '*.deps.json'
+      skip-dirs: ${{ inputs.skip-dirs }}
+      skip-files: ${{ inputs.skip-files }}
