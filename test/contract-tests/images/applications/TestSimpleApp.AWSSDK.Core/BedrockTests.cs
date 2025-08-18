@@ -36,6 +36,7 @@ public class BedrockTests(
         {
             HttpStatusCode = HttpStatusCode.OK,
             GuardrailId = "test-guardrail",
+            GuardrailArn = "arn:aws:bedrock:us-west-2:12345678901:guardrail/test-guardrail",
         };
     }
 

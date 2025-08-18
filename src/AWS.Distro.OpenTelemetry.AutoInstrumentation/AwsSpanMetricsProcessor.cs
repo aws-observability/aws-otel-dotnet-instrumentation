@@ -165,7 +165,7 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private void RecordMetrics(Activity span, ActivityTagsCollection attributes)
     {
         // Only record metrics if non-empty attributes are returned.
-        if (attributes.Count > 0 && !IsEc2MetadataApiSpan(attributes))
+        if (attributes.Count > 0 && !this.IsEc2MetadataApiSpan(attributes))
         {
             this.RecordErrorOrFault(span, attributes);
             this.RecordLatency(span, attributes);
@@ -180,6 +180,7 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
         {
             return true;
         }
+
         return false;
     }
 }

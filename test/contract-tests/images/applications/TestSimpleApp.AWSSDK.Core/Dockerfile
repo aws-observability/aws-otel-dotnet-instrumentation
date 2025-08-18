@@ -25,3 +25,4 @@ ENV DOTNET_STARTUP_HOOKS=/opt/aws/otel/dotnet/net/OpenTelemetry.AutoInstrumentat
 ENV OTEL_DOTNET_AUTO_HOME=/opt/aws/otel/dotnet
 ENV ASPNETCORE_ENVIRONMENT=Development
 ENV RESOURCE_DETECTORS_ENABLED=false
+ENV OTEL_EXPORTER_OTLP_HEADERS="te=trailers"

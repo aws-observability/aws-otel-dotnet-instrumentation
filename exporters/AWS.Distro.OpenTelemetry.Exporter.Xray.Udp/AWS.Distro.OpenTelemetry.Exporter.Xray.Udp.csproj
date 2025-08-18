@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net462</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net462'">
+    <LangVersion>10.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="OpenTelemetry" Version="1.11.2" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.11.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <!-- NuGet packages -->
+    <IsPackable>true</IsPackable>
+    <PackageProjectUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation/</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>docs/readme.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>See release notes at https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases</PackageReleaseNotes>
+    <PackageTags>OpenTelemetry;OTEL;tracing;Lambda;AWS</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Items that are only added when building the NuGet package -->
+  <ItemGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
+  </ItemGroup>
+</Project>
