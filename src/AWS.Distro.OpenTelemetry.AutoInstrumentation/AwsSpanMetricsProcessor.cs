@@ -6,6 +6,7 @@ using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -31,6 +32,8 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private const int ErrorCodeUpperBound = 499;
     private const int FaultCodeLowerBound = 500;
     private const int FaultCodeUpperBound = 599;
+
+    private const string Ec2MetadataApiIp = "169.254.169.254";
 
     // Metric instruments
     private Histogram<long> errorHistogram;
@@ -162,10 +165,22 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     private void RecordMetrics(Activity span, ActivityTagsCollection attributes)
     {
         // Only record metrics if non-empty attributes are returned.
-        if (attributes.Count > 0)
+        if (attributes.Count > 0 && !this.IsEc2MetadataApiSpan(attributes))
         {
             this.RecordErrorOrFault(span, attributes);
             this.RecordLatency(span, attributes);
         }
+    }
+
+    private bool IsEc2MetadataApiSpan(ActivityTagsCollection attributes)
+    {
+        if (attributes.TryGetValue(AttributeAWSRemoteService, out object? value) &&
+            value is string ip &&
+            ip == Ec2MetadataApiIp)
+        {
+            return true;
+        }
+
+        return false;
     }
 }

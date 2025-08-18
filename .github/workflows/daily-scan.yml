@@ -1,0 +1,122 @@
+name: Daily scan
+
+on:
+  schedule: # scheduled to run at 14:00, 20:00, 02:00 UTC every day
+    - cron: '0 14 * * *' # 6:00/7:00   PST/PDT (14:00 UTC)
+    - cron: '0 20 * * *' # 12:00/13:00 PST/PDT (20:00 UTC)
+    - cron: '0 02 * * *' # 18:00/19:00 PST/PDT (02:00 UTC)  
+  workflow_dispatch: # be able to run the workflow on demand
+
+env:
+  AWS_DEFAULT_REGION: us-east-1
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  scan_and_report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo for dependency scan
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install java for dependency scan
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Configure AWS credentials for dependency scan
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SECRET_MANAGER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Get NVD API key for dependency scan
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        id: nvd_api_key
+        with:
+          secret-ids: ${{ secrets.NVD_API_KEY_SECRET_ARN }}
+          parse-json-secrets: true
+
+      # See http://jeremylong.github.io/DependencyCheck/dependency-check-cli/ for installation explanation
+      - name: Install and run dependency scan
+        id: dep_scan
+        if: always()
+        run: |
+          gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 259A55407DD6C00299E6607EFFDE55BE73A2D1ED
+          VERSION=$(curl -s https://jeremylong.github.io/DependencyCheck/current.txt | head -n1 | cut -d' ' -f1)
+          curl -Ls "https://github.com/dependency-check/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip" --output dependency-check.zip
+          curl -Ls "https://github.com/dependency-check/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip.asc" --output dependency-check.zip.asc
+          gpg --verify dependency-check.zip.asc
+          unzip dependency-check.zip
+          
+      - name: Run Dependency Check
+        run: |
+          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --out . --scan "**/*.csproj"
+
+      - name: Print dependency scan results on failure
+        if: ${{ steps.dep_scan.outcome != 'success' }}
+        run: less dependency-check-report.html
+
+      - name: Configure AWS credentials for image scan
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ASSUME_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Login to Public ECR
+        uses: docker/login-action@v3
+        with:
+          registry: public.ecr.aws
+          
+      - name: Perform high image scan
+        if: always()
+        id: high_scan
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.9.0"
+          severity: 'CRITICAL,HIGH'
+          logout: 'false'
+
+      - name: Perform low image scan
+        if: always()
+        id: low_scan
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.9.0"
+          severity: 'MEDIUM,LOW,UNKNOWN'
+          logout: 'false'
+
+      - name: Configure AWS Credentials for emitting metrics
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.MONITORING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Publish high scan status
+        if: always()
+        run: |
+          value="${{ steps.high_scan.outcome == 'success' && '1.0' || '0.0' }}"
+          aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+            --metric-name Success \
+            --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=daily_scan_high \
+            --value $value
+
+      - name: Publish low scan status
+        if: always()
+        run: |
+          value="${{ steps.low_scan.outcome == 'success' && steps.dep_scan.outcome == 'success' && '1.0' || '0.0'}}"
+          aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+            --metric-name Success \
+            --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=daily_scan_low \
+            --value $value

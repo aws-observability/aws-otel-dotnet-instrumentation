@@ -29,7 +29,9 @@ public class ConsoleLoggerProvider : ILoggerProvider
     /// <inheritdoc/>
     public ILogger CreateLogger(string categoryName)
     {
+#pragma warning disable CS0436 // Type conflicts with imported type
         return new ConsoleLogger(categoryName, this.minLogLevel);
+#pragma warning restore CS0436 // Type conflicts with imported type
     }
 
     /// <inheritdoc/>

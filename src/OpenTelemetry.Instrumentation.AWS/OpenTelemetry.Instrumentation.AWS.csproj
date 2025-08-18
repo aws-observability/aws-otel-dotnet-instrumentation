@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- OmniSharp/VS Code requires TargetFrameworks to be in descending order for IntelliSense and analysis. -->
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <!-- We will need to swap net462 with $(NetFrameworkMinimumSupportedVersion) when we push this back to upstream -->
     <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net462</TargetFrameworks>
     <Description>AWS client instrumentation for OpenTelemetry .NET</Description>
@@ -28,6 +28,7 @@
     <PackageReference Include="AWSSDK.Core" Version="3.7.300" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.300" />
     <PackageReference Include="AWSSDK.SQS" Version="3.7.300" />
+    <PackageReference Include="AWSSDK.XRay" Version="3.7.300" />
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.3.0-beta.1" />
   </ItemGroup>
 

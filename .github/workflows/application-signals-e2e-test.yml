@@ -44,11 +44,11 @@ jobs:
           role-external-id: ApplicationSignalsDotnet
           aws-region: us-east-1
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.ec2-default-image-name }}
       
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.ec2-windows-image-name }}
 
@@ -89,14 +89,14 @@ jobs:
         
       - name: Download Linux x64 Artifact
         if: runner.os == 'Linux'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
           
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
@@ -125,8 +125,11 @@ jobs:
           docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.windows2022 .
           docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-windows2022-${{ steps.short_sha.outputs.SHORT_SHA }}
         shell: powershell
-
-  dotnet-ec2-default-test:
+  #
+  # PACKAGED DISTRIBUTION LANGUAGE VERSION COVERAGE
+  # DEFAULT SETTING: {Dotnet Version}, EC2
+  #
+  default-v8:
     needs: [ upload-main-build ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
     secrets: inherit
@@ -134,6 +137,7 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '8.0'
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
@@ -143,7 +147,15 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-windows-image-name }}
-      
+
+  dotnet-ec2-adot-sigv4-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-adot-sigv4-test.yml@main
+    secrets: inherit
+    with:
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
@@ -161,8 +173,17 @@ jobs:
     with:
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
-      test-cluster-name: 'eks-windows-manual'
+      test-cluster-name: 'e2e-dotnet-windows-canary-test'
       caller-workflow-name: 'main-build'
+
+  dotnet-k8s-test:
+    needs: [ upload-main-build, upload-main-build-image ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-k8s-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
         
   build-lambda-staging-sample-app:
     runs-on: ubuntu-latest
@@ -204,3 +225,21 @@ jobs:
     with:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
+
+  # This validation is to ensure that all test workflows relevant to this repo are actually
+  # being used in this repo, which is referring to all the other jobs in this file.
+  #
+  # If this starts failing, then it most likely means that new e2e test workflow was
+  # added to `aws-observability/aws-application-signals-test-framework`, but was not
+  # added to this file. It could also mean that a test in this file has been removed.
+  #
+  # If a particular test file is intended to not be tested in this repo and should not
+  # be failing this particular validation, then choose one of the following options:
+  # - Add the test file to the exclusions input (CSV format) to the workflow
+  #   (see: https://github.com/aws-observability/aws-application-signals-test-framework/blob/main/.github/workflows/validate-e2e-tests-are-accounted-for.yml#L1)
+  # - Update the `validate-e2e-tests-are-accounted-for` job to change which "workflow files are expected to be used by this repo"
+  #   (see: https://github.com/aws-observability/aws-application-signals-test-framework/blob/main/.github/workflows/validate-e2e-tests-are-accounted-for.yml)
+  validate-all-tests-are-accounted-for:
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@main
+    with:
+      exclusions: dotnet-ec2-nuget-test.yml,dotnet-ec2-asg-test.yml
