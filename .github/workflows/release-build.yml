@@ -135,15 +135,6 @@ jobs:
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
             AWS.Otel.DotNet.Auto.psm1.sha256 \
             --clobber
-          # Download layer.zip from existing latest tagged SDK release note
-          LATEST_SDK_VERSION=$(gh release list --repo "aws-observability/aws-otel-dotnet-instrumentation" --json tagName,isLatest -q 'map(select(.isLatest==true)) | .[0].tagName')
-          mkdir -p layer_artifact
-          gh release download "$LATEST_SDK_VERSION" --repo "aws-observability/aws-otel-dotnet-instrumentation" --pattern "layer.zip" --dir layer_artifact
-          shasum -a 256 layer_artifact/layer.zip > layer_artifact/layer.zip.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
-            layer_artifact/layer.zip \
-            layer_artifact/layer.zip.sha256 \
-            --clobber
 
   release-image:
     # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
