@@ -104,11 +104,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         run: |
+          # Create release notes template
+          cat > release_notes.md << 'EOF'
+          This release contains the following upstream components:
+
+          OpenTelemetry .NET Auto Instrumentation - <opentelemetry-dotnet-contrib version - e.g. 1.11.0>
+
+          This release also publishes to public ECR and NuGet.
+          * See ADOT .NET auto-instrumentation Docker image v${{ github.event.inputs.version }} in our public ECR repository:
+          https://gallery.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet
+          * See version ${{ github.event.inputs.version }} in our NuGet repository:
+          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.AutoInstrumentation
+          EOF
+
           gh release create --target "$GITHUB_REF_NAME" \
              --title "Release v${{ github.event.inputs.version }}" \
              --draft \
              "v${{ github.event.inputs.version }}" \
-              --notes "Release Verions v${{ github.event.inputs.version }}"
+              --notes-file release_notes.md
 
       - name: Upload artifacts and checksum to release
         env:
