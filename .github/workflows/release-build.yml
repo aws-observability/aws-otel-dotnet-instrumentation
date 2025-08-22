@@ -245,6 +245,18 @@ jobs:
         run: |
           set -e
           docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
+
+      - name: Scan Linux container
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64"
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          logout: 'true'
+
+      - name: Push Linux container
+        if: runner.os == 'Linux'
+        run: |
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
@@ -256,6 +268,18 @@ jobs:
           cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
           cd ./arm64
           docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
+
+      - name: Scan Linux arm64 container
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64"
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          logout: 'true'
+
+      - name: Push Linux arm64 container
+        if: runner.os == 'Linux'
+        run: |
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
@@ -267,19 +291,31 @@ jobs:
           if ($osInfo -match "10.0.17763") {
             Echo "Build image for Windows Server 2019"
             docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 -f ./Dockerfile.windows2019 .
-            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
-            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
-            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+            echo "WINDOWS_IMAGE_TAG=windows2019" >> $env:GITHUB_ENV
           } elseif ($osInfo -match "10.0.20348") {
             Echo "Build image for Windows Server 2022"
             docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
-            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            echo "WINDOWS_IMAGE_TAG=windows2022" >> $env:GITHUB_ENV
           } else {
               Echo "Unknown Windows Server version: $osInfo"
               exit 1
           }
+        shell: powershell
+
+      - name: Scan Windows container
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/image_scan
+        with:
+          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}"
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          logout: 'true'
+
+      - name: Push Windows container
+        if: runner.os == 'Windows'
+        run: |
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}
         shell: powershell
 
   release-multi-platform-image:
