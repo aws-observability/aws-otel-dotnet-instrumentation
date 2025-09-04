@@ -55,13 +55,15 @@ jobs:
           mkdir -p ./OpenTelemetryDistribution
           unzip -o bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d ./OpenTelemetryDistribution
           cp THIRD-PARTY-LICENSES ./OpenTelemetryDistribution/THIRD-PARTY-LICENSES
-          docker build -t pr-build-x64-glibc:latest -f ./Dockerfile.linux .
+          IMAGE_NAME="pr-build-x64-glibc:latest"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          docker build -t $IMAGE_NAME -f ./Dockerfile.linux .
 
       - name: Perform Linux image scan
         if: runner.os == 'Linux'
         uses: ./.github/actions/image_scan
         with:
-          image-ref: "pr-build-x64-glibc:latest"
+          image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
 
@@ -69,14 +71,16 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           Expand-Archive -LiteralPath .\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
-          docker build -t pr-build-windows-2022:latest -f .\Dockerfile.windows2022 .
+          $IMAGE_NAME="pr-build-windows-2022:latest"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $env:GITHUB_ENV
+          docker build -t $IMAGE_NAME -f .\Dockerfile.windows2022 .
         shell: powershell
 
       - name: Perform Windows image scan
         if: runner.os == 'Windows'
         uses: ./.github/actions/image_scan
         with:
-          image-ref: "pr-build-windows-2022:latest"
+          image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
 
@@ -102,12 +106,14 @@ jobs:
           mkdir -p ./OpenTelemetryDistribution
           unzip -o bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip -d ./OpenTelemetryDistribution
           cp THIRD-PARTY-LICENSES ./OpenTelemetryDistribution/THIRD-PARTY-LICENSES
-          docker build -t pr-build-arm64-glibc:latest -f ./Dockerfile.linux .
+          IMAGE_NAME="pr-build-arm64-glibc:latest"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          docker build -t $IMAGE_NAME -f ./Dockerfile.linux .
 
       - name: Perform image scan
         uses: ./.github/actions/image_scan
         with:
-          image-ref: "pr-build-arm64-glibc:latest"
+          image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
 
@@ -122,14 +128,16 @@ jobs:
       - name: Build in Docker container
         run: |
           set -e
-          docker build -t pr-build-x64-musl:latest -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project pr-build-x64-musl \
+          IMAGE_NAME="pr-build-x64-musl:latest"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
       - name: Perform image scan
         uses: ./.github/actions/image_scan
         with:
-          image-ref: "pr-build-x64-musl:latest"
+          image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
           skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
@@ -145,14 +153,16 @@ jobs:
       - name: Build in Docker container
         run: |
           set -e
-          docker build -t pr-build-arm64-musl -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project pr-build-arm64-musl \
+          IMAGE_NAME="pr-build-arm64-musl"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
       - name: Perform image scan
         uses: ./.github/actions/image_scan
         with:
-          image-ref: "pr-build-arm64-musl"
+          image-ref: "${{ env.IMAGE_NAME }}"
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
           skip-dirs: '/usr/share/dotnet,/usr/share/powershell'

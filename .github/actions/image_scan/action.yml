@@ -20,10 +20,6 @@ inputs:
     required: false
     description: "Directories to skip during scanning"
     default: ''
-  skip-files:
-    required: false
-    description: "File patterns to skip during scanning"
-    default: ''
 
 runs:
   using: "composite"
@@ -46,4 +42,3 @@ runs:
       severity: ${{ inputs.severity }}
       exit-code: '1'
       skip-dirs: ${{ inputs.skip-dirs }}
-      skip-files: ${{ inputs.skip-files }}
