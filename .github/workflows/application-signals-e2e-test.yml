@@ -165,6 +165,15 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
 
+  dotnet-ec2-asg-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-asg-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
