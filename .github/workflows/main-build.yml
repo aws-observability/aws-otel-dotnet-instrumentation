@@ -55,7 +55,7 @@ jobs:
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
-        uses: ./.github/actions/build-and-scan-linux-and-windows-images
+        uses: ./.github/actions/build-and-scan-images
         with:
           image-name: "main-build-windows-2022:latest"
           zip-path: "./bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
@@ -100,7 +100,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build in Docker container and scan
-        uses: ./.github/actions/build-and-scan-musl-images
+        uses: ./.github/actions/build-and-scan-images
         with:
           image-name: "main-build-x64-musl"
           dockerfile: "./docker/alpine.dockerfile"
@@ -129,7 +129,7 @@ jobs:
         run: dotnet test
 
       - name: Build and scan Linux image
-        uses: ./.github/actions/build-and-scan-linux-and-windows-images
+        uses: ./.github/actions/build-and-scan-images
         with:
           image-name: "main-build-arm64-glibc:latest"
           zip-path: "bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
@@ -152,7 +152,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build in Docker container and scan
-        uses: ./.github/actions/build-and-scan-musl-images
+        uses: ./.github/actions/build-and-scan-images
         with:
           image-name: "main-build-arm64-musl"
           dockerfile: "./docker/alpine.dockerfile"
