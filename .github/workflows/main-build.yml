@@ -58,8 +58,8 @@ jobs:
         uses: ./.github/actions/build-and-scan-linux-and-windows-images
         with:
           image-name: "main-build-windows-2022:latest"
-          zip-path: ".\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
-          dockerfile: ".\Dockerfile.windows2022"
+          zip-path: "./bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+          dockerfile: "./Dockerfile.windows2022"
           platform: "windows"
 
       - name: Upload Artifact on X64 Linux
