@@ -68,7 +68,7 @@ jobs:
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
-        uses: ./.github/actions/build-and-scan-image
+        uses: ./.github/actions/build-and-scan-linux-and-windows-images
         with:
           image-name: "pr-build-windows-2022:latest"
           zip-path: ".\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
@@ -115,21 +115,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build in Docker container
-        run: |
-          set -e
-          IMAGE_NAME="pr-build-x64-musl:latest"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
+      - name: Build in Docker container and scan
+        uses: ./.github/actions/build-and-scan-musl-images
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "pr-build-x64-musl:latest"
+          dockerfile: "./docker/alpine.dockerfile"
           skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
   
   build-arm-musl:
@@ -140,21 +130,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build in Docker container
-        run: |
-          set -e
-          IMAGE_NAME="pr-build-arm64-musl"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
+      - name: Build in Docker container and scan
+        uses: ./.github/actions/build-and-scan-musl-images
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "pr-build-arm64-musl"
+          dockerfile: "./docker/alpine.dockerfile"
           skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
   contract-test:

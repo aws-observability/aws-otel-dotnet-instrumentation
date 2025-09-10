@@ -1,5 +1,5 @@
-name: 'Build and Scan Docker Image'
-description: 'Build Docker image from distribution and scan for vulnerabilities'
+name: 'Build and Scan Linux and Windows Images'
+description: 'Build Docker image from pre-built distribution and scan for vulnerabilities'
 inputs:
   image-name:
     description: 'Docker image name'

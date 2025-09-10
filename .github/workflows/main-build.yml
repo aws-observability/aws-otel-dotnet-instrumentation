@@ -55,7 +55,7 @@ jobs:
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
-        uses: ./.github/actions/build-and-scan-image
+        uses: ./.github/actions/build-and-scan-linux-and-windows-images
         with:
           image-name: "main-build-windows-2022:latest"
           zip-path: ".\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
@@ -99,21 +99,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build in Docker container
-        run: |
-          set -e
-          IMAGE_NAME="main-build-x64-musl"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
+      - name: Build in Docker container and scan
+        uses: ./.github/actions/build-and-scan-musl-images
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "main-build-x64-musl"
+          dockerfile: "./docker/alpine.dockerfile"
 
       - name: Upload Artifact on MUSL X64 Linux
         uses: actions/upload-artifact@v4
@@ -139,7 +129,7 @@ jobs:
         run: dotnet test
 
       - name: Build and scan Linux image
-        uses: ./.github/actions/build-and-scan-image
+        uses: ./.github/actions/build-and-scan-linux-and-windows-images
         with:
           image-name: "main-build-arm64-glibc:latest"
           zip-path: "bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
@@ -161,21 +151,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build in Docker container
-        run: |
-          set -e
-          IMAGE_NAME="main-build-arm64-musl"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          docker build -t $IMAGE_NAME -f "./docker/alpine.dockerfile" ./docker
-          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
-            /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
-
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
+      - name: Build in Docker container and scan
+        uses: ./.github/actions/build-and-scan-musl-images
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "main-build-arm64-musl"
+          dockerfile: "./docker/alpine.dockerfile"
 
       - name: Upload Artifact on MUSL arm64 Linux
         uses: actions/upload-artifact@v4
