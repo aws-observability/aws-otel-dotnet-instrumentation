@@ -53,22 +53,14 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet test
 
-      - name: Build Windows image
+      - name: Build and scan Windows image
         if: runner.os == 'Windows'
-        run: |
-          Expand-Archive -LiteralPath .\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
-          $IMAGE_NAME="main-build-windows-2022:latest"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $env:GITHUB_ENV
-          docker build -t $IMAGE_NAME -f .\Dockerfile.windows2022 .
-        shell: powershell
-
-      - name: Perform Windows image scan
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/image_scan
+        uses: ./.github/actions/build-and-scan-image
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "main-build-windows-2022:latest"
+          zip-path: ".\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+          dockerfile: ".\Dockerfile.windows2022"
+          platform: "windows"
 
       - name: Upload Artifact on X64 Linux
         if: runner.os == 'Linux'
@@ -146,21 +138,13 @@ jobs:
       - name: Test on Linux
         run: dotnet test
 
-      - name: Build Linux image
-        run: |
-          rm -rf ./OpenTelemetryDistribution
-          mkdir -p ./OpenTelemetryDistribution
-          unzip -o bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip -d ./OpenTelemetryDistribution
-          IMAGE_NAME="main-build-arm64-glibc:latest"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          docker build -t $IMAGE_NAME -f ./Dockerfile.linux .
-
-      - name: Perform image scan
-        uses: ./.github/actions/image_scan
+      - name: Build and scan Linux image
+        uses: ./.github/actions/build-and-scan-image
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "main-build-arm64-glibc:latest"
+          zip-path: "bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
+          dockerfile: "./Dockerfile.linux"
+          platform: "linux"
 
       - name: Upload Artifact on arm64 Linux
         uses: actions/upload-artifact@v4

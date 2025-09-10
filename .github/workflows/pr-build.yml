@@ -66,22 +66,14 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           logout: 'true'
 
-      - name: Build Windows image
+      - name: Build and scan Windows image
         if: runner.os == 'Windows'
-        run: |
-          Expand-Archive -LiteralPath .\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
-          $IMAGE_NAME="pr-build-windows-2022:latest"
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $env:GITHUB_ENV
-          docker build -t $IMAGE_NAME -f .\Dockerfile.windows2022 .
-        shell: powershell
-
-      - name: Perform Windows image scan
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/image_scan
+        uses: ./.github/actions/build-and-scan-image
         with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          image-name: "pr-build-windows-2022:latest"
+          zip-path: ".\bin\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+          dockerfile: ".\Dockerfile.windows2022"
+          platform: "windows"
 
   build-arm:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
