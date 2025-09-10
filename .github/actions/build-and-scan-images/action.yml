@@ -1,10 +1,6 @@
 name: 'Build and Scan Images'
 description: 'Build Docker image and scan for vulnerabilities'
 inputs:
-  name:
-    description: 'Step name for identification'
-    required: false
-    default: 'Build and scan image'
   image-name:
     description: 'Docker image name'
     required: true
