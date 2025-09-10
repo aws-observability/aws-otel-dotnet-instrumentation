@@ -240,19 +240,15 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Linux container
+      - name: Build and scan Linux container
         if: runner.os == 'Linux'
-        run: |
-          set -e
-          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
-
-      - name: Scan Linux container
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/image_scan
+        uses: ./.github/actions/build-and-scan-images
         with:
-          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          name: "Build and scan Linux container"
+          image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64"
+          zip-path: "./artifacts/linux/x64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip"
+          dockerfile: "./Dockerfile.linux"
+          platform: "linux"
 
       - name: Push Linux container
         if: runner.os == 'Linux'
@@ -261,21 +257,16 @@ jobs:
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
 
-      - name: Build Linux arm64 container
+      - name: Build and scan Linux arm64 container
         if: runner.os == 'Linux'
-        run: |
-          set -e
-          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
-          cd ./arm64
-          docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
-
-      - name: Scan Linux arm64 container
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/image_scan
+        uses: ./.github/actions/build-and-scan-images
         with:
-          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          name: "Build and scan Linux arm64 container"
+          image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64"
+          zip-path: "./artifacts/linux/arm64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
+          dockerfile: "./Dockerfile.linux"
+          platform: "linux"
+          docker-platform: "linux/arm64"
 
       - name: Push Linux arm64 container
         if: runner.os == 'Linux'
@@ -284,31 +275,31 @@ jobs:
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
 
-      - name: Build Windows container
+      - name: Determine Windows version
         if: runner.os == 'Windows'
         run: |
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.17763") {
-            Echo "Build image for Windows Server 2019"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 -f ./Dockerfile.windows2019 .
             echo "WINDOWS_IMAGE_TAG=windows2019" >> $env:GITHUB_ENV
+            echo "DOCKERFILE_PATH=./Dockerfile.windows2019" >> $env:GITHUB_ENV
           } elseif ($osInfo -match "10.0.20348") {
-            Echo "Build image for Windows Server 2022"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
             echo "WINDOWS_IMAGE_TAG=windows2022" >> $env:GITHUB_ENV
+            echo "DOCKERFILE_PATH=./Dockerfile.windows2022" >> $env:GITHUB_ENV
           } else {
               Echo "Unknown Windows Server version: $osInfo"
               exit 1
           }
         shell: powershell
 
-      - name: Scan Windows container
+      - name: Build and scan Windows container
         if: runner.os == 'Windows'
-        uses: ./.github/actions/image_scan
+        uses: ./.github/actions/build-and-scan-images
         with:
-          image-ref: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}"
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-          logout: 'true'
+          name: "Build and scan Windows container"
+          image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}"
+          zip-path: "./artifacts/windows/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
+          dockerfile: "${{ env.DOCKERFILE_PATH }}"
+          platform: "windows"
 
       - name: Push Windows container
         if: runner.os == 'Windows'

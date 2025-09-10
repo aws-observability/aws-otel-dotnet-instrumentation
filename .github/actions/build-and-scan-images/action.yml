@@ -1,11 +1,15 @@
 name: 'Build and Scan Images'
 description: 'Build Docker image and scan for vulnerabilities'
 inputs:
+  name:
+    description: 'Step name for identification'
+    required: false
+    default: 'Build and scan image'
   image-name:
     description: 'Docker image name'
     required: true
   dockerfile:
-    description: 'Path to Dockerfile'
+    description: 'Path to Dockerfile (can use environment variables)'
     required: true
   zip-path:
     description: 'Path to distribution zip file (required for zip-based builds)'
@@ -14,6 +18,9 @@ inputs:
     description: 'Platform (linux or windows, for zip-based builds)'
     required: false
     default: 'linux'
+  docker-platform:
+    description: 'Docker platform flag (e.g., linux/arm64)'
+    required: false
   skip-dirs:
     description: 'Directories to skip during scanning'
     required: false
@@ -46,7 +53,15 @@ runs:
       shell: bash
       run: |
         set -e
-        docker build -t ${{ inputs.image-name }} -f ${{ inputs.dockerfile }} .
+        # Expand environment variables in dockerfile path
+        DOCKERFILE_PATH="${{ inputs.dockerfile }}"
+        DOCKERFILE_PATH=$(eval echo "$DOCKERFILE_PATH")
+        
+        if [ -n "${{ inputs.docker-platform }}" ]; then
+          docker build --platform ${{ inputs.docker-platform }} -t ${{ inputs.image-name }} -f "$DOCKERFILE_PATH" .
+        else
+          docker build -t ${{ inputs.image-name }} -f "$DOCKERFILE_PATH" .
+        fi
 
     - name: Build and run in Docker container (from source)
       if: "inputs.dockerfile != './Dockerfile.linux' && inputs.dockerfile != './Dockerfile.windows2019' && inputs.dockerfile != './Dockerfile.windows2022'"
