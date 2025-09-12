@@ -242,7 +242,7 @@ jobs:
 
       - name: Build and scan Linux container
         if: runner.os == 'Linux'
-        uses: ./.github/actions/build-and-scan-images
+        uses: ./.github/actions/build-and-scan-image
         with:
           image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64"
           zip-path: "./artifacts/linux/x64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip"
@@ -258,7 +258,7 @@ jobs:
 
       - name: Build and scan Linux arm64 container
         if: runner.os == 'Linux'
-        uses: ./.github/actions/build-and-scan-images
+        uses: ./.github/actions/build-and-scan-image
         with:
           image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64"
           zip-path: "./artifacts/linux/arm64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip"
@@ -291,7 +291,7 @@ jobs:
 
       - name: Build and scan Windows container
         if: runner.os == 'Windows'
-        uses: ./.github/actions/build-and-scan-images
+        uses: ./.github/actions/build-and-scan-image
         with:
           image-name: "${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-${{ env.WINDOWS_IMAGE_TAG }}"
           zip-path: "./artifacts/windows/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip"
