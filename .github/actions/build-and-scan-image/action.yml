@@ -25,15 +25,20 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Unzip Linux Artifact
-      if: runner.os == 'Linux'
+    - name: Unzip x64 Artifacts
+      if: runner.os == 'Linux' && (inputs.x64-artifact-path != '' && inputs.x64-musl-artifact-path != '')
       shell: bash
       run: |
-        unzip ${{ inputs.x64-artifact-path }} -d ./OpenTelemetryDistribution
-        unzip ${{ inputs.x64-musl-artifact-path }} "linux-musl-x64/*" -d ./OpenTelemetryDistribution
-        mkdir ./arm64
-        unzip ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
-        unzip ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+        unzip -o ${{ inputs.x64-artifact-path }} -d ./OpenTelemetryDistribution
+        unzip -o ${{ inputs.x64-musl-artifact-path }} "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+
+    - name: Unzip arm64 Artifacts
+      if: runner.os == 'Linux' && (inputs.arm64-artifact-path != '' && inputs.arm64-musl-artifact-path != '')
+      shell: bash
+      run: |
+        mkdir -p ./arm64
+        unzip -o ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
+        unzip -o ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 
     - name: Unzip Windows Artifact
       if: runner.os == 'Windows'
