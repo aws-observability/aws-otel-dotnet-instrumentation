@@ -16,9 +16,8 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-          - os: windows-2019
           - os: ubuntu-latest
-
+          - os: macos-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -136,7 +135,6 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-          - os: windows-2019
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -189,16 +187,8 @@ jobs:
           arm64-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
           arm64-musl-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
-      - name: Build and scan Windows 2019 image
-        if: runner.os == 'Windows' && matrix.os == 'windows-2019'
-        uses: ./.github/actions/build-and-scan-image
-        with:
-          version: pr-${{ github.event.number }}
-          image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-windows2019
-          windows-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
-
       - name: Build and scan Windows 2022 image
-        if: runner.os == 'Windows' && matrix.os == 'windows-2022'
+        if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
           version: pr-${{ github.event.number }}
