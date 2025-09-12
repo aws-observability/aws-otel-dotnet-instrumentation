@@ -130,6 +130,7 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
   build-and-scan-images:
+    needs: [build, build-arm, build-x64-musl, build-arm-musl]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -140,10 +141,35 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+      - name: Download Linux x64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
         with:
-          dotnet-version: '8.0.x'
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+
+      - name: Download Linux X64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+
+      - name: Download Linux arm64 Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+
+      - name: Download Linux arm64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Download Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
 
       - name: Build and scan x64 image
         if: runner.os == 'Linux'
@@ -151,8 +177,8 @@ jobs:
         with:
           version: pr-${{ github.event.number }}
           image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-amd64
-          x64-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          x64-musl-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          x64-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          x64-musl-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
 
       - name: Build and scan arm64 image
         if: runner.os == 'Linux'
@@ -160,8 +186,8 @@ jobs:
         with:
           version: pr-${{ github.event.number }}
           image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-arm64
-          arm64-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
-          arm64-musl-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+          arm64-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          arm64-musl-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
       - name: Build and scan Windows 2019 image
         if: runner.os == 'Windows' && matrix.os == 'windows-2019'
@@ -169,7 +195,7 @@ jobs:
         with:
           version: pr-${{ github.event.number }}
           image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-windows2019
-          windows-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          windows-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
 
       - name: Build and scan Windows 2022 image
         if: runner.os == 'Windows' && matrix.os == 'windows-2022'
@@ -177,7 +203,7 @@ jobs:
         with:
           version: pr-${{ github.event.number }}
           image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-windows2022
-          windows-artifact-path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          windows-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
 
   contract-test:
     runs-on: ubuntu-latest
