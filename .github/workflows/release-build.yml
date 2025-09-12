@@ -146,8 +146,6 @@ jobs:
             --clobber
 
   release-image:
-    # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
-    # since deleting from Private ECR is not possible.
     needs: [release, build-release-nuget]
     runs-on: ${{ matrix.os }}
     continue-on-error: true
@@ -155,7 +153,6 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-          - os: windows-2019
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -188,28 +185,12 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: ./artifacts/linux/arm64-musl
 
-      - name: Unzip Linux Artifact
-        if: runner.os == 'Linux'
-        run: |
-          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
-          unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
-          mkdir ./arm64
-          unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
-          unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
-
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
         uses: actions/download-artifact@v4
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
-
-      - name: Unzip Windows Artifact
-        if: runner.os == 'Windows'
-        run: |
-          Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
-        shell: powershell
-
 
       - name: Configure AWS credentials for public ECR
         uses: aws-actions/configure-aws-credentials@v4
@@ -240,45 +221,183 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Linux container
-        if: runner.os == 'Linux'
+      - name: Build and scan x64 image
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          version: ${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+          x64-artifact-path: ./artifacts/linux/x64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          x64-musl-artifact-path: ./artifacts/linux/x64-musl/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          arm64-artifact-path: ./artifacts/linux/arm64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          arm64-musl-artifact-path: ./artifacts/linux/arm64-musl/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Push Linux x64 Image
         run: |
-          set -e
-          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
 
-      - name: Build Linux arm64 container
-        if: runner.os == 'Linux'
+  release-image-arm64:
+    needs: [release, build-release-nuget]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Linux x64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+
+      - name: Download Linux X64 MUSL Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          path: ./artifacts/linux/x64-musl
+
+      - name: Download Linux arm64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          path: ./artifacts/linux/arm64
+
+      - name: Download Linux arm64 MUSL Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+          path: ./artifacts/linux/arm64-musl
+
+      - name: Configure AWS credentials for public ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
+
+      - name: Login to Amazon public ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and scan arm64 image
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          version: ${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          x64-artifact-path: ./artifacts/linux/x64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          x64-musl-artifact-path: ./artifacts/linux/x64-musl/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          arm64-artifact-path: ./artifacts/linux/arm64/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          arm64-musl-artifact-path: ./artifacts/linux/arm64-musl/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Push Linux arm64 Image
         run: |
-          set -e
-          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
-          cd ./arm64
-          docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
 
-      - name: Build Windows container
+  release-image-windows:
+    needs: [release, build-release-nuget]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [windows-2022]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          path: ./artifacts/windows
+
+      - name: Configure AWS credentials for public ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
+
+      - name: Fix Public ECR login issue on GitHub Windows Runner
+        run: |
+          echo '{"auths": {"https://index.docker.io/v1/": {}}, "HttpHeaders": { "User-Agent": "Docker-Client/19.03.12 (windows)"}}' | out-file -encoding ASCII ~/.docker/config.json
+        shell: powershell
+
+      - name: Login to Amazon public ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Configure AWS credentials for private ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
+          aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
+
+      - name: Login to Amazon private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and scan Windows 2022 image
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          version: ${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          windows-artifact-path: ./artifacts/windows/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+
+      - name: Push Windows Images
+        run: |
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+        shell: powershellsl/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Push Linux arm64 Image
+        if: runner.os == 'Linux'
+        run: |
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+
+      - name: Build and scan Windows 2019 image
+        if: runner.os == 'Windows' && matrix.os == 'windows-2019'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          version: ${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+          windows-artifact-path: ./artifacts/windows/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+
+      - name: Build and scan Windows 2022 image
+        if: runner.os == 'Windows' && matrix.os == 'windows-2022'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          version: ${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          windows-artifact-path: ./artifacts/windows/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+
+      - name: Push Windows Images
         if: runner.os == 'Windows'
         run: |
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.17763") {
-            Echo "Build image for Windows Server 2019"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 -f ./Dockerfile.windows2019 .
             docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
             docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
             docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
           } elseif ($osInfo -match "10.0.20348") {
-            Echo "Build image for Windows Server 2022"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
             docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
             docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
             docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          } else {
-              Echo "Unknown Windows Server version: $osInfo"
-              exit 1
           }
         shell: powershell
 

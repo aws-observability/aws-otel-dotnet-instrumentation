@@ -1,0 +1,78 @@
+name: 'Build and Scan Image'
+description: 'Unzips artifacts and builds container images'
+inputs:
+  version:
+    description: 'Release version'
+    required: true
+  image-name:
+    description: 'Docker image name'
+    required: true
+  windows-artifact-path:
+    description: 'Windows artifact zip path'
+    required: false
+  x64-artifact-path:
+    description: 'Linux x64 artifact zip path'
+    required: false
+  x64-musl-artifact-path:
+    description: 'Linux x64 MUSL artifact zip path'
+    required: false
+  arm64-artifact-path:
+    description: 'Linux arm64 artifact zip path'
+    required: false
+  arm64-musl-artifact-path:
+    description: 'Linux arm64 MUSL artifact zip path'
+    required: false
+runs:
+  using: 'composite'
+  steps:
+    - name: Unzip x64 Artifacts
+      if: runner.os == 'Linux' && (inputs.x64-artifact-path != '' && inputs.x64-musl-artifact-path != '')
+      shell: bash
+      run: |
+        unzip -o ${{ inputs.x64-artifact-path }} -d ./OpenTelemetryDistribution
+        unzip -o ${{ inputs.x64-musl-artifact-path }} "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+
+    - name: Unzip arm64 Artifacts
+      if: runner.os == 'Linux' && (inputs.arm64-artifact-path != '' && inputs.arm64-musl-artifact-path != '')
+      shell: bash
+      run: |
+        mkdir -p ./arm64
+        unzip -o ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
+        unzip -o ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+
+    - name: Unzip Windows Artifact
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        Expand-Archive -LiteralPath ${{ inputs.windows-artifact-path }} -DestinationPath .\OpenTelemetryDistribution -Force
+
+    - name: Build Linux container
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -e
+        if [[ "${{ inputs.image-name }}" == *"amd64"* ]]; then
+          docker build -t ${{ inputs.image-name }} -f ./Dockerfile.linux .
+        elif [[ "${{ inputs.image-name }}" == *"arm64"* ]]; then
+          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
+          cd ./arm64
+          docker build --platform linux/arm64 -t ${{ inputs.image-name }} -f ../Dockerfile.linux .
+        fi
+
+    - name: Build Windows container
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        if ("${{ inputs.image-name }}" -match "windows2019") {
+          docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2019 .
+        } elseif ("${{ inputs.image-name }}" -match "windows2022") {
+          docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
+        }
+
+    - name: Scan image
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
