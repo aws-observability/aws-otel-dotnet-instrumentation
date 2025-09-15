@@ -1,78 +1,71 @@
-name: 'Build and Scan Images'
-description: 'Build Docker image and scan for vulnerabilities'
+name: 'Build and Scan Image'
+description: 'Unzips artifacts and builds container images'
 inputs:
   image-name:
     description: 'Docker image name'
     required: true
-  dockerfile:
-    description: 'Path to Dockerfile (can use environment variables)'
-    required: true
-  zip-path:
-    description: 'Path to distribution zip file (required for zip-based builds)'
+  windows-artifact-path:
+    description: 'Windows artifact zip path'
     required: false
-  platform:
-    description: 'Platform (linux or windows, for zip-based builds)'
+  x64-artifact-path:
+    description: 'Linux x64 artifact zip path'
     required: false
-    default: 'linux'
-  docker-platform:
-    description: 'Docker platform flag (e.g., linux/arm64)'
+  x64-musl-artifact-path:
+    description: 'Linux x64 MUSL artifact zip path'
     required: false
-  skip-dirs:
-    description: 'Directories to skip during scanning'
+  arm64-artifact-path:
+    description: 'Linux arm64 artifact zip path'
     required: false
-    default: ''
-
+  arm64-musl-artifact-path:
+    description: 'Linux arm64 MUSL artifact zip path'
+    required: false
 runs:
   using: 'composite'
   steps:
-    - name: Prepare Linux distribution
-      if: "inputs.dockerfile == './Dockerfile.linux' && inputs.platform == 'linux'"
+    - name: Unzip x64 Artifacts
+      if: runner.os == 'Linux' && (inputs.x64-artifact-path != '' && inputs.x64-musl-artifact-path != '')
       shell: bash
       run: |
-        set -e
-        rm -rf ./OpenTelemetryDistribution
-        mkdir -p ./OpenTelemetryDistribution
-        unzip -o ${{ inputs.zip-path }} -d ./OpenTelemetryDistribution
-        cp THIRD-PARTY-LICENSES ./OpenTelemetryDistribution/THIRD-PARTY-LICENSES
-        echo "IMAGE_NAME=${{ inputs.image-name }}" >> $GITHUB_ENV
+        unzip -o ${{ inputs.x64-artifact-path }} -d ./OpenTelemetryDistribution
+        unzip -o ${{ inputs.x64-musl-artifact-path }} "linux-musl-x64/*" -d ./OpenTelemetryDistribution
 
-    - name: Prepare Windows distribution
-      if: "(inputs.dockerfile == './Dockerfile.windows2019' || inputs.dockerfile == './Dockerfile.windows2022') && inputs.platform == 'windows'"
+    - name: Unzip arm64 Artifacts
+      if: runner.os == 'Linux' && (inputs.arm64-artifact-path != '' && inputs.arm64-musl-artifact-path != '')
+      shell: bash
+      run: |
+        mkdir -p ./arm64
+        unzip -o ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
+        unzip -o ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+
+    - name: Unzip Windows Artifact
+      if: runner.os == 'Windows'
       shell: powershell
       run: |
-        Expand-Archive -LiteralPath ${{ inputs.zip-path }} -DestinationPath .\OpenTelemetryDistribution -Force
-        $IMAGE_NAME="${{ inputs.image-name }}"
-        echo "IMAGE_NAME=$IMAGE_NAME" >> $env:GITHUB_ENV
+        Expand-Archive -LiteralPath ${{ inputs.windows-artifact-path }} -DestinationPath .\OpenTelemetryDistribution -Force
 
-    - name: Build Docker image (from zip)
-      if: "inputs.dockerfile == './Dockerfile.linux' || inputs.dockerfile == './Dockerfile.windows2019' || inputs.dockerfile == './Dockerfile.windows2022'"
+    - name: Build Linux container
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         set -e
-        DOCKERFILE_PATH="${{ inputs.dockerfile }}"
-        DOCKERFILE_PATH=$(eval echo "$DOCKERFILE_PATH")
-        
-        if [ -n "${{ inputs.docker-platform }}" ]; then
-          docker build --platform ${{ inputs.docker-platform }} -t ${{ inputs.image-name }} -f "$DOCKERFILE_PATH" .
-        else
-          docker build -t ${{ inputs.image-name }} -f "$DOCKERFILE_PATH" .
+        if [[ "${{ inputs.image-name }}" == *"amd64"* ]]; then
+          docker build -t ${{ inputs.image-name }} -f ./Dockerfile.linux .
+        elif [[ "${{ inputs.image-name }}" == *"arm64"* ]]; then
+          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
+          cd ./arm64
+          docker build --platform linux/arm64 -t ${{ inputs.image-name }} -f ../Dockerfile.linux .
         fi
 
-    - name: Build and run in Docker container (from source)
-      if: "inputs.dockerfile == './docker/alpine.dockerfile'"
-      shell: bash
+    - name: Build Windows container
+      if: runner.os == 'Windows'
+      shell: powershell
       run: |
-        set -e
-        IMAGE_NAME="${{ inputs.image-name }}"
-        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-        docker build -t $IMAGE_NAME -f "${{ inputs.dockerfile }}" ./docker
-        docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project $IMAGE_NAME \
-          /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
+        docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
 
-    - name: Scan Docker image
+    - name: Scan image
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}
-        severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
-        logout: 'true'
-        skip-dirs: ${{ inputs.skip-dirs }}
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
