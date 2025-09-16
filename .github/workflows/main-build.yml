@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-latest
+          - os: windows-2022
           - os: ubuntu-latest
 
     steps:
@@ -148,6 +148,28 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
+  build-and-scan-images:
+    needs: [build, build-arm64, build-x64-musl, build-arm64-musl]
+    runs-on: ${{ matrix.os }}
+    environment: ${{ inputs.environment }}
+    strategy:
+      matrix:
+        os: [windows-2022, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build and scan Linux images
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}
+
+      - name: Build and scan Windows image
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}-windows2022
+
   application-signals-e2e-test:
     name: "Application Signals E2E Test"
     needs: [ build ]
@@ -156,3 +178,23 @@ jobs:
     permissions:
       id-token: write
       contents: read
+
+  publish-main-build-status:
+    name: "Publish Main Build Status"
+    needs: [ build, application-signals-e2e-test ]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Configure AWS Credentials for emitting metrics
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.MONITORING_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Publish main build status
+        run: |
+          value="${{ needs.build.result == 'success' && needs.application-signals-e2e-test.result == 'success' && '0.0' || '1.0'}}"
+          aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+            --metric-name Failure \
+            --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=main_build \
+            --value $value
