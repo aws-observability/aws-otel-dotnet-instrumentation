@@ -34,8 +34,8 @@ runs:
       shell: bash
       run: |
         mkdir -p ./arm64
-        unzip -o ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
-        unzip -o ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+        unzip ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
+        unzip ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 
     - name: Unzip Windows Artifact
       if: runner.os == 'Windows'
