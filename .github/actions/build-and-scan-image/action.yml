@@ -61,7 +61,7 @@ runs:
       if: runner.os == 'Windows'
       shell: powershell
       run: |
-        Expand-Archive -LiteralPath ./artifacts/windows/*.zip -DestinationPath .\OpenTelemetryDistribution -Force
+        Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
 
     - name: Build Linux container
       if: runner.os == 'Linux'
