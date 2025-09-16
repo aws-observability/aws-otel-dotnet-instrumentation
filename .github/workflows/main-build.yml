@@ -24,7 +24,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: ${{ inputs.environment }}
     strategy:
-      fail-fast: false
       matrix:
         include:
           - os: windows-2022
