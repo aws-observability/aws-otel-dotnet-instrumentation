@@ -76,7 +76,6 @@ runs:
 
     - name: Scan x64 image
       if: runner.os == 'Linux'
-      continue-on-error: true
       shell: bash
       run: |
         echo "Simulating x64 scan failure"
@@ -84,7 +83,6 @@ runs:
 
     - name: Scan arm64 image
       if: runner.os == 'Linux'
-      continue-on-error: true
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}-arm64
@@ -94,7 +92,6 @@ runs:
 
     - name: Scan Windows image
       if: runner.os == 'Windows'
-      continue-on-error: true
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}
