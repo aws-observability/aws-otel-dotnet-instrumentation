@@ -67,6 +67,7 @@ runs:
         cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
         cd ./arm64
         docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
+        exit 1
 
     - name: Build Windows container
       if: runner.os == 'Windows'
@@ -75,7 +76,7 @@ runs:
         docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
 
     - name: Scan x64 image
-      if: runner.os == 'Linux'
+      if: always() && runner.os == 'Linux'
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}-amd64
@@ -84,7 +85,7 @@ runs:
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
     - name: Scan arm64 image
-      if: runner.os == 'Linux'
+      if: always() && runner.os == 'Linux'
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}-arm64
@@ -93,7 +94,7 @@ runs:
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
     - name: Scan Windows image
-      if: runner.os == 'Windows'
+      if: always() && runner.os == 'Windows'
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}
