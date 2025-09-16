@@ -228,9 +228,16 @@ jobs:
       - name: Push Windows Images
         if: runner.os == 'Windows'
         run: |
-          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          $osInfo = systeminfo | Select-String "OS Version"
+          if ($osInfo -match "10.0.20348") {
+            Echo "Push image for Windows Server 2022"
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          } else {
+              Echo "Unknown Windows Server version: $osInfo"
+              exit 1
+          }
         shell: powershell
 
   release-multi-platform-image:
@@ -261,13 +268,13 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon private ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
 
       - name: Create multi-platform image and push to Amazon public ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
 
