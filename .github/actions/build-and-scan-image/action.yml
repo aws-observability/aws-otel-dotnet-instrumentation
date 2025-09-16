@@ -67,7 +67,6 @@ runs:
         cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
         cd ./arm64
         docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
-        exit 1
 
     - name: Build Windows container
       if: runner.os == 'Windows'
@@ -77,12 +76,10 @@ runs:
 
     - name: Scan x64 image
       if: always() && runner.os == 'Linux'
-      uses: ./.github/actions/image_scan
-      with:
-        image-ref: ${{ inputs.image-name }}-amd64
-        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-        logout: 'false'
-        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+      shell: bash
+      run: |
+        echo "Simulating x64 scan failure"
+        exit 1
 
     - name: Scan arm64 image
       if: always() && runner.os == 'Linux'
