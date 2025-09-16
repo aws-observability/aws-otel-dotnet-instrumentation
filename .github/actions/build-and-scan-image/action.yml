@@ -75,14 +75,16 @@ runs:
         docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
 
     - name: Scan x64 image
-      if: always() && runner.os == 'Linux'
+      if: runner.os == 'Linux'
+      continue-on-error: true
       shell: bash
       run: |
         echo "Simulating x64 scan failure"
         exit 1
 
     - name: Scan arm64 image
-      if: always() && runner.os == 'Linux'
+      if: runner.os == 'Linux'
+      continue-on-error: true
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}-arm64
@@ -91,7 +93,8 @@ runs:
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
 
     - name: Scan Windows image
-      if: always() && runner.os == 'Windows'
+      if: runner.os == 'Windows'
+      continue-on-error: true
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}
