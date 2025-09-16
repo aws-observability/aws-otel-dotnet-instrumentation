@@ -191,17 +191,11 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and scan x64 image
+      - name: Build and scan Linux images
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-
-      - name: Build and scan arm64 image
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/build-and-scan-image
-        with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'

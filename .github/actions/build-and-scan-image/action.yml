@@ -42,17 +42,12 @@ runs:
         name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
         path: ./artifacts/windows
     
-    - name: Unzip x64 Artifacts
+    - name: Unzip Linux Artifacts
       if: runner.os == 'Linux'
       shell: bash
       run: |
         unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
         unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
-
-    - name: Unzip arm64 Artifacts
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
         mkdir -p ./arm64
         unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
         unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
@@ -63,18 +58,15 @@ runs:
       run: |
         Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
 
-    - name: Build Linux container
+    - name: Build Linux containers
       if: runner.os == 'Linux'
       shell: bash
       run: |
         set -e
-        if [[ "${{ inputs.image-name }}" == *"amd64"* ]]; then
-          docker build -t ${{ inputs.image-name }} -f ./Dockerfile.linux .
-        elif [[ "${{ inputs.image-name }}" == *"arm64"* ]]; then
-          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
-          cd ./arm64
-          docker build --platform linux/arm64 -t ${{ inputs.image-name }} -f ../Dockerfile.linux .
-        fi
+        docker build -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux .
+        cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
+        cd ./arm64
+        docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
 
     - name: Build Windows container
       if: runner.os == 'Windows'
@@ -82,7 +74,26 @@ runs:
       run: |
         docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
 
-    - name: Scan image
+    - name: Scan x64 image
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}-amd64
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+
+    - name: Scan arm64 image
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}-arm64
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+
+    - name: Scan Windows image
+      if: runner.os == 'Windows'
       uses: ./.github/actions/image_scan
       with:
         image-ref: ${{ inputs.image-name }}

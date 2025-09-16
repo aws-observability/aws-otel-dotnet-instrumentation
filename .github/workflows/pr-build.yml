@@ -139,19 +139,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build and scan x64 image
+      - name: Build and scan Linux images
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
-          image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-amd64
+          image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}
 
-      - name: Build and scan arm64 image
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/build-and-scan-image
-        with:
-          image-name: adot-autoinstrumentation-dotnet:pr-${{ github.event.number }}-arm64
-
-      - name: Build and scan Windows 2022 image
+      - name: Build and scan Windows image
         if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
