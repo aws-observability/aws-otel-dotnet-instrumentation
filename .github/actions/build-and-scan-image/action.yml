@@ -46,16 +46,16 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        unzip -o ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
-        unzip -o ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+        unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+        unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
 
     - name: Unzip arm64 Artifacts
       if: runner.os == 'Linux'
       shell: bash
       run: |
         mkdir -p ./arm64
-        unzip -o ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
-        unzip -o ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+        unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
+        unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 
     - name: Unzip Windows Artifact
       if: runner.os == 'Windows'
