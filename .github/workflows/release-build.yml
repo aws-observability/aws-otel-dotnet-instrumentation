@@ -224,8 +224,7 @@ jobs:
         run: |
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.20348") {
-            Echo "Build image for Windows Server 2022"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
+            Echo "Push image for Windows Server 2022"
             docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
             docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
             docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
