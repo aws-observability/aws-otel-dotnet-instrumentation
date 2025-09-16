@@ -159,40 +159,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Download Linux x64 Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          path: ./artifacts/linux/x64
 
-      - name: Download Linux X64 MUSL Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
-          path: ./artifacts/linux/x64-musl
-
-      - name: Download Linux arm64 Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
-          path: ./artifacts/linux/arm64
-
-      - name: Download Linux arm64 MUSL Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
-          path: ./artifacts/linux/arm64-musl
-
-      - name: Download Windows Artifact
-        if: runner.os == 'Windows'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
-          path: ./artifacts/windows
 
 
       - name: Configure AWS credentials for public ECR
@@ -229,23 +196,18 @@ jobs:
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-          x64-artifact-path: ./artifacts/linux/x64/*.zip
-          x64-musl-artifact-path: ./artifacts/linux/x64-musl/*.zip
 
       - name: Build and scan arm64 image
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
-          arm64-artifact-path: ./artifacts/linux/arm64/*.zip
-          arm64-musl-artifact-path: ./artifacts/linux/arm64-musl/*.zip
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          windows-artifact-path: ./artifacts/windows/*.zip
 
       - name: Push Linux x64 Image
         if: runner.os == 'Linux'

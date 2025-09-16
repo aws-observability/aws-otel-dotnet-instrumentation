@@ -1,47 +1,67 @@
 name: 'Build and Scan Image'
-description: 'Unzips artifacts and builds container images'
+description: 'Downloads, unzips artifacts and builds container images'
 inputs:
   image-name:
     description: 'Docker image name'
     required: true
-  windows-artifact-path:
-    description: 'Windows artifact zip path'
-    required: false
-  x64-artifact-path:
-    description: 'Linux x64 artifact zip path'
-    required: false
-  x64-musl-artifact-path:
-    description: 'Linux x64 MUSL artifact zip path'
-    required: false
-  arm64-artifact-path:
-    description: 'Linux arm64 artifact zip path'
-    required: false
-  arm64-musl-artifact-path:
-    description: 'Linux arm64 MUSL artifact zip path'
-    required: false
 runs:
   using: 'composite'
   steps:
+    - name: Download Linux x64 Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+        path: ./artifacts/linux/x64
+
+    - name: Download Linux x64 MUSL Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+        path: ./artifacts/linux/x64-musl
+
+    - name: Download Linux arm64 Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+        path: ./artifacts/linux/arm64
+
+    - name: Download Linux arm64 MUSL Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+        path: ./artifacts/linux/arm64-musl
+
+    - name: Download Windows Artifact
+      if: runner.os == 'Windows'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+        path: ./artifacts/windows
+    
     - name: Unzip x64 Artifacts
-      if: runner.os == 'Linux' && (inputs.x64-artifact-path != '' && inputs.x64-musl-artifact-path != '')
+      if: runner.os == 'Linux'
       shell: bash
       run: |
-        unzip -o ${{ inputs.x64-artifact-path }} -d ./OpenTelemetryDistribution
-        unzip -o ${{ inputs.x64-musl-artifact-path }} "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+        unzip -o ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+        unzip -o ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
 
     - name: Unzip arm64 Artifacts
-      if: runner.os == 'Linux' && (inputs.arm64-artifact-path != '' && inputs.arm64-musl-artifact-path != '')
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         mkdir -p ./arm64
-        unzip ${{ inputs.arm64-artifact-path }} -d ./arm64/OpenTelemetryDistribution
-        unzip ${{ inputs.arm64-musl-artifact-path }} "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+        unzip -o ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
+        unzip -o ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
 
     - name: Unzip Windows Artifact
       if: runner.os == 'Windows'
       shell: powershell
       run: |
-        Expand-Archive -LiteralPath ${{ inputs.windows-artifact-path }} -DestinationPath .\OpenTelemetryDistribution -Force
+        Expand-Archive -LiteralPath ./artifacts/windows/*.zip -DestinationPath .\OpenTelemetryDistribution -Force
 
     - name: Build Linux container
       if: runner.os == 'Linux'

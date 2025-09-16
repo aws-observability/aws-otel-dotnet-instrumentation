@@ -158,58 +158,23 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Download Linux x64 Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-
-      - name: Download Linux X64 MUSL Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
-
-      - name: Download Linux arm64 Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
-
-      - name: Download Linux arm64 MUSL Artifact
-        if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
-
-      - name: Download Windows Artifact
-        if: runner.os == 'Windows'
-        uses: actions/download-artifact@v4
-        with:
-          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
-
       - name: Build and scan x64 image
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}-amd64
-          x64-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
-          x64-musl-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
 
       - name: Build and scan arm64 image
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}-arm64
-          arm64-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
-          arm64-musl-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
 
       - name: Build and scan Windows 2022 image
         if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}-windows2022
-          windows-artifact-path: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
 
   application-signals-e2e-test:
     name: "Application Signals E2E Test"
