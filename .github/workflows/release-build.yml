@@ -145,7 +145,7 @@ jobs:
             layer_artifact/layer.zip.sha256 \
             --clobber
 
-  release-image:
+  build-and-scan-images:
     # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
     # since deleting from Private ECR is not possible.
     needs: [release, build-release-nuget]
@@ -159,9 +159,31 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Build and scan Linux images
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
 
+      - name: Build and scan Windows image
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
 
-
+  release-image:
+    # Only push images if ALL build and scan jobs succeed
+    needs: [build-and-scan-images]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+          - os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
       - name: Configure AWS credentials for public ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -190,18 +212,6 @@ jobs:
       - name: Login to Amazon private ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and scan Linux images
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/build-and-scan-image
-        with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
-
-      - name: Build and scan Windows image
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/build-and-scan-image
-        with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
 
       - name: Push Linux x64 Image
         if: runner.os == 'Linux'
