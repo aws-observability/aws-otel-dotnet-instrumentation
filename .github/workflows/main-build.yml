@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-latest
+          - os: windows-2022
           - os: ubuntu-latest
 
     steps:
@@ -147,6 +147,29 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+  build-and-scan-images:
+    needs: [build, build-arm64, build-x64-musl, build-arm64-musl]
+    runs-on: ${{ matrix.os }}
+    environment: ${{ inputs.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build and scan Linux images
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}
+
+      - name: Build and scan Windows image
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: adot-autoinstrumentation-dotnet:main-${{ github.run_number }}-windows2022
 
   application-signals-e2e-test:
     name: "Application Signals E2E Test"

@@ -61,7 +61,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     outputs: 
       short_sha: ${{ steps.short_sha.outputs.SHORT_SHA }}
-    continue-on-error: true
     strategy:
       matrix:
         include:
@@ -153,6 +152,15 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-adot-sigv4-test.yml@main
     secrets: inherit
     with:
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+  
+  dotnet-asg-linux-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-asg-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
 

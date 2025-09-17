@@ -16,6 +16,10 @@ inputs:
     description: |
       Whether to logout of public AWS ECR. Set to 'true' for PR workflows to avoid potential call failures,
       'false' for daily scans which has a higher bar for passing regularly and specifically wants to sign in.
+  skip-dirs:
+    required: false
+    description: "Directories to skip during scanning"
+    default: ''
 
 runs:
   using: "composite"
@@ -37,3 +41,4 @@ runs:
       image-ref: ${{ inputs.image-ref }}
       severity: ${{ inputs.severity }}
       exit-code: '1'
+      skip-dirs: ${{ inputs.skip-dirs }}
