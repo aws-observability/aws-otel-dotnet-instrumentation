@@ -61,7 +61,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     outputs: 
       short_sha: ${{ steps.short_sha.outputs.SHORT_SHA }}
-    continue-on-error: true
     strategy:
       matrix:
         include:

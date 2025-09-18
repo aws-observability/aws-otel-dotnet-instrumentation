@@ -1,0 +1,102 @@
+name: 'Build and Scan Image'
+description: 'Downloads, unzips artifacts and builds container images'
+inputs:
+  image-name:
+    description: 'Docker image name'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Download Linux x64 Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+        path: ./artifacts/linux/x64
+
+    - name: Download Linux x64 MUSL Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+        path: ./artifacts/linux/x64-musl
+
+    - name: Download Linux arm64 Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+        path: ./artifacts/linux/arm64
+
+    - name: Download Linux arm64 MUSL Artifact
+      if: runner.os == 'Linux'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+        path: ./artifacts/linux/arm64-musl
+
+    - name: Download Windows Artifact
+      if: runner.os == 'Windows'
+      uses: actions/download-artifact@v4
+      with:
+        name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+        path: ./artifacts/windows
+    
+    - name: Unzip Linux Artifacts
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+        unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
+        mkdir -p ./arm64
+        unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
+        unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+
+    - name: Unzip Windows Artifact
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
+
+    - name: Build Linux containers
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -e
+        docker build -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux .
+        cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
+        cd ./arm64
+        docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
+
+    - name: Build Windows container
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        docker build -t ${{ inputs.image-name }} -f ./Dockerfile.windows2022 .
+
+    - name: Scan x64 image
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}-amd64
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+
+    - name: Scan arm64 image
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}-arm64
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+
+    - name: Scan Windows image
+      if: runner.os == 'Windows'
+      uses: ./.github/actions/image_scan
+      with:
+        image-ref: ${{ inputs.image-name }}
+        severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        logout: 'false'
+        skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
