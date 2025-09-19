@@ -10,8 +10,10 @@
     <IsTestProject>true</IsTestProject>
     <!-- Suppress StyleCop rules for test projects:
          SA0001: XML comment analysis disabled (test projects don't need XML documentation)
-         SA1300: Element naming (test namespace uses underscores by convention) -->
-    <NoWarn>$(NoWarn);SA0001;SA1300</NoWarn>
+         SA1204: Element ordering (test helper classes can appear in any order)
+         SA1300: Element naming (test namespace uses underscores by convention)
+         SA1402: Multiple types per file (test helper classes are acceptable) -->
+    <NoWarn>$(NoWarn);SA0001;SA1204;SA1300;SA1402</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

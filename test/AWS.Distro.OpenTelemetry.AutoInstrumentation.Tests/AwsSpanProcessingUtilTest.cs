@@ -3,12 +3,6 @@
 
 using System.Diagnostics;
 using System.Reflection;
-using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
-using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
-using static OpenTelemetry.Trace.TraceSemanticConventions;
-
-namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
-
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -16,6 +10,11 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Moq;
 using Xunit;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
+using static OpenTelemetry.Trace.TraceSemanticConventions;
+
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 #pragma warning disable CS8602 // Possible null reference argument.

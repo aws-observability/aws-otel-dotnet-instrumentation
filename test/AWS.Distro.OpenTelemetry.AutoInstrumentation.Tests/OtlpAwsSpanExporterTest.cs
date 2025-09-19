@@ -17,7 +17,6 @@ using OpenTelemetry.Trace;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Test helper classes")]
 public class OtlpAwsSpanExporterTest
 {
     private const string XrayOtlpEndpoint = "https://xray.us-east-1.amazonaws.com/v1/traces";
