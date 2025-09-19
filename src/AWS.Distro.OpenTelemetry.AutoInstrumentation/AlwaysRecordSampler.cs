@@ -11,7 +11,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// new sampling result will be returned that is functionally equivalent to the original, except that
 /// it contains the sampling decision  <see cref="SamplingDecision.RecordOnly"/>. This ensures that all
 /// spans are recorded, with no change to sampling.
-/// 
+///
 /// The intended use case of this sampler is to provide a means of sending all spans to a
 /// processor without having an impact on the sampling rate. This may be desirable if a user wishes
 /// to count or otherwise measure all spans produced in a service, without incurring the cost of 100%

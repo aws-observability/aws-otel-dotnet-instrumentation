@@ -154,7 +154,7 @@ public class LambdaWrapper
         }
     }
 
-    private (MethodInfo handlerMethod, object handlerInstance) ExtractOriginalHandler()
+    private (MethodInfo HandlerMethod, object HandlerInstance) ExtractOriginalHandler()
     {
         string? originalHandler = Environment.GetEnvironmentVariable("OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER");
         if (string.IsNullOrEmpty(originalHandler))
@@ -173,19 +173,19 @@ public class LambdaWrapper
             throw new Exception($"handlerType of type: ${type} and assembly: ${assembly} was not found");
         }
 
-        object? handlerInstance = Activator.CreateInstance(handlerType);
-        if (handlerInstance == null)
+        object? HandlerInstance = Activator.CreateInstance(handlerType);
+        if (HandlerInstance == null)
         {
-            throw new Exception("handlerInstance was not created");
+            throw new Exception("HandlerInstance was not created");
         }
 
-        MethodInfo? handlerMethod = handlerType.GetMethod(method);
-        if (handlerMethod == null)
+        MethodInfo? HandlerMethod = handlerType.GetMethod(method);
+        if (HandlerMethod == null)
         {
-            throw new Exception($"handlerMethod: ${method} was not found");
+            throw new Exception($"HandlerMethod: ${method} was not found");
         }
 
-        return (handlerMethod, handlerInstance);
+        return (HandlerMethod, HandlerInstance);
     }
 }
 #endif
