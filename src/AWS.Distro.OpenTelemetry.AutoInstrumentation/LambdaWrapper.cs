@@ -154,7 +154,7 @@ public class LambdaWrapper
         }
     }
 
-    private (MethodInfo, object) ExtractOriginalHandler()
+    private (MethodInfo handlerMethod, object handlerInstance) ExtractOriginalHandler()
     {
         string? originalHandler = Environment.GetEnvironmentVariable("OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER");
         if (string.IsNullOrEmpty(originalHandler))
