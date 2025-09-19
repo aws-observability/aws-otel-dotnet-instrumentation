@@ -6,13 +6,13 @@ using OpenTelemetry.Trace;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
-/// This sampler will return the sampling result of the provided {@link #rootSampler}, unless the
+/// This sampler will return the sampling result of the provided rootSampler, unless the
 /// sampling result contains the sampling decision <see cref="SamplingDecision.Drop"/>, in which case, a
 /// new sampling result will be returned that is functionally equivalent to the original, except that
 /// it contains the sampling decision  <see cref="SamplingDecision.RecordOnly"/>. This ensures that all
 /// spans are recorded, with no change to sampling.
-///
-/// <p>The intended use case of this sampler is to provide a means of sending all spans to a
+/// 
+/// The intended use case of this sampler is to provide a means of sending all spans to a
 /// processor without having an impact on the sampling rate. This may be desirable if a user wishes
 /// to count or otherwise measure all spans produced in a service, without incurring the cost of 100%
 /// sampling.

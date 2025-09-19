@@ -40,8 +40,18 @@ public class SqsUrlParser
         return null;
     }
 
+    /// <summary>
+    /// Gets the account ID from an SQS URL.
+    /// </summary>
+    /// <param name="url">The SQS URL to parse.</param>
+    /// <returns>The account ID or null if not found.</returns>
     public static string? GetAccountId(string? url) => ParseUrl(url).AccountId;
 
+    /// <summary>
+    /// Gets the region from an SQS URL.
+    /// </summary>
+    /// <param name="url">The SQS URL to parse.</param>
+    /// <returns>The region or null if not found.</returns>
     public static string? GetRegion(string? url) => ParseUrl(url).Region;
 
     /// <summary>

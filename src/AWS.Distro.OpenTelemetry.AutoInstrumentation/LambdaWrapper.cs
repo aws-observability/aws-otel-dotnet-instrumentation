@@ -63,7 +63,7 @@ public class LambdaWrapper
     /// The following are assumptions made about the lambda handler function parameters.
     ///     * Maximum Parameters: A .NET Lambda handler function can have up to two parameters.
     ///     * Parameter Order: If both parameters are used, the event input parameter must come first, followed by the ILambdaContext.
-    ///     * Return Types: The handler can return void, a specific type, or a Task/Task<T> for asynchronous methods.
+    ///     * Return Types: The handler can return void, a specific type, or a Task/Task[T] for asynchronous methods.
     /// </summary>
     /// <param name="input"></param>
     /// <param name="context"></param>
@@ -77,10 +77,10 @@ public class LambdaWrapper
             throw new Exception($"Input cannot be null.");
         }
 
-        (MethodInfo handlerMethod, object handlerInstance) = this.ExtractOriginalHandler();
+        (MethodInfo HandlerMethod, object HandlerInstance) = this.ExtractOriginalHandler();
 
         object? originalHandlerResult;
-        ParameterInfo[] parameters = handlerMethod.GetParameters();
+        ParameterInfo[] parameters = HandlerMethod.GetParameters();
 
         // A .NET Lambda handler function can have zero, one, or two parameters, depending on the customer's needs:
         //      * Zero Parameters:  When no input data or context is needed.
@@ -96,7 +96,7 @@ public class LambdaWrapper
                 throw new Exception($"Wrapper wasn't able to convert the input object to type: {inputParameterType}!");
             }
 
-            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { inputObject, context });
+            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { inputObject, context });
         }
         else if (parameters.Length == 1)
         {
@@ -108,18 +108,18 @@ public class LambdaWrapper
                 throw new Exception($"Wrapper wasn't able to convert the input object to type: {inputParameterType}!");
             }
 
-            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { inputObject });
+            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { inputObject });
         }
         else if (parameters.Length == 0)
         {
-            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { });
+            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { });
         }
         else
         {
             throw new Exception($"Wrapper handler doesn't support more than 2 input paramaters");
         }
 
-        Type returnType = handlerMethod.ReturnType;
+        Type returnType = HandlerMethod.ReturnType;
         if (originalHandlerResult == null && returnType.ToString() != typeof(void).ToString())
         {
             throw new Exception($"originalHandlerResult of type: {returnType} returned from the original handler is null!");
@@ -128,7 +128,7 @@ public class LambdaWrapper
         // AsyncStateMachineAttribute can be used to determine whether the original handler method is
         // asynchronous vs synchronous
         Type asyncAttribType = typeof(AsyncStateMachineAttribute);
-        var asyncAttrib = (AsyncStateMachineAttribute?)handlerMethod.GetCustomAttribute(asyncAttribType);
+        var asyncAttrib = (AsyncStateMachineAttribute?)HandlerMethod.GetCustomAttribute(asyncAttribType);
 
         // The return type of the original lambda function is Task<T> or Task so we await for it
         if (asyncAttrib != null && originalHandlerResult != null)
