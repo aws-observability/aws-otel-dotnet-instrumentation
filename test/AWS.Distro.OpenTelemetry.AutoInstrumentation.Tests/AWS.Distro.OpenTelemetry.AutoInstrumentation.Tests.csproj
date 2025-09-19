@@ -8,12 +8,13 @@
     <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Suppress StyleCop rules for test projects:
+    <!-- Suppress warnings for test projects:
+         CS8002: Unsigned assembly references (test projects can reference unsigned packages)
          SA0001: XML comment analysis disabled (test projects don't need XML documentation)
          SA1204: Element ordering (test helper classes can appear in any order)
          SA1300: Element naming (test namespace uses underscores by convention)
          SA1402: Multiple types per file (test helper classes are acceptable) -->
-    <NoWarn>$(NoWarn);SA0001;SA1204;SA1300;SA1402</NoWarn>
+    <NoWarn>$(NoWarn);CS8002;SA0001;SA1204;SA1300;SA1402</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
