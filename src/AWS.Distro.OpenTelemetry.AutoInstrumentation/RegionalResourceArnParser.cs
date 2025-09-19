@@ -23,7 +23,7 @@ public class RegionalResourceArnParser
     /// arn:partition:service:region:account-id:resource-type/resource-id or
     /// arn:partition:service:region:account-id:resource-type:resource-id
     /// </summary>
-    private static string[] ? ParseArn(string? arn)
+    private static string[]? ParseArn(string? arn)
     {
         if (arn == null || !arn.StartsWith("arn:"))
         {

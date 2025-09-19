@@ -1147,7 +1147,7 @@ public class AwsMetricAttributesGeneratorTest
         {
             { AttributeAWSSNSTopicArn, "arn:aws:sns:us-west-2:invalid_account_id:aws_topic_arn" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, null, null, null);
+        this.ValidateRemoteResourceAttributes(attributesCombination, null!, null!, null!);
 
         // Arn with invalid region
         attributesCombination = new Dictionary<string, object>
@@ -1161,7 +1161,7 @@ public class AwsMetricAttributesGeneratorTest
         {
             { AttributeAWSSNSTopicArn, "invalid_arn" },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, null, null, null);
+        this.ValidateRemoteResourceAttributes(attributesCombination, null!, null!, null!);
 
         // Invalid arn but account access key is available
         attributesCombination = new Dictionary<string, object>
@@ -1170,7 +1170,7 @@ public class AwsMetricAttributesGeneratorTest
             { AttributeAWSAuthAccessKey, this.awsRemoteResourceAccessKey },
             { AttributeAWSAuthRegion, this.awsRemoteResourceRegion },
         };
-        this.ValidateRemoteResourceAttributes(attributesCombination, null, null, null);
+        this.ValidateRemoteResourceAttributes(attributesCombination, null!, null!, null!);
     }
 
     [Fact]
