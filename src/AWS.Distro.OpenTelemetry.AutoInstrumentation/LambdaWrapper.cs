@@ -65,9 +65,9 @@ public class LambdaWrapper
     ///     * Parameter Order: If both parameters are used, the event input parameter must come first, followed by the ILambdaContext.
     ///     * Return Types: The handler can return void, a specific type, or a Task/Task[T] for asynchronous methods.
     /// </summary>
-    /// <param name="input"></param>
-    /// <param name="context"></param>
-    /// <returns></returns>
+    /// <param name="input">Input JObject to be converted to the correct object type.</param>
+    /// <param name="context">Lambda context for the function execution.</param>
+    /// <returns>Task containing the result object from the original handler.</returns>
     /// <exception cref="Exception">Multiple exceptions that act as safe gaurds in case any of the
     /// assumptions are wrong or if for any reason reflection is failing to get the original function and it's info.</exception>
     private async Task<object?> FunctionHandler(JObject input, ILambdaContext context)
@@ -77,10 +77,10 @@ public class LambdaWrapper
             throw new Exception($"Input cannot be null.");
         }
 
-        (MethodInfo HandlerMethod, object HandlerInstance) = this.ExtractOriginalHandler();
+        (MethodInfo handlerMethod, object handlerInstance) = this.ExtractOriginalHandler();
 
         object? originalHandlerResult;
-        ParameterInfo[] parameters = HandlerMethod.GetParameters();
+        ParameterInfo[] parameters = handlerMethod.GetParameters();
 
         // A .NET Lambda handler function can have zero, one, or two parameters, depending on the customer's needs:
         //      * Zero Parameters:  When no input data or context is needed.
@@ -96,7 +96,7 @@ public class LambdaWrapper
                 throw new Exception($"Wrapper wasn't able to convert the input object to type: {inputParameterType}!");
             }
 
-            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { inputObject, context });
+            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { inputObject, context });
         }
         else if (parameters.Length == 1)
         {
@@ -108,18 +108,18 @@ public class LambdaWrapper
                 throw new Exception($"Wrapper wasn't able to convert the input object to type: {inputParameterType}!");
             }
 
-            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { inputObject });
+            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { inputObject });
         }
         else if (parameters.Length == 0)
         {
-            originalHandlerResult = HandlerMethod.Invoke(HandlerInstance, new object[] { });
+            originalHandlerResult = handlerMethod.Invoke(handlerInstance, new object[] { });
         }
         else
         {
             throw new Exception($"Wrapper handler doesn't support more than 2 input paramaters");
         }
 
-        Type returnType = HandlerMethod.ReturnType;
+        Type returnType = handlerMethod.ReturnType;
         if (originalHandlerResult == null && returnType.ToString() != typeof(void).ToString())
         {
             throw new Exception($"originalHandlerResult of type: {returnType} returned from the original handler is null!");
@@ -128,7 +128,7 @@ public class LambdaWrapper
         // AsyncStateMachineAttribute can be used to determine whether the original handler method is
         // asynchronous vs synchronous
         Type asyncAttribType = typeof(AsyncStateMachineAttribute);
-        var asyncAttrib = (AsyncStateMachineAttribute?)HandlerMethod.GetCustomAttribute(asyncAttribType);
+        var asyncAttrib = (AsyncStateMachineAttribute?)handlerMethod.GetCustomAttribute(asyncAttribType);
 
         // The return type of the original lambda function is Task<T> or Task so we await for it
         if (asyncAttrib != null && originalHandlerResult != null)
@@ -173,19 +173,19 @@ public class LambdaWrapper
             throw new Exception($"handlerType of type: ${type} and assembly: ${assembly} was not found");
         }
 
-        object? HandlerInstance = Activator.CreateInstance(handlerType);
-        if (HandlerInstance == null)
+        object? handlerInstance = Activator.CreateInstance(handlerType);
+        if (handlerInstance == null)
         {
-            throw new Exception("HandlerInstance was not created");
+            throw new Exception("handlerInstance was not created");
         }
 
-        MethodInfo? HandlerMethod = handlerType.GetMethod(method);
-        if (HandlerMethod == null)
+        MethodInfo? handlerMethod = handlerType.GetMethod(method);
+        if (handlerMethod == null)
         {
-            throw new Exception($"HandlerMethod: ${method} was not found");
+            throw new Exception($"handlerMethod: ${method} was not found");
         }
 
-        return (HandlerMethod, HandlerInstance);
+        return (handlerMethod, handlerInstance);
     }
 }
 #endif
