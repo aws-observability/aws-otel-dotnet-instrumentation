@@ -17,6 +17,7 @@ using OpenTelemetry.Trace;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Test helper classes")]
 public class OtlpAwsSpanExporterTest
 {
     private const string XrayOtlpEndpoint = "https://xray.us-east-1.amazonaws.com/v1/traces";
@@ -68,14 +69,14 @@ public class OtlpAwsSpanExporterTest
             Content = new StringContent(string.Empty),
         };
 
-        (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+        (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
         int callCount = mockAuth.CallCount;
 
         // Verify the result
-        Assert.Equal(ExportResult.Success, execute.result);
+        Assert.Equal(ExportResult.Success, execute.Result);
         Assert.Equal(1, callCount);
-        Assert.NotNull(execute.capturedRequest);
-        ValidateSigV4Headers(execute.capturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
+        Assert.NotNull(execute.CapturedRequest);
+        ValidateSigV4Headers(execute.CapturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
     }
 
     // Verifies that the exporter can successfully export multiple span requests with different sigv4 headers.
@@ -96,14 +97,14 @@ public class OtlpAwsSpanExporterTest
 
         for (int i = 1; i < 11; i += 1)
         {
-            (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+            (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
 
             var callCount = mockAuth.CallCount;
 
-            Assert.Equal(ExportResult.Success, execute.result);
+            Assert.Equal(ExportResult.Success, execute.Result);
             Assert.Equal(i, callCount);
-            Assert.NotNull(execute.capturedRequest);
-            ValidateSigV4Headers(execute.capturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
+            Assert.NotNull(execute.CapturedRequest);
+            ValidateSigV4Headers(execute.CapturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
         }
     }
 
@@ -129,13 +130,13 @@ public class OtlpAwsSpanExporterTest
             };
 
             BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
-            (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+            (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
 
             int callCount = mockAuth.CallCount;
-            Assert.Equal(ExportResult.Failure, execute.result);
+            Assert.Equal(ExportResult.Failure, execute.Result);
             Assert.Equal(1, callCount);
-            Assert.NotNull(execute.capturedRequest);
-            ValidateSigV4Headers(execute.capturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
+            Assert.NotNull(execute.CapturedRequest);
+            ValidateSigV4Headers(execute.CapturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
         }
     }
 
@@ -164,13 +165,13 @@ public class OtlpAwsSpanExporterTest
             response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromMilliseconds(500));
             BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
 
-            (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+            (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
 
             int callCount = mockAuth.CallCount;
-            Assert.Equal(ExportResult.Failure, execute.result);
+            Assert.Equal(ExportResult.Failure, execute.Result);
             Assert.Equal(2, callCount);
-            Assert.NotNull(execute.capturedRequest);
-            ValidateSigV4Headers(execute.capturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
+            Assert.NotNull(execute.CapturedRequest);
+            ValidateSigV4Headers(execute.CapturedRequest, ExpectedAuth + callCount, ExpectedAmzDate + callCount, ExpectedAmzContentSha256 + callCount);
         }
     }
 
@@ -189,10 +190,10 @@ public class OtlpAwsSpanExporterTest
             };
             this.options.TimeoutMilliseconds = 5000;
             BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
-            (ExportResult result, HttpRequestMessage? capturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
-            Assert.Equal(ExportResult.Failure, execute.result);
+            (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+            Assert.Equal(ExportResult.Failure, execute.Result);
             Assert.True(mockAuth.CallCount > 1); // The delay is random for exceptions. Hard to tell how times it retries.
-            Assert.Null(execute.capturedRequest);
+            Assert.Null(execute.CapturedRequest);
         }
 
         this.options.TimeoutMilliseconds = 1000;
@@ -210,7 +211,7 @@ public class OtlpAwsSpanExporterTest
         Assert.Equal(expectedAmzContentSha256, capturedRequest.Headers.GetValues(XAmzContentSha256Header).First());
     }
 
-    private static (ExportResult, HttpRequestMessage?) SetupMockExporterAndCaptureRequest(BaseExporter<Activity> exporter, HttpResponseMessage response)
+    private static (ExportResult Result, HttpRequestMessage? CapturedRequest) SetupMockExporterAndCaptureRequest(BaseExporter<Activity> exporter, HttpResponseMessage response)
     {
         HttpRequestMessage? capturedRequest = null;
 

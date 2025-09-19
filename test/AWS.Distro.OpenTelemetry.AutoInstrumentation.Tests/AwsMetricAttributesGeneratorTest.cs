@@ -55,9 +55,9 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Server);
@@ -70,11 +70,11 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
-            new (AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
-            new (AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
+            new(AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Consumer);
@@ -88,9 +88,9 @@ public class AwsMetricAttributesGeneratorTest
         this.resource = Resource.Empty;
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Server);
@@ -103,11 +103,11 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
-            new (AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
-            new (AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
+            new(AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Producer);
@@ -120,11 +120,11 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
-            new (AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
-            new (AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
-            new (AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
+            new(AttributeAWSLocalService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownService),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
+            new(AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Client);
@@ -149,9 +149,9 @@ public class AwsMetricAttributesGeneratorTest
         Activity? spanDataMock = this.testSource.StartActivity(this.spanNameValue, ActivityKind.Server);
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, this.spanNameValue),
+            new(AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, this.spanNameValue),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
@@ -165,9 +165,9 @@ public class AwsMetricAttributesGeneratorTest
         Activity? spanDataMock = this.testSource.StartActivity(this.spanNameValue, ActivityKind.Internal);
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
@@ -184,18 +184,18 @@ public class AwsMetricAttributesGeneratorTest
 
         List<KeyValuePair<string, object?>> expectServiceAttiributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
         };
 
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
-            new (AttributeAWSRemoteService, this.awsRemoteServiceValue),
-            new (AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
+            new(AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSRemoteService, this.awsRemoteServiceValue),
+            new(AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
         };
 
         ActivityTagsCollection expectServiceAttiributes = new ActivityTagsCollection(expectServiceAttiributesList);
@@ -215,18 +215,18 @@ public class AwsMetricAttributesGeneratorTest
 
         List<KeyValuePair<string, object?>> expectServiceAttiributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
         };
 
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
-            new (AttributeAWSRemoteService, this.awsRemoteServiceValue),
-            new (AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
+            new(AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSRemoteService, this.awsRemoteServiceValue),
+            new(AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
         };
 
         ActivityTagsCollection expectServiceAttiributes = new ActivityTagsCollection(expectServiceAttiributesList);
@@ -246,18 +246,18 @@ public class AwsMetricAttributesGeneratorTest
 
         List<KeyValuePair<string, object?>> expectServiceAttiributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSSpanKind, AutoInstrumentation.AwsSpanProcessingUtil.LocalRoot),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
         };
 
         List<KeyValuePair<string, object?>> expectDependencyAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
-            new (AttributeAWSRemoteService, this.awsRemoteServiceValue),
-            new (AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
+            new(AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.InternalOperation),
+            new(AttributeAWSRemoteService, this.awsRemoteServiceValue),
+            new(AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
         };
 
         ActivityTagsCollection expectServiceAttiributes = new ActivityTagsCollection(expectServiceAttiributesList);
@@ -272,11 +272,11 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
-            new (AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
-            new (AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Consumer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSRemoteService, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteService),
+            new(AttributeAWSRemoteOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownRemoteOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Consumer);
@@ -290,9 +290,9 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, this.spanNameValue),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, this.spanNameValue),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(this.spanNameValue, ActivityKind.Server);
@@ -307,9 +307,9 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Server);
@@ -323,9 +323,9 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, AutoInstrumentation.AwsSpanProcessingUtil.UnknownOperation),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity("GET", ActivityKind.Server);
@@ -341,9 +341,9 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, "POST /payment"),
+            new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, "POST /payment"),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity("POST", ActivityKind.Server);
@@ -359,11 +359,11 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, this.awsLocalOperationValue),
-            new (AttributeAWSRemoteService, this.awsRemoteServiceValue),
-            new (AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
+            new(AttributeAWSSpanKind, ActivityKind.Producer.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, this.awsLocalOperationValue),
+            new(AttributeAWSRemoteService, this.awsRemoteServiceValue),
+            new(AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Producer);
@@ -381,11 +381,11 @@ public class AwsMetricAttributesGeneratorTest
         this.UpdateResourceWithServiceName();
         List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
         {
-            new (AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
-            new (AttributeAWSLocalService, this.serviceNameValue),
-            new (AttributeAWSLocalOperation, this.awsLocalOperationValue),
-            new (AttributeAWSRemoteService, this.awsRemoteServiceValue),
-            new (AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
+            new(AttributeAWSSpanKind, ActivityKind.Client.ToString().ToUpper()),
+            new(AttributeAWSLocalService, this.serviceNameValue),
+            new(AttributeAWSLocalOperation, this.awsLocalOperationValue),
+            new(AttributeAWSRemoteService, this.awsRemoteServiceValue),
+            new(AttributeAWSRemoteOperation, this.awsRemoteOperationValue),
         };
         ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
         Activity? spanDataMock = this.testSource.StartActivity(string.Empty, ActivityKind.Client);
@@ -1500,8 +1500,8 @@ public class AwsMetricAttributesGeneratorTest
     {
         List<KeyValuePair<string, object>> resourceAttributes = new List<KeyValuePair<string, object>>
         {
-            new (AutoInstrumentation.AwsMetricAttributeGenerator.AttributeServiceName, this.serviceNameValue),
-            new (AwsAttributeKeys.AttributeAWSLocalService, this.serviceNameValue),
+            new(AutoInstrumentation.AwsMetricAttributeGenerator.AttributeServiceName, this.serviceNameValue),
+            new(AwsAttributeKeys.AttributeAWSLocalService, this.serviceNameValue),
         };
         this.resource = new Resource(resourceAttributes);
     }

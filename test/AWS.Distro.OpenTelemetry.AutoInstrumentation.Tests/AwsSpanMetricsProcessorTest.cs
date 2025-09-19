@@ -15,6 +15,27 @@ using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+public static class GlobalCallbackData
+{
+    public static List<KeyValuePair<string, object?>>? CallList { get; set; }
+
+    public static void Clear()
+    {
+        CallList = null;
+    }
+}
+
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1602:Enumeration items should be documented", Justification = "Tests")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1201:Elements should appear in the correct order", Justification = "Test helper enum")]
+public enum ExpectedStatusMetric
+{
+    ERROR = 0,
+    FAULT = 1,
+    NEITHER = 2,
+}
+
 // There is two test that is not implemented in this Class, comparing with Java:
 
 // 1. testIsRequired()
@@ -27,6 +48,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 // It either valid (set by passing a parent ID and automatically matching Activity.Parent field)
 // or just Null
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Test helper classes")]
 #pragma warning disable CS8604 // Possible null reference argument.
 #pragma warning disable CS8602 // Possible null reference argument.
 public class AwsSpanMetricsProcessorTest : IDisposable
@@ -556,24 +578,4 @@ public class AwsSpanMetricsProcessorTest : IDisposable
         MethodInfo? durationSetMethod = spanDuration?.GetSetMethod(nonPublic: true);
         durationSetMethod?.Invoke(spanDataMock, new object?[] { timeSpan });
     }
-}
-
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public static class GlobalCallbackData
-{
-    public static List<KeyValuePair<string, object?>>? CallList { get; set; }
-
-    public static void Clear()
-    {
-        CallList = null;
-    }
-}
-
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1602:Enumeration items should be documented", Justification = "Tests")]
-public enum ExpectedStatusMetric
-{
-    ERROR = 0,
-    FAULT = 1,
-    NEITHER = 2,
 }
