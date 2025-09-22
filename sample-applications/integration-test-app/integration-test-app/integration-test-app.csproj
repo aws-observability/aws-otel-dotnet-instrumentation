@@ -3,11 +3,15 @@
   <PropertyGroup>
     <TargetFramework>netcoreapp8.0</TargetFramework>
     <RootNamespace>integration_test_app</RootNamespace>
+    <!-- Suppress StyleCop rules for test applications:
+         SA0001: XML comment analysis disabled (test apps don't need XML documentation)
+         SA1300: Element naming (test namespace uses underscores by convention) -->
+    <NoWarn>$(NoWarn);SA0001;SA1300</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.304" />
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

@@ -206,7 +206,8 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
                 DotNetBuild(s => s
                     .SetProjectFile(project)
                     .SetNoRestore(true)
-                    .SetConfiguration(this.configuration));
+                    .SetConfiguration(this.configuration)
+                    .SetProperty("TreatWarningsAsErrors", "true"));
             }
         });
 

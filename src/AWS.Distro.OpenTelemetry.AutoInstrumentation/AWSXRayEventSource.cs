@@ -9,7 +9,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 [EventSource(Name = "OpenTelemetry-AWS-XRay")]
 internal class AWSXRayEventSource : EventSource
 {
-    internal static readonly AWSXRayEventSource Log = new ();
+    internal static readonly AWSXRayEventSource Log = new();
 
     [NonEvent]
     public void ActivityContextExtractException(string format, Exception ex)
