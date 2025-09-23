@@ -1,4 +1,4 @@
-# AWS Distro for OpenTelemetry - Instrumentation for DotNet
+# AWS Distro for OpenTelemetry - Instrumentation for DotNet 
 
 ## Introduction
 
