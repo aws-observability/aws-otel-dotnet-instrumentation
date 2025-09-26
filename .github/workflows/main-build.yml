@@ -12,7 +12,7 @@ on:
       ref:
         description: 'The branch, tag or SHA to checkout'
         required: false
-        type: stringx
+        type: string
         default: ''
   workflow_dispatch: # be able to run the workflow on demand
   push:
