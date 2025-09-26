@@ -5,16 +5,18 @@ on:
     - cron: "21 3 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
 env:
   BRANCH_NAME: nightly-dependency-updates
+  AWS_DEFAULT_REGION: us-east-1
 
 jobs:
   update-and-create-pr:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
     
@@ -101,3 +103,27 @@ jobs:
       caller-workflow-name: nightly-build
       environment: Dev
       ref: nightly-dependency-updates
+
+  publish-nightly-build-status:
+    name: "Publish Nightly Build Status"
+    needs: [update-and-create-pr, build-and-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Configure AWS Credentials for emitting metrics
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
+        with:
+          role-to-assume: ${{ secrets.MONITORING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Publish nightly build status
+        run: |
+          if [[ "${{ needs.build-and-test.result }}" == "skipped" ]]; then
+            echo "Build was skipped (no changes), not publishing metric"
+          else
+            value="${{ needs.build-and-test.result == 'success' && '0.0' || '1.0'}}"
+            aws cloudwatch put-metric-data --namespace 'ADOT/GitHubActions' \
+              --metric-name Failure \
+              --dimensions repository=${{ github.repository }},branch=${{ github.ref_name }},workflow=nightly_build \
+              --value $value
+          fi
