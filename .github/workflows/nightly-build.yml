@@ -69,7 +69,11 @@ jobs:
     - name: Create or update PR
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
-        PR_BODY="Automated update of OpenTelemetry dependencies to their latest available versions."
+        PR_BODY="Automated update of OpenTelemetry dependencies to their latest available versions.
+
+        **Check for breaking changes:**
+        - [opentelemetry-dotnet releases](https://github.com/open-telemetry/opentelemetry-dotnet/releases)
+        - [opentelemetry-dotnet-contrib releases](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/releases)"
         
         if gh pr view "$BRANCH_NAME" --json state --jq '.state' 2>/dev/null | grep -q "OPEN"; then
           echo "Open PR already exists, updating description..."
