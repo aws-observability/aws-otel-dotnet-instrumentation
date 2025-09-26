@@ -101,7 +101,7 @@ jobs:
     secrets: inherit
     permissions:
       id-token: write
-      contents: read
+      contents: write
     with:
       caller-workflow-name: nightly-build
       environment: Dev
