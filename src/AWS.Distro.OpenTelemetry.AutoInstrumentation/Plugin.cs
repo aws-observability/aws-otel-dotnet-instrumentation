@@ -21,6 +21,7 @@ using OpenTelemetry.Instrumentation.AspNet;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporters.Aws.Metrics;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
@@ -86,12 +87,23 @@ public class Plugin
         };
 
     private Sampler? sampler;
+    private MetricReader? emfMetricReader;
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
-    /// </summary>public void Initializing()
+    /// </summary>
     public void Initializing()
     {
+        try
+        {
+            File.AppendAllText("/app/logs/plugin-debug.log", $"[{DateTime.Now}] Plugin.Initializing() called\n");
+            Console.WriteLine("Plugin.Initializing() called");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in Initializing: {ex.Message}");
+        }
+        this.CustomizeMetricReader();
     }
 
     /// <summary>
@@ -193,6 +205,15 @@ public class Plugin
     /// <returns>Returns configured builder</returns>
     public TracerProviderBuilder BeforeConfigureTracerProvider(TracerProviderBuilder builder)
     {
+        try
+        {
+            File.AppendAllText("/app/logs/plugin-debug.log", $"[{DateTime.Now}] BeforeConfigureTracerProvider called\n");
+            Console.WriteLine("BeforeConfigureTracerProvider called");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in BeforeConfigureTracerProvider logging: {ex.Message}");
+        }
         if (this.IsApplicationSignalsEnabled())
         {
             var resourceBuilder = ResourceBuilder
@@ -267,6 +288,27 @@ public class Plugin
     /// <returns>The configured metric provider builder</returns>
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
+        // Add EMF metric reader if configured
+
+        Logger.Log(
+            LogLevel.Error, "Check if EMF Metric Reader is configured");
+            Console.WriteLine("\nCheck if EMF Metric Reader is configured.");
+        if (this.emfMetricReader != null)
+        {
+            Logger.Log(
+                LogLevel.Error, "EMF Metric READER is CONFIGURED");
+            Console.WriteLine("\nEMF Metric READER is CONFIGURED.");
+            builder.AddReader(this.emfMetricReader);
+            // Configure exponential histogram aggregation for histogram instruments
+            builder.AddView(instrument =>
+            {
+                return instrument.GetType().GetGenericTypeDefinition() == typeof(Histogram<>)
+                    ? new Base2ExponentialBucketHistogramConfiguration()
+                    : null;
+            });
+            Logger.Log(LogLevel.Information, "AWS EMF exporter enabled with DELTA temporality and exponential histograms.");
+        }
+
         if (!this.IsApplicationSignalsRuntimeEnabled())
         {
             return builder;
@@ -525,6 +567,80 @@ public class Plugin
     {
         return this.IsApplicationSignalsEnabled() &&
                !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
+    }
+
+    private void CustomizeMetricReader()
+    {
+        Logger.Log(
+            LogLevel.Error, "CustomizeMetricReader()");
+        Console.WriteLine("\nCustomizeMetricReader().");
+        File.AppendAllText("/app/logs/plugin-debug.log", $"[{DateTime.Now}] CustomizeMetricReader()\n");
+        
+        bool isEmfEnabled = this.CheckEmfExporterEnabled();
+        if (isEmfEnabled)
+        {
+            Logger.Log(
+                LogLevel.Error, "EMF IS Enabled");
+            Console.WriteLine("\nEMF IS Enabled.");
+            File.AppendAllText("/app/logs/plugin-debug.log", $"[{DateTime.Now}] EMF IS Enabled\n");
+            
+            var emfExporter = this.CreateEmfExporter();
+            if (emfExporter != null)
+            {
+                Logger.Log(
+                    LogLevel.Error, "EMF Exporter is NOT null");
+                Console.WriteLine("\nEMF Exporter is NOT null.");
+                File.AppendAllText("/app/logs/plugin-debug.log", $"[{DateTime.Now}] EMF Exporter is NOT null\n");
+                
+                this.emfMetricReader = new PeriodicExportingMetricReader(emfExporter, GetMetricExportInterval())
+                {
+                    TemporalityPreference = MetricReaderTemporalityPreference.Delta
+                };
+            }
+        }
+    }
+
+    private bool CheckEmfExporterEnabled()
+    {
+        var exporterValue = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
+        if (string.IsNullOrEmpty(exporterValue))
+        {
+            return false;
+        }
+
+        var exporters = exporterValue.Split(',').Select(e => e.Trim()).ToList();
+        var index = exporters.IndexOf("awsemf");
+        if (index == -1)
+        {
+            return false;
+        }
+
+        exporters.RemoveAt(index);
+        var newValue = exporters.Count > 0 ? string.Join(",", exporters) : null;
+
+        if (!string.IsNullOrEmpty(newValue))
+        {
+            System.Environment.SetEnvironmentVariable(MetricExporterConfig, newValue);
+        }
+        else
+        {
+            System.Environment.SetEnvironmentVariable(MetricExporterConfig, null);
+        }
+
+        return true;
+    }
+
+    private EmfExporterBase? CreateEmfExporter()
+    {
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment())
+        {
+            // Lambda environment - use Console EMF exporter
+            return new ConsoleEmfExporter();
+        }
+
+        // Non-Lambda environment - would use CloudWatch EMF exporter if headers are valid
+        // For now, return Console EMF exporter for debugging
+        return new ConsoleEmfExporter();
     }
 
     private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)
