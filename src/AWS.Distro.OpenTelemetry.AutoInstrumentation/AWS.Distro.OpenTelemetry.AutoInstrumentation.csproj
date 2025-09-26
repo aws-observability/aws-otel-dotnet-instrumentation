@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<?xml version='1.0' encoding='utf-8'?>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -21,18 +22,18 @@
     <PackageReference Include="AWSSDK.XRay" Version="3.7.300" />
     <PackageReference Include="Amazon.Lambda.Serialization.Json" Version="2.2.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OpenTelemetry" Version="1.11.2" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.11.2" />
-    <!-- TODO: Need to look into release those packages before GA -->
-    <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.11.2" />
+    <PackageReference Include="OpenTelemetry" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+    
+    <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.12.1" />
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.11.1" />
-    <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.11.2" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.11.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.11.0-beta.2" Condition="'$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AWSLambda" Version="1.11.2" Condition="'$(TargetFramework)' != 'net462'" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.11.1" />
-    <PackageReference Include="OpenTelemetry.Sampler.AWS" Version="0.1.0-alpha.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.12.0-beta.2" Condition="'$(TargetFramework)' == 'net462'" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AWSLambda" Version="1.12.1" Condition="'$(TargetFramework)' != 'net462'" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Sampler.AWS" Version="0.1.0-alpha.4" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -41,7 +42,7 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 
-  <!-- TODO: Once upstream release is done, move the dependency to use upstream version -->
+  
   <ItemGroup>
     <ProjectReference Include="../OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj" PrivateAssets="All" />
   </ItemGroup>
@@ -50,7 +51,7 @@
   </ItemGroup>
 
   <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
-    <!-- NuGet packages -->
+    
     <IsPackable>true</IsPackable>
     <PackageProjectUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation/</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -62,7 +63,7 @@
     <RepositoryUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git</RepositoryUrl>
   </PropertyGroup>
 
-  <!-- Items that are only added when building the NuGet package -->
+  
   <ItemGroup Condition=" '$(_IsPacking)' == 'true' ">
     <Content Include="adot-launch.*">
       <PackageCopyToOutput>true</PackageCopyToOutput>
@@ -70,11 +71,11 @@
     <Content Include="configuration/**">
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.7.0">
-      <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.12.0">
+      <PrivateAssets>none</PrivateAssets> 
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
-    <!-- TODO: Once upstream release is done, remove the logic below -->
+    
     <Content Include="./bin/Release/net8.0/OpenTelemetry.Instrumentation.AWS.dll">
         <Pack>true</Pack>
         <PackagePath>lib\net8.0</PackagePath>
@@ -83,8 +84,8 @@
         <Pack>true</Pack>
         <PackagePath>lib\net462</PackagePath>
     </Content>
-    <!-- Add AWS.Distro.OpenTelemetry.Exporter.Xray.Udp DLLs -->
-    <!-- TODO: Remove once UDP Exporter is published to NuGet -->
+    
+    
     <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net8.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
         <Pack>true</Pack>
         <PackagePath>lib\net8.0</PackagePath>
