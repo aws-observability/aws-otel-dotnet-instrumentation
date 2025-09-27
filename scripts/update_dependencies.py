@@ -100,9 +100,8 @@ def get_latest_dotnet_instrumentation_version():
 def update_csproj_file(file_path, github_versions):
     """Update OpenTelemetry package versions in a .csproj file."""
     try:
-        # Parse the XML file
-        tree = ET.parse(file_path)
-        root = tree.getroot()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
         
         updated = False
         
@@ -114,41 +113,51 @@ def update_csproj_file(file_path, github_versions):
             'OpenTelemetry.Extensions.Propagators'
         ]
         
-        # Find all PackageReference elements
-        for package_ref in root.findall('.//PackageReference'):
-            include = package_ref.get('Include', '')
+        # Find and update PackageReference elements using regex
+        def update_package_version(match):
+            nonlocal updated
+            package_name = match.group(1)
+            current_version = match.group(2)
             
             # Only update OpenTelemetry packages
-            if include.startswith('OpenTelemetry'):
-                current_version = package_ref.get('Version', '')
-                latest_version = None
-                
-                # Try to get version from GitHub releases only
-                if include in core_packages and 'core' in github_versions:
-                    latest_version = github_versions['core']
-                elif include in github_versions:
-                    latest_version = github_versions[include]
-                else:
-                    # Skip packages not found in GitHub (likely only have pre-releases)
-                    print(f"Skipping {include} - no stable release found in GitHub")
-                    continue
-                
-                if latest_version and current_version != latest_version:
-                    package_ref.set('Version', latest_version)
-                    updated = True
-                    print(f"Updated {include}: {current_version} → {latest_version}")
-                elif latest_version:
-                    print(f"{include} already at latest version: {latest_version}")
+            if not package_name.startswith('OpenTelemetry'):
+                return match.group(0)
+            
+            latest_version = None
+            
+            # Try to get version from GitHub releases only
+            if package_name in core_packages and 'core' in github_versions:
+                latest_version = github_versions['core']
+            elif package_name in github_versions:
+                latest_version = github_versions[package_name]
+            else:
+                # Skip packages not found in GitHub (likely only have pre-releases)
+                print(f"Skipping {package_name} - no stable release found in GitHub")
+                return match.group(0)
+            
+            if latest_version and current_version != latest_version:
+                updated = True
+                print(f"Updated {package_name}: {current_version} → {latest_version}")
+                return f'<PackageReference Include="{package_name}" Version="{latest_version}" />'
+            elif latest_version:
+                print(f"{package_name} already at latest version: {latest_version}")
+            
+            return match.group(0)
+        
+        # Use regex to find and replace PackageReference elements
+        pattern = r'<PackageReference\s+Include="([^"]+)"\s+Version="([^"]+)"\s*/>'
+        new_content = re.sub(pattern, update_package_version, content)
         
         if updated:
-            tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
             print("Dependencies updated successfully")
             return True
         else:
             print("No OpenTelemetry dependencies needed updating")
             return False
             
-    except (ET.ParseError, OSError, IOError) as file_error:
+    except (OSError, IOError) as file_error:
         print(f"Error updating dependencies: {file_error}")
         sys.exit(1)
 
