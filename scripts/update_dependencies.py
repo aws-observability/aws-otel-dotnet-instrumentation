@@ -79,35 +79,6 @@ def get_latest_versions_from_github():
         print(f"Warning: Could not get GitHub releases: {request_error}")
         return {}
 
-def get_latest_version_fallback(package_name):
-    """Fallback to NuGet API if GitHub doesn't have the package."""
-    try:
-        response = requests.get(
-            f'https://api.nuget.org/v3-flatcontainer/{package_name.lower()}/index.json',
-            timeout=30
-        )
-        response.raise_for_status()
-        
-        data = response.json()
-        versions = data.get('versions', [])
-        
-        if not versions:
-            print(f"Warning: No versions found for {package_name}")
-            return None
-            
-        # Get the latest stable version (avoid pre-release versions for now)
-        stable_versions = [v for v in versions if not any(pre in v.lower() for pre in ['alpha', 'beta', 'rc', 'preview'])]
-        
-        if stable_versions:
-            return stable_versions[-1]  # Last version is typically the latest
-        else:
-            # If no stable versions, use the latest version
-            return versions[-1]
-            
-    except requests.RequestException as request_error:
-        print(f"Warning: Could not get latest version for {package_name}: {request_error}")
-        return None
-
 def get_latest_dotnet_instrumentation_version():
     """Get the latest version of opentelemetry-dotnet-instrumentation from GitHub releases."""
     try:
@@ -152,15 +123,15 @@ def update_csproj_file(file_path, github_versions):
                 current_version = package_ref.get('Version', '')
                 latest_version = None
                 
-                # Try to get version from GitHub releases first
+                # Try to get version from GitHub releases only
                 if include in core_packages and 'core' in github_versions:
                     latest_version = github_versions['core']
                 elif include in github_versions:
                     latest_version = github_versions[include]
                 else:
-                    # Fallback to NuGet API for packages not found in GitHub
-                    print(f"Package {include} not found in GitHub releases, falling back to NuGet")
-                    latest_version = get_latest_version_fallback(include)
+                    # Skip packages not found in GitHub (likely only have pre-releases)
+                    print(f"Skipping {include} - no stable release found in GitHub")
+                    continue
                 
                 if latest_version and current_version != latest_version:
                     package_ref.set('Version', latest_version)
