@@ -359,11 +359,11 @@ public class Plugin
 #endif
     }
 
+#if !NETFRAMEWORK
     /// <summary>
     /// Used to call ShouldSampleParent function
     /// </summary>
     /// <param name="options"><see cref="AspNetCoreTraceInstrumentationOptions"/> options to configure</param>
-#if !NETFRAMEWORK
     public void ConfigureTracesOptions(AspNetCoreTraceInstrumentationOptions options)
     {
         options.EnrichWithHttpRequest = (activity, request) =>

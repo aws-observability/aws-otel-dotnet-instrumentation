@@ -9,35 +9,35 @@ runs:
   steps:
     - name: Download Linux x64 Artifact
       if: runner.os == 'Linux'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
       with:
         name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
         path: ./artifacts/linux/x64
 
     - name: Download Linux x64 MUSL Artifact
       if: runner.os == 'Linux'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
       with:
         name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
         path: ./artifacts/linux/x64-musl
 
     - name: Download Linux arm64 Artifact
       if: runner.os == 'Linux'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
       with:
         name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
         path: ./artifacts/linux/arm64
 
     - name: Download Linux arm64 MUSL Artifact
       if: runner.os == 'Linux'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
       with:
         name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
         path: ./artifacts/linux/arm64-musl
 
     - name: Download Windows Artifact
       if: runner.os == 'Windows'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
       with:
         name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
         path: ./artifacts/windows

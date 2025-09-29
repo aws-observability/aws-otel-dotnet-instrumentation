@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Assume nuget role
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
           aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}

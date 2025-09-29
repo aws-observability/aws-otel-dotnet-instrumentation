@@ -9,7 +9,7 @@ on:
         required: false
         type: string
         default: Dev
-  
+  workflow_dispatch: # be able to run the workflow on demand
   push:
     branches:
       - main
@@ -30,10 +30,10 @@ jobs:
           - os: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: '8.0.x'
 
@@ -55,28 +55,28 @@ jobs:
 
       - name: Upload Artifact on X64 Linux
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
       
       - name: Upload bash installation script
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-otel-dotnet-install.sh
           path: bin/InstallationScripts/aws-otel-dotnet-install.sh
 
       - name: Upload psm1 installation script
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: AWS.Otel.DotNet.Auto.psm1
           path: bin/InstallationScripts/AWS.Otel.DotNet.Auto.psm1
 
       - name: Upload Artifact on Windows
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
@@ -86,7 +86,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           fetch-depth: 0
 
@@ -98,7 +98,7 @@ jobs:
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
       - name: Upload Artifact on MUSL X64 Linux
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
@@ -107,10 +107,10 @@ jobs:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
     environment: ${{ inputs.environment }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: '8.0.x'
 
@@ -121,7 +121,7 @@ jobs:
         run: dotnet test
 
       - name: Upload Artifact on arm64 Linux
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
@@ -131,7 +131,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           fetch-depth: 0
 
@@ -143,7 +143,7 @@ jobs:
             /bin/sh -c 'git config --global --add safe.directory /project && dotnet test && ./build.sh'
 
       - name: Upload Artifact on MUSL arm64 Linux
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
@@ -157,7 +157,7 @@ jobs:
       matrix:
         os: [windows-2022, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Build and scan Linux images
         if: runner.os == 'Linux'
@@ -187,7 +187,7 @@ jobs:
     if: always()
     steps:
       - name: Configure AWS Credentials for emitting metrics
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.MONITORING_ROLE_ARN }}
           aws-region: us-east-1

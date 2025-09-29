@@ -8,6 +8,13 @@
     <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Suppress warnings for test projects:
+         CS8002: Unsigned assembly references (test projects can reference unsigned packages)
+         SA0001: XML comment analysis disabled (test projects don't need XML documentation)
+         SA1204: Element ordering (test helper classes can appear in any order)
+         SA1300: Element naming (test namespace uses underscores by convention)
+         SA1402: Multiple types per file (test helper classes are acceptable) -->
+    <NoWarn>$(NoWarn);CS8002;SA0001;SA1204;SA1300;SA1402</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,7 +34,7 @@
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.11.2" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="NSubstitute" Version="5.1.0" />
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

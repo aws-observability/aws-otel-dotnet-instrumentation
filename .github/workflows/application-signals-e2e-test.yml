@@ -38,17 +38,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.STAING_ARTIFACTS_ACCESS_ROLE }}
           role-external-id: ApplicationSignalsDotnet
           aws-region: us-east-1
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
         with:
           name: ${{ inputs.ec2-default-image-name }}
       
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
         with:
           name: ${{ inputs.ec2-windows-image-name }}
 
@@ -67,7 +67,7 @@ jobs:
           - os: windows-2022
           - os: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
       - name: Get Short SHA
         id: short_sha
         run: |
@@ -76,7 +76,7 @@ jobs:
         shell: bash
 
       - name: Configure AWS credentials for private ECR
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME}}
           aws-region: us-east-1
@@ -88,14 +88,14 @@ jobs:
         
       - name: Download Linux x64 Artifact
         if: runner.os == 'Linux'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
           
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
           path: ./artifacts/windows
@@ -196,17 +196,17 @@ jobs:
   build-lambda-staging-sample-app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.STAING_ARTIFACTS_ACCESS_ROLE }}
           role-external-id: ApplicationSignalsDotnet
           aws-region: us-east-1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: '8.0.x'
 
