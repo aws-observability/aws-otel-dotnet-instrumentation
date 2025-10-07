@@ -489,19 +489,38 @@ jobs:
           # Extract version from Build.cs
           OTEL_INSTRUMENTATION_VERSION=$(grep "OpenTelemetryAutoInstrumentationDefaultVersion = " build/Build.cs | sed 's/.*= "\(.*\)";/\1/' | sed 's/^v//')
 
+          # Extract CHANGELOG entries for this version
+          CHANGELOG_ENTRIES=$(python3 -c "
+          import re
+          with open('CHANGELOG.md', 'r') as f:
+              content = f.read()
+          version_pattern = r'## v${{ github.event.inputs.version }}.*?\n(.*?)(?=\n## |\Z)'
+          version_match = re.search(version_pattern, content, re.DOTALL)
+          if version_match:
+              entries = version_match.group(1).strip()
+              if entries:
+                  print(entries)
+          ")
+
           # Create release notes
           cat > release_notes.md << EOF
-          This release contains the following upstream components:
+          $(if [ -n "$CHANGELOG_ENTRIES" ]; then echo "## What's Changed"; echo "$CHANGELOG_ENTRIES"; echo ""; fi)
 
-          OpenTelemetry .NET Auto Instrumentation - $OTEL_INSTRUMENTATION_VERSION
+          ## Upstream Components
 
-          This release also publishes to public ECR and NuGet.
+          - \`OpenTelemetry .NET Auto Instrumentation\` - $OTEL_INSTRUMENTATION_VERSION
+
+          ## Release Artifacts
+
+          This release publishes to public ECR and NuGet.
           * See ADOT .NET auto-instrumentation Docker image v${{ github.event.inputs.version }} in our public ECR repository:
           https://gallery.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet
           * See version ${{ github.event.inputs.version }} in our NuGet repository:
           https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.AutoInstrumentation
 
-          This release also includes the AWS OpenTelemetry Lambda Layer for .NET version ${{ github.event.inputs.version }}-$(git rev-parse --short HEAD).
+          ## Lambda Layer
+
+          This release includes the AWS OpenTelemetry Lambda Layer for .NET version ${{ github.event.inputs.version }}-$(git rev-parse --short HEAD).
 
           Lambda Layer ARNs:
           ${{ needs.generate-lambda-release-note.outputs.layer-note }}
