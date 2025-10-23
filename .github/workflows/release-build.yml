@@ -473,7 +473,7 @@ jobs:
       - name: Create GH release
         id: create_release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Extract version from Build.cs
           OTEL_INSTRUMENTATION_VERSION=$(grep "OpenTelemetryAutoInstrumentationDefaultVersion = " build/Build.cs | sed 's/.*= "\(.*\)";/\1/' | sed 's/^v//')
@@ -496,40 +496,28 @@ jobs:
           ${{ needs.generate-lambda-release-note.outputs.layer-note }}
           EOF
 
-          gh release create --target "$GITHUB_REF_NAME" \
-             --title "Release v${{ github.event.inputs.version }}" \
-             --draft \
-             "v${{ github.event.inputs.version }}" \
-              --notes-file release_notes.md
-
-      - name: Upload artifacts and checksum to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREFIX="Release_v${{github.event.inputs.version}}_"
-
+          # Prepare all artifacts and checksums
           find ./artifacts/ -name "*.zip" | while read file; do
-          base=$(basename "$file")
-          cp "$file" "$base"
-          shasum -a 256 $base > $base.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
-            $base \
-            $base.sha256 \
-            --clobber
+            base=$(basename "$file")
+            cp "$file" "$base"
+            shasum -a 256 "$base" > "$base.sha256"
           done
+          
           shasum -a 256 ./installationScripts/aws-otel-dotnet-install.sh | sed "s|./installationScripts/||" > aws-otel-dotnet-install.sh.sha256
           shasum -a 256 ./installationScripts/AWS.Otel.DotNet.Auto.psm1 | sed "s|./installationScripts/||" > AWS.Otel.DotNet.Auto.psm1.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./installationScripts/aws-otel-dotnet-install.sh \
-            aws-otel-dotnet-install.sh.sha256 \
-            --clobber
-          gh release upload "v${{ github.event.inputs.version }}" \
-            ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
-            AWS.Otel.DotNet.Auto.psm1.sha256 \
-            --clobber
-
           shasum -a 256 layer.zip > layer.zip.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
-            layer.zip \
-            layer.zip.sha256 \
-            --clobber
+
+          # Create release with all artifacts in one command
+          gh release create --target "$GITHUB_REF_NAME" \
+             --title "Release v${{ github.event.inputs.version }}" \
+             --notes-file release_notes.md \
+             --draft \
+             "v${{ github.event.inputs.version }}" \
+             aws-distro-opentelemetry-dotnet-instrumentation-*.zip \
+             aws-distro-opentelemetry-dotnet-instrumentation-*.zip.sha256 \
+             ./installationScripts/aws-otel-dotnet-install.sh \
+             aws-otel-dotnet-install.sh.sha256 \
+             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
+             AWS.Otel.DotNet.Auto.psm1.sha256 \
+             layer.zip \
+             layer.zip.sha256
