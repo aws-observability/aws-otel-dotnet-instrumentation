@@ -506,8 +506,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREFIX="Release_v${{github.event.inputs.version}}_"
-
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
           cp "$file" "$base"
