@@ -29,7 +29,6 @@ permissions:
 
 jobs:
   build-sdk:
-    # environment: Release
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +42,7 @@ jobs:
     # since deleting from Private ECR is not possible.
   build-release-nuget:
     needs: build-sdk
+    environment: Release
     runs-on: windows-latest
     strategy:
         fail-fast: true
