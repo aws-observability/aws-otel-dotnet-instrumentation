@@ -29,7 +29,6 @@ permissions:
 
 jobs:
   build-sdk:
-    environment: Release
     strategy:
       fail-fast: false
       matrix:
@@ -38,22 +37,12 @@ jobs:
     secrets: inherit
     with:
       caller-workflow-name: 'release_build_workflow'
-    
-  build-layer:
-    needs: build-sdk
-    strategy:
-      fail-fast: false
-      matrix:
-        aws-region: [ 'us-east-1' ]
-    uses: ./.github/workflows/main-build.yml
-    secrets: inherit
-    with:
-      caller-workflow-name: 'release_lambda_workflow'
   
   # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
     # since deleting from Private ECR is not possible.
   build-release-nuget:
-    needs: [build-sdk, build-layer]
+    needs: build-sdk
+    environment: Release
     runs-on: windows-latest
     strategy:
         fail-fast: true

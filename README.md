@@ -14,6 +14,8 @@ apply some small configuration changes, and our OpenTelemetry friends takes care
 
 ## Important
 
+The AWS Distro for OpenTelemetry for .NET currently does not support AWS SDK for .NET V4. We will offer support for V4 before the AWS SDK for .NET V3 reaches end of life on June 1, 2026. In the meantime, please use the AWS SDK for .NET V3 with this package for full instrumentation support.
+
 Although this repository is released under the Apache-2.0 license, some Dockerfiles uses Windows as a base image, which is licensed under the following terms https://learn.microsoft.com/en-us/virtualization/windowscontainers/images-eula.
 
 ## Building the Project
