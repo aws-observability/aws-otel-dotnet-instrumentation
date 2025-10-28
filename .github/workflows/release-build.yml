@@ -76,10 +76,12 @@ jobs:
           .\buildtools\sign_files.ps1 -Filters AWS.OpenTelemetry.Exporter.Otlp.Udp.dll -Recurse -Path .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\bin\Release
           
       - name: Pack nugets
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: >
           dotnet pack
           .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
-          /p:Version=${{github.event.inputs.version}}
+          /p:Version=$VERSION
           --no-build
           -c Release
           -o .\Deployment\nuget-packages
@@ -150,36 +152,49 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Linux container
+      - name: Build and scan Linux images
         if: runner.os == 'Linux'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+
+      - name: Build and scan Windows image
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/build-and-scan-image
+        with:
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+
+      - name: Push Linux x64 Image
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           set -e
-          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
-          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64
 
       - name: Build Linux arm64 container
         if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           set -e
-          cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
-          cd ./arm64
-          docker build --platform linux/arm64 -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 -f ../Dockerfile.linux .
-          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
-          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
-          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64
 
       - name: Build Windows container
         if: runner.os == 'Windows'
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.20348") {
-            Echo "Build image for Windows Server 2022"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
-            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            Echo "Push image for Windows Server 2022"
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$env:VERSION-windows2022
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$env:VERSION-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$env:VERSION-windows2022
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$env:VERSION-windows2022
           } else {
               Echo "Unknown Windows Server version: $osInfo"
               exit 1
@@ -213,16 +228,20 @@ jobs:
           registry: public.ecr.aws
 
       - name: Create multi-platform image and push to Amazon private ECR
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
-          docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-windows2022
+          docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION
+          docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION
 
       - name: Create multi-platform image and push to Amazon public ECR
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
-          docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-windows2022
+          docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
+          docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
 
   setup-regions-matrix:
     runs-on: ubuntu-latest
@@ -232,8 +251,10 @@ jobs:
     steps:
       - name: Set up regions matrix
         id: set-matrix
+        env:
+          AWS_REGIONS: ${{ github.event.inputs.aws_region }}
         run: |
-          IFS=',' read -ra REGIONS <<< "${{ github.event.inputs.aws_region }}"
+          IFS=',' read -ra REGIONS <<< "$AWS_REGIONS"
           MATRIX="["
           for region in "${REGIONS[@]}"; do
             trimmed_region=$(echo "$region" | xargs)
@@ -286,6 +307,8 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
       - name: publish
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           aws s3 mb s3://${{ env.BUCKET_NAME }}
           aws s3 cp aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip s3://${{ env.BUCKET_NAME }}
@@ -296,7 +319,7 @@ jobs:
               --compatible-runtimes dotnet8 \
               --compatible-architectures "x86_64" \
               --license-info "Apache-2.0" \
-              --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime v${{ github.event.inputs.version }}" \
+              --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime v$VERSION" \
               --query 'LayerVersionArn' \
               --output text
           )
@@ -453,8 +476,10 @@ jobs:
           aws-region: ${{ env.AWS_DEFAULT_REGION }}
 
       - name: Upload to Private S3 Bucket
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          PREFIX="Release_v${{github.event.inputs.version}}"
+          PREFIX="Release_v$VERSION"
 
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
@@ -468,60 +493,82 @@ jobs:
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           # Extract version from Build.cs
           OTEL_INSTRUMENTATION_VERSION=$(grep "OpenTelemetryAutoInstrumentationDefaultVersion = " build/Build.cs | sed 's/.*= "\(.*\)";/\1/' | sed 's/^v//')
 
+          # Extract CHANGELOG entries for this version
+          CHANGELOG_ENTRIES=$(python3 -c "
+          import re, os
+          version = os.environ['VERSION']
+          with open('CHANGELOG.md', 'r') as f:
+              content = f.read()
+          version_pattern = rf'## v{re.escape(version)}.*?\n(.*?)(?=\n## |\Z)'
+          version_match = re.search(version_pattern, content, re.DOTALL)
+          if version_match:
+              entries = version_match.group(1).strip()
+              if entries:
+                  print(entries)
+          ")
+
           # Create release notes
           cat > release_notes.md << EOF
-          This release contains the following upstream components:
+          $(if [ -n "$CHANGELOG_ENTRIES" ]; then echo "## What's Changed"; echo "$CHANGELOG_ENTRIES"; echo ""; fi)
 
-          OpenTelemetry .NET Auto Instrumentation - $OTEL_INSTRUMENTATION_VERSION
+          ## Upstream Components
 
-          This release also publishes to public ECR and NuGet.
-          * See ADOT .NET auto-instrumentation Docker image v${{ github.event.inputs.version }} in our public ECR repository:
+          - \`OpenTelemetry .NET Auto Instrumentation\` - $OTEL_INSTRUMENTATION_VERSION
+
+          ## Release Artifacts
+
+          This release publishes to public ECR and NuGet.
+          * See ADOT .NET auto-instrumentation Docker image v$VERSION in our public ECR repository:
           https://gallery.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet
-          * See version ${{ github.event.inputs.version }} in our NuGet repository:
+          * See version $VERSION in our NuGet repository:
           https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.AutoInstrumentation
 
-          This release also includes the AWS OpenTelemetry Lambda Layer for .NET version ${{ github.event.inputs.version }}-$(git rev-parse --short HEAD).
+          ## Lambda Layer
+
+          This release includes the AWS OpenTelemetry Lambda Layer for .NET version $VERSION-$(echo $GITHUB_SHA | cut -c1-7).
 
           Lambda Layer ARNs:
           ${{ needs.generate-lambda-release-note.outputs.layer-note }}
           EOF
 
           gh release create --target "$GITHUB_REF_NAME" \
-             --title "Release v${{ github.event.inputs.version }}" \
+             --title "Release v$VERSION" \
              --draft \
-             "v${{ github.event.inputs.version }}" \
+             "v$VERSION" \
               --notes-file release_notes.md
 
       - name: Upload artifacts and checksum to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
           cp "$file" "$base"
           shasum -a 256 $base > $base.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
+          gh release upload "v$VERSION" \
             $base \
             $base.sha256 \
             --clobber
           done
           shasum -a 256 ./installationScripts/aws-otel-dotnet-install.sh | sed "s|./installationScripts/||" > aws-otel-dotnet-install.sh.sha256
           shasum -a 256 ./installationScripts/AWS.Otel.DotNet.Auto.psm1 | sed "s|./installationScripts/||" > AWS.Otel.DotNet.Auto.psm1.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
+          gh release upload "v$VERSION" \
             ./installationScripts/aws-otel-dotnet-install.sh \
             aws-otel-dotnet-install.sh.sha256 \
             --clobber
-          gh release upload "v${{ github.event.inputs.version }}" \
+          gh release upload "v$VERSION" \
             ./installationScripts/AWS.Otel.DotNet.Auto.psm1 \
             AWS.Otel.DotNet.Auto.psm1.sha256 \
             --clobber
 
           shasum -a 256 layer.zip > layer.zip.sha256
-          gh release upload "v${{ github.event.inputs.version }}" \
+          gh release upload "v$VERSION" \
             layer.zip \
             layer.zip.sha256 \
             --clobber
