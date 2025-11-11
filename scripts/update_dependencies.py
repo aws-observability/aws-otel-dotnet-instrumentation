@@ -204,6 +204,15 @@ def main():
     
     print("Found versions:", github_versions)
     
+    # Set GitHub outputs
+    import os
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            if 'core' in github_versions:
+                f.write(f"otel_dotnet_core_version={github_versions['core']}\n")
+            if 'OpenTelemetry.Extensions.AWS' in github_versions:
+                f.write(f"otel_dotnet_aws_version={github_versions['OpenTelemetry.Extensions.AWS']}\n")
+    
     csproj_path = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj'
     build_cs_path = 'build/Build.cs'
     

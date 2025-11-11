@@ -1,4 +1,5 @@
 name: Nightly Upstream Snapshot Build
+description: This workflow checks for new upstream versions of OpenTelemetry dependencies, creates a PR to update them, and builds and tests the new changes.
 
 on:
   schedule:
@@ -22,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      otel_dotnet_core_version: ${{ steps.update_deps.outputs.otel_dotnet_core_version }}
+      otel_dotnet_aws_version: ${{ steps.update_deps.outputs.otel_dotnet_aws_version }}
     
     steps:
     - name: Checkout repository
@@ -54,6 +57,7 @@ jobs:
       run: pip install requests
     
     - name: Update dependencies
+      id: update_deps
       run: python3 scripts/update_dependencies.py
     
     - name: Check for changes and commit
@@ -100,11 +104,17 @@ jobs:
         BUILD_EMOJI="${{ needs.build-and-test.result == 'success' && '✅' || '❌' }}"
         BUILD_LINK="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         
-        PR_BODY="Automated update of OpenTelemetry dependencies to their latest available versions.
+        PR_BODY="Automated update of OpenTelemetry dependencies.
 
         **Build Status:** ${BUILD_EMOJI} [${BUILD_STATUS}](${BUILD_LINK})
 
+        **Updated versions:**
+        - [OpenTelemetry .NET Core](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/v${{ needs.update-dependencies.outputs.otel_dotnet_core_version }}): ${{ needs.update-dependencies.outputs.otel_dotnet_core_version }}
+        - [OpenTelemetry .NET AWS Extensions](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/releases/tag/Extensions.AWS-${{ needs.update-dependencies.outputs.otel_dotnet_aws_version }}): ${{ needs.update-dependencies.outputs.otel_dotnet_aws_version }}
+
         **Check for breaking changes:**
+        Note: the mechanism to detect upstream breaking changes is not perfect. Be sure to check all new releases and understand if any additional changes need to be addressed.
+        
         - [opentelemetry-dotnet releases](https://github.com/open-telemetry/opentelemetry-dotnet/releases)
         - [opentelemetry-dotnet-contrib releases](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/releases)"
         
