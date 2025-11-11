@@ -7,7 +7,7 @@ import requests
 from packaging import version
 
 def get_current_version_from_csproj():
-    """Extract current OpenTelemetry versions from .csproj file."""
+    """Extract current OpenTelemetry core version from .csproj file."""
     try:
         with open("src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj", "r", encoding="utf-8") as file:
             content = file.read()
@@ -21,6 +21,8 @@ def get_current_version_from_csproj():
     except (OSError, IOError) as error:
         print(f"Error reading current versions: {error}")
         return None
+
+
 
 def get_releases_with_breaking_changes(repo, current_version, new_version):
     """Get releases between current and new version that mention breaking changes."""
@@ -42,10 +44,7 @@ def get_releases_with_breaking_changes(repo, current_version, new_version):
             if repo == "opentelemetry-dotnet":
                 version_match = re.match(r'^(?:v|core-)?(\d+\.\d+\.\d+)$', tag_name)
                 release_version = version_match.group(1) if version_match else None
-            else:
-                # For contrib, extract from component-version format
-                version_match = re.match(r'^.+-(\d+\.\d+\.\d+)$', tag_name)
-                release_version = version_match.group(1) if version_match else None
+
 
             if not release_version:
                 continue
@@ -112,6 +111,7 @@ def main():
     # Set GitHub output
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
+            output_file.write(f"breaking_changes_info<<EOF\n{breaking_info}\nEOF\n")UTPUT"], "a", encoding="utf-8") as output_file:
             output_file.write(f"breaking_changes_info<<EOF\n{breaking_info}\nEOF\n")
 
 if __name__ == "__main__":
