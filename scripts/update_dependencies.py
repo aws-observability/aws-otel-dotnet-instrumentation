@@ -35,7 +35,7 @@ def update_core_packages(file_path, otel_dotnet_core_version):
             
             return match.group(0)
         
-        pattern = r'<PackageReference\\s+Include="([^"]+)"\\s+Version="([^"]+)"\\s*/>'
+        pattern = r'<PackageReference\s+Include="([^"]+)"\s+Version="([^"]+)"\s*/?>'
         new_content = re.sub(pattern, update_package_version, content)
         
         if updated:
@@ -65,7 +65,7 @@ def update_contrib_packages(csproj_dir):
             return False
         
         updated = False
-        lines = result.stdout.split('\\n')
+        lines = result.stdout.split('\n')
         
         for line in lines:
             # Parse dotnet list output for OpenTelemetry packages
