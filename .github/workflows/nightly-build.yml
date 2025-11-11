@@ -24,6 +24,7 @@ jobs:
     outputs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
       otel_dotnet_core_version: ${{ steps.get_versions.outputs.otel_dotnet_core_version }}
+      otel_dotnet_instrumentation_version: ${{ steps.get_versions.outputs.otel_dotnet_instrumentation_version }}
     
     steps:
     - name: Checkout repository

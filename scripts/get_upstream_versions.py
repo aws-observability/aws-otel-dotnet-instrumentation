@@ -56,14 +56,18 @@ def main():
         print("Error: Could not get core version - no stable releases found")
         sys.exit(1)
     
+    if not instrumentation_version:
+        print("Error: Could not get instrumentation version")
+        sys.exit(1)
+    
     print(f"OTEL_DOTNET_CORE_VERSION={otel_dotnet_core_version}")
     print(f"OTEL_DOTNET_INSTRUMENTATION_VERSION={instrumentation_version}")
     
     # Write to GitHub output if in CI
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
-            output_file.write(f"otel_dotnet_core_version={otel_dotnet_core_version}\\n")
-            output_file.write(f"otel_dotnet_instrumentation_version={instrumentation_version}\\n")
+            output_file.write(f"otel_dotnet_core_version={otel_dotnet_core_version}\n")
+            output_file.write(f"otel_dotnet_instrumentation_version={instrumentation_version}\n")
 
 if __name__ == "__main__":
     main()
