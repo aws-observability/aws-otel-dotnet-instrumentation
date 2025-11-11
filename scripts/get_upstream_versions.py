@@ -21,10 +21,9 @@ def get_latest_core_version():
                 continue
             
             tag_name = release['tag_name']
-            version_match = re.match(r'^(?:v|core-)?(\\d+\\.\\d+\\.\\d+)$', tag_name)
+            version_match = re.match(r'^(?:v|core-)?(\d+\.\d+\.\d+)$', tag_name)
             if version_match:
                 return version_match.group(1)
-        
         return None
         
     except requests.RequestException as request_error:
@@ -54,7 +53,7 @@ def main():
     instrumentation_version = get_latest_dotnet_instrumentation_version()
     
     if not otel_dotnet_core_version:
-        print("Error: Could not get core version")
+        print("Error: Could not get core version - no stable releases found")
         sys.exit(1)
     
     print(f"OTEL_DOTNET_CORE_VERSION={otel_dotnet_core_version}")
