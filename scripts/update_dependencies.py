@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 
-def update_core_packages(file_path, otel_dotnet_core_version):
+def update_file_dependencies(file_path, otel_dotnet_core_version):
     """Update core OpenTelemetry package versions in a .csproj file."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -28,7 +28,7 @@ def update_core_packages(file_path, otel_dotnet_core_version):
             if package_name in core_packages:
                 if current_version != otel_dotnet_core_version:
                     updated = True
-                    print(f"Updated {package_name}: {current_version} → {otel_dotnet_core_version}")
+                    print(f"Updated {package_name} in {file_path}: {current_version} → {otel_dotnet_core_version}")
                     return f'<PackageReference Include="{package_name}" Version="{otel_dotnet_core_version}" />'
                 else:
                     print(f"{package_name} already at latest version: {otel_dotnet_core_version}")
@@ -41,6 +41,7 @@ def update_core_packages(file_path, otel_dotnet_core_version):
         if updated:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
+            print(f"Updated {file_path}")
         
         return updated
             
@@ -151,15 +152,33 @@ def main():
         print("Error: OTEL_DOTNET_INSTRUMENTATION_VERSION environment variable required")
         sys.exit(1)
     
-    csproj_path = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj'
+    # All files to update
+    files_to_update = [
+        'src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj',
+        'exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj',
+        'test/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.csproj'
+    ]
+    
     csproj_dir = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation'
     build_cs_path = 'build/Build.cs'
     
-    core_updated = update_core_packages(csproj_path, otel_dotnet_core_version)
-    contrib_updated = update_contrib_packages(csproj_dir)
+    # Update core packages in all files
+    any_core_updated = False
+    for file_path in files_to_update:
+        if update_file_dependencies(file_path, otel_dotnet_core_version):
+            any_core_updated = True
+    
+    # Update contrib packages in all directories
+    any_contrib_updated = False
+    for file_path in files_to_update:
+        csproj_dir = os.path.dirname(file_path)
+        if update_contrib_packages(csproj_dir):
+            any_contrib_updated = True
+    
+    # Update Build.cs
     build_cs_updated = update_build_cs_file(build_cs_path, otel_dotnet_instrumentation_version)
     
-    if core_updated or contrib_updated or build_cs_updated:
+    if any_core_updated or any_contrib_updated or build_cs_updated:
         print(f"Dependencies updated to Core {otel_dotnet_core_version}")
     else:
         print("No updates were made")

@@ -30,7 +30,7 @@ def get_latest_core_version():
         print(f"Error getting OpenTelemetry core version: {request_error}")
         sys.exit(1)
 
-def get_latest_dotnet_instrumentation_version():
+def get_latest_instrumentation_version():
     """Get the latest version of opentelemetry-dotnet-instrumentation from GitHub releases."""
     try:
         response = requests.get(
@@ -50,7 +50,7 @@ def get_latest_dotnet_instrumentation_version():
 
 def main():
     otel_dotnet_core_version = get_latest_core_version()
-    instrumentation_version = get_latest_dotnet_instrumentation_version()
+    instrumentation_version = get_latest_instrumentation_version()
     
     if not otel_dotnet_core_version:
         print("Error: Could not get core version - no stable releases found")
