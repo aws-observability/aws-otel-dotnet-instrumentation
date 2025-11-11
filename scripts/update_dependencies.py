@@ -19,9 +19,7 @@ def update_core_packages(file_path, otel_dotnet_core_version):
             'OpenTelemetry.Exporter.OpenTelemetryProtocol',
             'OpenTelemetry.Extensions.Propagators'
         ]
-        
-        print(f"Checking for core packages to update with version {otel_dotnet_core_version}")
-        
+
         def update_package_version(match):
             nonlocal updated
             package_name = match.group(1)
@@ -34,8 +32,6 @@ def update_core_packages(file_path, otel_dotnet_core_version):
                     return f'<PackageReference Include="{package_name}" Version="{otel_dotnet_core_version}" />'
                 else:
                     print(f"{package_name} already at latest version: {otel_dotnet_core_version}")
-            else:
-                print(f"Skipping {package_name} (not in core packages list)")
             
             return match.group(0)
         
@@ -78,10 +74,6 @@ def update_contrib_packages(csproj_dir):
             check=False
         )
         
-        print(f"dotnet list package --outdated output:")
-        print(result.stdout)
-        print(f"Return code: {result.returncode}")
-        
         if result.returncode != 0:
             print(f"Error running dotnet list: {result.stderr}")
             return False
@@ -89,19 +81,13 @@ def update_contrib_packages(csproj_dir):
         updated = False
         lines = result.stdout.split('\n')
         
-        print(f"Processing {len(lines)} lines of output")
-        
-        for i, line in enumerate(lines):
-            print(f"Line {i}: '{line.strip()}'")
+        for line in lines:
             # Parse dotnet list output for OpenTelemetry packages
-            if 'OpenTelemetry.' in line and '>' in line:
-                print(f"Found OpenTelemetry package line: {line}")
+            if 'OpenTelemetry.' in line and '>' in line and 'Not found' not in line:
                 parts = line.split()
-                print(f"Split into {len(parts)} parts: {parts}")
-                if len(parts) >= 4:
+                if len(parts) >= 5:  # Ensure we have package name and version
                     package_name = parts[1]
-                    latest_version = parts[-1]
-                    print(f"Attempting to update {package_name} to {latest_version}")
+                    latest_version = parts[4]  # Latest version is in 5th column
                     
                     # Update the package
                     update_result = subprocess.run(

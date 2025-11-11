@@ -101,9 +101,9 @@ def main():
     breaking_info = ""
 
     if core_breaking:
-        breaking_info += "**opentelemetry-dotnet:**\\n"
+        breaking_info += "**opentelemetry-dotnet:**\n"
         for release in core_breaking:
-            breaking_info += f"- [{release['name']}]({release['url']})\\n"
+            breaking_info += f"- [{release['name']}]({release['url']})\n"
 
     if not breaking_info:
         breaking_info = "No breaking changes detected in releases."
