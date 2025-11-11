@@ -55,6 +55,20 @@ def update_core_packages(file_path, otel_dotnet_core_version):
 def update_contrib_packages(csproj_dir):
     """Update contrib packages using dotnet commands."""
     try:
+        # First restore the project
+        print("Restoring project...")
+        restore_result = subprocess.run(
+            ['dotnet', 'restore'],
+            cwd=csproj_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if restore_result.returncode != 0:
+            print(f"Failed to restore project: {restore_result.stderr}")
+            return False
+        
         # Get outdated OpenTelemetry packages
         result = subprocess.run(
             ['dotnet', 'list', 'package', '--outdated'],
