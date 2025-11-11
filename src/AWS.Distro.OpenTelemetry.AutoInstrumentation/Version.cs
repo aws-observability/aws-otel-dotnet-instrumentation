@@ -5,5 +5,5 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 static class Version
 {
-    public static string version = "1.9.1";
+    public static string version = "1.9.2";
 }
