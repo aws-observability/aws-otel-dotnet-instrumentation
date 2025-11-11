@@ -25,6 +25,7 @@ jobs:
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
       otel_dotnet_core_version: ${{ steps.get_versions.outputs.otel_dotnet_core_version }}
       otel_dotnet_instrumentation_version: ${{ steps.get_versions.outputs.otel_dotnet_instrumentation_version }}
+      breaking_changes_info: ${{ steps.breaking_changes.outputs.breaking_changes_info }}
     
     steps:
     - name: Checkout repository
@@ -41,11 +42,17 @@ jobs:
     - name: Install build tools
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install requests packaging
     
     - name: Get latest upstream versions
       id: get_versions
       run: python scripts/get_upstream_versions.py
+    
+    - name: Check for breaking changes
+      id: breaking_changes
+      env:
+        OTEL_DOTNET_CORE_VERSION: ${{ steps.get_versions.outputs.otel_dotnet_core_version }}
+      run: python scripts/find_breaking_changes.py
     
     - name: Setup Git
       run: |
@@ -119,11 +126,10 @@ jobs:
         - [OpenTelemetry .NET Core](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/v${{ needs.update-dependencies.outputs.otel_dotnet_core_version }}): ${{ needs.update-dependencies.outputs.otel_dotnet_core_version }}
         - OpenTelemetry .NET Contrib packages: Updated to latest available versions
 
-        **Check for breaking changes:**
+        **Upstream releases with breaking changes:**
         Note: the mechanism to detect upstream breaking changes is not perfect. Be sure to check all new releases and understand if any additional changes need to be addressed.
-        
-        - [opentelemetry-dotnet releases](https://github.com/open-telemetry/opentelemetry-dotnet/releases)
-        - [opentelemetry-dotnet-contrib releases](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/releases)"
+
+        ${{ needs.update-dependencies.outputs.breaking_changes_info }}"
         
         if gh pr view "$BRANCH_NAME" --json state --jq '.state' 2>/dev/null | grep -q "OPEN"; then
           echo "Open PR already exists, updating description..."
