@@ -112,7 +112,7 @@ def main():
     # Set GitHub output
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
-            output_file.write(f"breaking_changes_info<<EOF\\n{breaking_info}EOF\\n")
+            output_file.write(f"breaking_changes_info<<EOF\n{breaking_info}\nEOF\n")
 
 if __name__ == "__main__":
     main()
