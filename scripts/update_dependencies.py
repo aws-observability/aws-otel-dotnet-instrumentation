@@ -1,111 +1,18 @@
 #!/usr/bin/env python3
 
-import requests
+import os
 import re
+import subprocess
 import sys
-import xml.etree.ElementTree as ET
 
-def get_latest_versions_from_github():
-    """Get the latest versions from GitHub releases."""
-    try:
-        print("Fetching releases from opentelemetry-dotnet...")
-        dotnet_response = requests.get(
-            'https://api.github.com/repos/open-telemetry/opentelemetry-dotnet/releases?per_page=50',
-            timeout=30
-        )
-        dotnet_response.raise_for_status()
-        
-        print("Fetching releases from opentelemetry-dotnet-contrib...")
-        contrib_response = requests.get(
-            'https://api.github.com/repos/open-telemetry/opentelemetry-dotnet-contrib/releases?per_page=100',
-            timeout=30
-        )
-        contrib_response.raise_for_status()
-        
-        dotnet_releases = dotnet_response.json()
-        contrib_releases = contrib_response.json()
-        
-        print(f"Found {len(dotnet_releases)} dotnet releases")
-        print(f"Found {len(contrib_releases)} contrib releases")
-        
-        versions = {}
-        
-        # Process opentelemetry-dotnet releases (core packages)
-        for release in dotnet_releases:
-            if release.get('prerelease', False):
-                continue  # Skip pre-releases
-            
-            tag_name = release['tag_name']
-            # Core releases are typically tagged as "v1.9.0" or "core-1.9.0"
-            version_match = re.match(r'^(?:v|core-)?(\d+\.\d+\.\d+)$', tag_name)
-            if version_match and 'core' not in versions:
-                versions['core'] = version_match.group(1)
-                print(f"Found core version: {versions['core']}")
-                break  # Take the first (latest) stable release
-        
-        # Process opentelemetry-dotnet-contrib releases
-        # Map package names to their release tag prefixes
-        package_mappings = {
-            'OpenTelemetry.Extensions.AWS': 'Extensions.AWS',
-            'OpenTelemetry.Resources.AWS': 'Resources.AWS', 
-            'OpenTelemetry.Instrumentation.AspNetCore': 'Instrumentation.AspNetCore',
-            'OpenTelemetry.Instrumentation.AspNet': 'Instrumentation.AspNet',
-            'OpenTelemetry.Instrumentation.AWSLambda': 'Instrumentation.AWS',  # Maps to AWS releases
-            'OpenTelemetry.Instrumentation.Http': 'Instrumentation.Http',
-            'OpenTelemetry.Sampler.AWS': 'Sampler.AWS',
-            'OpenTelemetry.SemanticConventions': 'SemanticConventions'
-        }
-        
-        for release in contrib_releases:
-            if release.get('prerelease', False):
-                continue  # Skip pre-releases
-            
-            tag_name = release['tag_name']
-            # Parse contrib releases like "Instrumentation.AspNetCore-1.12.0"
-            match = re.match(r'^(.+)-(\d+\.\d+\.\d+)$', tag_name)
-            if match:
-                component_name = match.group(1)
-                version = match.group(2)
-                
-                # Find packages that map to this component
-                for package_name, expected_component in package_mappings.items():
-                    if component_name == expected_component and package_name not in versions:
-                        versions[package_name] = version
-                        print(f"Found {package_name}: {version}")
-        
-        return versions
-        
-    except requests.RequestException as request_error:
-        print(f"Warning: Could not get GitHub releases: {request_error}")
-        return {}
-
-def get_latest_dotnet_instrumentation_version():
-    """Get the latest version of opentelemetry-dotnet-instrumentation from GitHub releases."""
-    try:
-        response = requests.get(
-            'https://api.github.com/repos/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest',
-            timeout=30
-        )
-        response.raise_for_status()
-        
-        release_data = response.json()
-        tag_name = release_data['tag_name']
-        
-        return tag_name
-        
-    except requests.RequestException as request_error:
-        print(f"Warning: Could not get latest dotnet-instrumentation version: {request_error}")
-        return None
-
-def update_csproj_file(file_path, github_versions):
-    """Update OpenTelemetry package versions in a .csproj file."""
+def update_core_packages(file_path, otel_dotnet_core_version):
+    """Update core OpenTelemetry package versions in a .csproj file."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
         updated = False
         
-        # Package categorization
         core_packages = [
             'OpenTelemetry',
             'OpenTelemetry.Api', 
@@ -113,67 +20,93 @@ def update_csproj_file(file_path, github_versions):
             'OpenTelemetry.Extensions.Propagators'
         ]
         
-        # Find and update PackageReference elements using regex
         def update_package_version(match):
             nonlocal updated
             package_name = match.group(1)
             current_version = match.group(2)
             
-            # Only update OpenTelemetry packages
-            if not package_name.startswith('OpenTelemetry'):
-                return match.group(0)
-            
-            latest_version = None
-            
-            # Try to get version from GitHub releases only
-            if package_name in core_packages and 'core' in github_versions:
-                latest_version = github_versions['core']
-            elif package_name in github_versions:
-                latest_version = github_versions[package_name]
-            else:
-                # Skip packages not found in GitHub (likely only have pre-releases)
-                print(f"Skipping {package_name} - no stable release found in GitHub")
-                return match.group(0)
-            
-            if latest_version and current_version != latest_version:
-                updated = True
-                print(f"Updated {package_name}: {current_version} → {latest_version}")
-                return f'<PackageReference Include="{package_name}" Version="{latest_version}" />'
-            elif latest_version:
-                print(f"{package_name} already at latest version: {latest_version}")
+            if package_name in core_packages:
+                if current_version != otel_dotnet_core_version:
+                    updated = True
+                    print(f"Updated {package_name}: {current_version} → {otel_dotnet_core_version}")
+                    return f'<PackageReference Include="{package_name}" Version="{otel_dotnet_core_version}" />'
+                else:
+                    print(f"{package_name} already at latest version: {otel_dotnet_core_version}")
             
             return match.group(0)
         
-        # Use regex to find and replace PackageReference elements
-        pattern = r'<PackageReference\s+Include="([^"]+)"\s+Version="([^"]+)"\s*/>'
+        pattern = r'<PackageReference\\s+Include="([^"]+)"\\s+Version="([^"]+)"\\s*/>'
         new_content = re.sub(pattern, update_package_version, content)
         
         if updated:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            print("Dependencies updated successfully")
-            return True
-        else:
-            print("No OpenTelemetry dependencies needed updating")
-            return False
+        
+        return updated
             
     except (OSError, IOError) as file_error:
-        print(f"Error updating dependencies: {file_error}")
-        sys.exit(1)
+        print(f"Error updating {file_path}: {file_error}")
+        return False
 
-def update_build_cs_file(file_path):
+def update_contrib_packages(csproj_dir):
+    """Update contrib packages using dotnet commands."""
+    try:
+        # Get outdated OpenTelemetry packages
+        result = subprocess.run(
+            ['dotnet', 'list', 'package', '--outdated'],
+            cwd=csproj_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if result.returncode != 0:
+            print("No outdated packages found or error checking packages")
+            return False
+        
+        updated = False
+        lines = result.stdout.split('\\n')
+        
+        for line in lines:
+            # Parse dotnet list output for OpenTelemetry packages
+            if 'OpenTelemetry.' in line and '>' in line:
+                parts = line.split()
+                if len(parts) >= 4:
+                    package_name = parts[1]
+                    latest_version = parts[-1]
+                    
+                    # Update the package
+                    update_result = subprocess.run(
+                        ['dotnet', 'add', 'package', package_name, '--version', latest_version],
+                        cwd=csproj_dir,
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if update_result.returncode == 0:
+                        print(f"Updated {package_name} to {latest_version}")
+                        updated = True
+                    else:
+                        print(f"Failed to update {package_name}: {update_result.stderr}")
+        
+        return updated
+        
+    except Exception as e:
+        print(f"Error updating contrib packages: {e}")
+        return False
+
+def update_build_cs_file(file_path, instrumentation_version):
     """Update the openTelemetryAutoInstrumentationDefaultVersion in Build.cs."""
     try:
-        latest_version = get_latest_dotnet_instrumentation_version()
-        if not latest_version:
-            print("Could not get latest dotnet-instrumentation version")
+        if not instrumentation_version:
             return False
         
         with open(file_path, 'r', encoding='utf-8') as input_file:
             content = input_file.read()
         
         pattern = r'private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v[^"]*";'
-        replacement = f'private const string OpenTelemetryAutoInstrumentationDefaultVersion = "{latest_version}";'
+        replacement = f'private const string OpenTelemetryAutoInstrumentationDefaultVersion = "{instrumentation_version}";'
         
         if re.search(pattern, content):
             new_content = re.sub(pattern, replacement, content)
@@ -181,45 +114,40 @@ def update_build_cs_file(file_path):
             if new_content != content:
                 with open(file_path, 'w', encoding='utf-8') as output_file:
                     output_file.write(new_content)
-                print(f"Updated OpenTelemetryAutoInstrumentationDefaultVersion to {latest_version}")
+                print(f"Updated OpenTelemetryAutoInstrumentationDefaultVersion to {instrumentation_version}")
                 return True
             else:
-                print(f"OpenTelemetryAutoInstrumentationDefaultVersion already at latest version: {latest_version}")
-                return False
-        else:
-            print("Could not find OpenTelemetryAutoInstrumentationDefaultVersion in Build.cs")
-            return False
+                print(f"OpenTelemetryAutoInstrumentationDefaultVersion already at latest version: {instrumentation_version}")
+        
+        return False
             
     except (OSError, IOError) as file_error:
         print(f"Error updating Build.cs: {file_error}")
-        sys.exit(1)
+        return False
 
 def main():
-    print("Getting latest versions from GitHub releases...")
-    github_versions = get_latest_versions_from_github()
+    otel_dotnet_core_version = os.environ.get("OTEL_DOTNET_CORE_VERSION")
+    otel_dotnet_instrumentation_version = os.environ.get("OTEL_DOTNET_INSTRUMENTATION_VERSION")
     
-    if not github_versions:
-        print("No versions found from GitHub releases, exiting")
-        return
+    if not otel_dotnet_core_version:
+        print("Error: OTEL_DOTNET_CORE_VERSION environment variable required")
+        sys.exit(1)
     
-    print("Found versions:", github_versions)
-    
-    # Set GitHub outputs
-    import os
-    if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            if 'core' in github_versions:
-                f.write(f"otel_dotnet_core_version={github_versions['core']}\n")
-            if 'OpenTelemetry.Extensions.AWS' in github_versions:
-                f.write(f"otel_dotnet_aws_version={github_versions['OpenTelemetry.Extensions.AWS']}\n")
+    if not otel_dotnet_instrumentation_version:
+        print("Error: OTEL_DOTNET_INSTRUMENTATION_VERSION environment variable required")
+        sys.exit(1)
     
     csproj_path = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj'
+    csproj_dir = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation'
     build_cs_path = 'build/Build.cs'
     
-    csproj_updated = update_csproj_file(csproj_path, github_versions)
-    build_cs_updated = update_build_cs_file(build_cs_path)
+    core_updated = update_core_packages(csproj_path, otel_dotnet_core_version)
+    contrib_updated = update_contrib_packages(csproj_dir)
+    build_cs_updated = update_build_cs_file(build_cs_path, otel_dotnet_instrumentation_version)
     
-    if not csproj_updated and not build_cs_updated:
+    if core_updated or contrib_updated or build_cs_updated:
+        print(f"Dependencies updated to Core {otel_dotnet_core_version}")
+    else:
         print("No updates were made")
 
 if __name__ == '__main__':
