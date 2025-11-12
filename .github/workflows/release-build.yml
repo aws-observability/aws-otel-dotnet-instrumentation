@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Configure AWS credentials for public ECR
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
@@ -138,19 +138,19 @@ jobs:
 
       - name: Login to Amazon public ECR
         id: login-ecr-public
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 #v2.0.1
         with:
           registry-type: public
 
       - name: Configure AWS credentials for private ECR
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
 
       - name: Login to Amazon private ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 #v2.0.1
 
       - name: Build and scan Linux images
         if: runner.os == 'Linux'
@@ -206,24 +206,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials for private ECR
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PRIVATE_ECR_REGION }}
 
       - name: Log in to AWS private ECR
-        uses: docker/login-action@v3
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 #v3.5.0
         with:
           registry: ${{ env.RELEASE_PRIVATE_REGISTRY }}
 
       - name: Configure AWS credentials for public ECR
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_RELEASE }}
           aws-region: ${{ env.AWS_PUBLIC_ECR_REGION }}
 
       - name: Log in to AWS public ECR
-        uses: docker/login-action@v3
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 #v3.5.0
         with:
           registry: public.ecr.aws
 
