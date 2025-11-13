@@ -3,6 +3,10 @@
   <PropertyGroup>
     <TargetFramework>netcoreapp8.0</TargetFramework>
     <RootNamespace>integration_test_app</RootNamespace>
+    <!-- Suppress StyleCop rules for test applications:
+         SA0001: XML comment analysis disabled (test apps don't need XML documentation)
+         SA1300: Element naming (test namespace uses underscores by convention) -->
+    <NoWarn>$(NoWarn);SA0001;SA1300</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

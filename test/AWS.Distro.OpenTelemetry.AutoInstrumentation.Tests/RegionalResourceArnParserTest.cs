@@ -7,7 +7,7 @@ using Xunit;
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public class RegionalResourceArnParserTests
+public class RegionalResourceArnParserTest
 {
     [Theory]
     [InlineData(null, null)]

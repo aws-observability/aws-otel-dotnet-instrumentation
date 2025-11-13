@@ -63,11 +63,11 @@ public class LambdaWrapper
     /// The following are assumptions made about the lambda handler function parameters.
     ///     * Maximum Parameters: A .NET Lambda handler function can have up to two parameters.
     ///     * Parameter Order: If both parameters are used, the event input parameter must come first, followed by the ILambdaContext.
-    ///     * Return Types: The handler can return void, a specific type, or a Task/Task<T> for asynchronous methods.
+    ///     * Return Types: The handler can return void, a specific type, or a Task/Task[T] for asynchronous methods.
     /// </summary>
-    /// <param name="input"></param>
-    /// <param name="context"></param>
-    /// <returns></returns>
+    /// <param name="input">Input JObject to be converted to the correct object type.</param>
+    /// <param name="context">Lambda context for the function execution.</param>
+    /// <returns>Task containing the result object from the original handler.</returns>
     /// <exception cref="Exception">Multiple exceptions that act as safe gaurds in case any of the
     /// assumptions are wrong or if for any reason reflection is failing to get the original function and it's info.</exception>
     private async Task<object?> FunctionHandler(JObject input, ILambdaContext context)
@@ -154,7 +154,7 @@ public class LambdaWrapper
         }
     }
 
-    private (MethodInfo, object) ExtractOriginalHandler()
+    private (MethodInfo HandlerMethod, object HandlerInstance) ExtractOriginalHandler()
     {
         string? originalHandler = Environment.GetEnvironmentVariable("OTEL_INSTRUMENTATION_AWS_LAMBDA_HANDLER");
         if (string.IsNullOrEmpty(originalHandler))

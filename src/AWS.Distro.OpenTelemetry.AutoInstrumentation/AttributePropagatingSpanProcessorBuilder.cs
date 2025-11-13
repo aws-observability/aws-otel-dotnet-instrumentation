@@ -25,11 +25,20 @@ public class AttributePropagatingSpanProcessorBuilder
     {
     }
 
+    /// <summary>
+    /// Creates a new AttributePropagatingSpanProcessorBuilder instance.
+    /// </summary>
+    /// <returns>A new builder instance.</returns>
     public static AttributePropagatingSpanProcessorBuilder Create()
     {
         return new AttributePropagatingSpanProcessorBuilder();
     }
 
+    /// <summary>
+    /// Sets the propagation data extractor function.
+    /// </summary>
+    /// <param name="propagationDataExtractor">Function to extract propagation data from activity.</param>
+    /// <returns>This builder instance.</returns>
     public AttributePropagatingSpanProcessorBuilder SetPropagationDataExtractor(Func<Activity, string> propagationDataExtractor)
     {
         if (propagationDataExtractor == null)
@@ -41,6 +50,11 @@ public class AttributePropagatingSpanProcessorBuilder
         return this;
     }
 
+    /// <summary>
+    /// Sets the propagation data key.
+    /// </summary>
+    /// <param name="propagationDataKey">The key for propagation data.</param>
+    /// <returns>This builder instance.</returns>
     public AttributePropagatingSpanProcessorBuilder SetPropagationDataKey(string propagationDataKey)
     {
         if (propagationDataKey == null)
@@ -52,6 +66,11 @@ public class AttributePropagatingSpanProcessorBuilder
         return this;
     }
 
+    /// <summary>
+    /// Sets the attribute keys to propagate.
+    /// </summary>
+    /// <param name="attributesKeysToPropagate">List of attribute keys to propagate.</param>
+    /// <returns>This builder instance.</returns>
     public AttributePropagatingSpanProcessorBuilder SetAttributesKeysToPropagate(List<string> attributesKeysToPropagate)
     {
         if (attributesKeysToPropagate == null)
@@ -64,6 +83,10 @@ public class AttributePropagatingSpanProcessorBuilder
         return this;
     }
 
+    /// <summary>
+    /// Builds the AttributePropagatingSpanProcessor.
+    /// </summary>
+    /// <returns>The configured processor.</returns>
     public AttributePropagatingSpanProcessor Build()
     {
         return AttributePropagatingSpanProcessor

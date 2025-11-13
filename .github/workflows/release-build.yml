@@ -114,7 +114,6 @@ jobs:
   release-image:
     needs: build-release-nuget
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     strategy:
       matrix:
         include:
@@ -174,7 +173,7 @@ jobs:
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64
 
-      - name: Build Linux arm64 container
+      - name: Push Linux arm64 Image
         if: runner.os == 'Linux'
         env:
           VERSION: ${{ github.event.inputs.version }}
@@ -184,7 +183,7 @@ jobs:
           docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64
           docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64
 
-      - name: Build Windows container
+      - name: Push Windows Images
         if: runner.os == 'Windows'
         env:
           VERSION: ${{ github.event.inputs.version }}

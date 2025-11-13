@@ -10,7 +10,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// <summary>
 /// Metric attribute generator defines an interface for classes that can generate specific attributes
 /// to be used by an <see cref="AwsSpanMetricsProcessor"/> to produce metrics and by
-/// <see cref="AwsMetricAttributesSpanExporter"/> to wrap the original span.
+/// AwsMetricAttributesSpanExporter to wrap the original span.
 /// </summary>
 public interface IMetricAttributeGenerator
 {

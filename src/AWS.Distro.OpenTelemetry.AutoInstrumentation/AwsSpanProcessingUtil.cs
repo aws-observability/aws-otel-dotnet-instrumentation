@@ -316,7 +316,7 @@ internal sealed class AwsSpanProcessingUtil
         string? serviceName = (string?)span.GetTagItem(AttributeAWSServiceName);
 
         return !string.IsNullOrEmpty(serviceName)
-            && serviceName.Equals(SQSService)
+            && SQSService.Equals(serviceName)
             && ActivityKind.Consumer.Equals(spanKind)
             && spanActivitySource != null
             && spanActivitySource.Name.StartsWith(ActivitySourceName)
