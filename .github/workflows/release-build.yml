@@ -81,7 +81,7 @@ jobs:
         run: >
           dotnet pack
           .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
-          /p:Version=$VERSION
+          /p:Version=${{ env.VERSION }}
           --no-build
           -c Release
           -o .\Deployment\nuget-packages
