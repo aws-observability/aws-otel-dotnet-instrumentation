@@ -71,12 +71,8 @@ app.MapGet("/blogs/{id}", ([FromRoute] int id, [FromServices] BloggingContext db
 
 app.MapDelete("/blogs/{id}", ([FromRoute] int id, [FromServices] BloggingContext db) =>
 {
-    var blog = db.Blogs.Find(id);
-    if (blog == null)
-    {
-        return Results.NotFound();
-    }
-
+    var blog = new Blog { BlogId = id, Url = "" };
+    db.Blogs.Attach(blog);
     db.Blogs.Remove(blog);
     db.SaveChanges();
     return Results.Ok();
