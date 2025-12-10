@@ -12,6 +12,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+## v1.10.0 - 2025-12-10
+
 ## v1.9.2 - 2025-11-11
 - Fix: Disable instrumentation of AWS SDK v4
   ([#277](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/277))
