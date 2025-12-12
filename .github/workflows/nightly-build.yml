@@ -97,7 +97,7 @@ jobs:
     secrets: inherit
     permissions:
       id-token: write
-      contents: write
+      contents: read
     with:
       ref: nightly-dependency-updates
       caller-workflow-name: 'nightly_build'
