@@ -78,16 +78,18 @@ public class AwsMetricAttributesSpanProcessor : BaseProcessor<Activity>
         return span;
     }
 
+    /// <summary>
+    /// If the map has no items, no modifications are required. If there is one item, it means the
+    /// span either produces Service or Dependency metric attributes, and in either case we want to
+    /// modify the span with them. If there are two items, the span produces both Service and
+    /// Dependency metric attributes indicating the span is a local dependency root. The Service
+    /// Attributes must be a subset of the Dependency, with the exception of AttributeAWSSpanKind. The
+    /// knowledge that the span is a local root is more important that knowing that it is a
+    /// Dependency metric, so we take all the Dependency metrics but replace AttributeAWSSpanKind with
+    /// <see cref="AwsSpanProcessingUtil.LocalRoot"/>.
+    /// </summary>
     private Activity AddMetricAttributes(Activity span)
     {
-        /// If the map has no items, no modifications are required. If there is one item, it means the
-        /// span either produces Service or Dependency metric attributes, and in either case we want to
-        /// modify the span with them. If there are two items, the span produces both Service and
-        /// Dependency metric attributes indicating the span is a local dependency root. The Service
-        /// Attributes must be a subset of the Dependency, with the exception of AttributeAWSSpanKind. The
-        /// knowledge that the span is a local root is more important that knowing that it is a
-        /// Dependency metric, so we take all the Dependency metrics but replace AttributeAWSSpanKind with
-        /// <see cref="AwsSpanProcessingUtil.LocalRoot"/>.
         Dictionary<string, ActivityTagsCollection> attributeMap =
             this.generator.GenerateMetricAttributeMapFromSpan(span, this.resource);
         ActivityTagsCollection attributes = new ActivityTagsCollection();

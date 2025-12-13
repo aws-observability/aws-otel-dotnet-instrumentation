@@ -9,7 +9,7 @@ on:
         required: false
         type: string
         default: Dev
-  
+  workflow_dispatch: # be able to run the workflow on demand
   push:
     branches:
       - main

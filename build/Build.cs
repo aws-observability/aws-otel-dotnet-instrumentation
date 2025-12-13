@@ -12,7 +12,7 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 internal partial class Build : NukeBuild
 {
-    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.11.0";
+    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.13.0";
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
     [Solution("AWS.Distro.OpenTelemetry.AutoInstrumentation.sln")]
@@ -206,7 +206,8 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
                 DotNetBuild(s => s
                     .SetProjectFile(project)
                     .SetNoRestore(true)
-                    .SetConfiguration(this.configuration));
+                    .SetConfiguration(this.configuration)
+                    .SetProperty("TreatWarningsAsErrors", "true"));
             }
         });
 

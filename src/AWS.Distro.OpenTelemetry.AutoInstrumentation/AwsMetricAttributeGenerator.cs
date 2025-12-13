@@ -18,9 +18,9 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// <summary>
 /// AwsMetricAttributeGenerator generates very specific metric attributes based on low-cardinality
 /// span and resource attributes. If such attributes are not present, we fallback to default values.
-/// <p>The goal of these particular metric attributes is to get metrics for incoming and outgoing
+/// The goal of these particular metric attributes is to get metrics for incoming and outgoing
 /// traffic for a service. Namely, <see cref="SpanKind.Server"/> and <see cref="SpanKind.Consumer"/> spans
-/// represent "incoming" traffic, {<see cref="SpanKind.Client"/> and <see cref="SpanKind.Producer"/> spans
+/// represent "incoming" traffic, <see cref="SpanKind.Client"/> and <see cref="SpanKind.Producer"/> spans
 /// represent "outgoing" traffic, and <see cref="SpanKind.Internal"/> spans are ignored.
 /// </summary>
 internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
@@ -169,28 +169,28 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     /// instrumented span attributes, and are clear indications of customer intent. If AWS Remote
     /// attributes are not present, the next highest priority span attribute is Peer Service, which is
     /// also a reliable indicator of customer intent. If this is set, it will override
-    /// AWS_REMOTE_SERVICE identified from any other span attribute, other than AWS Remote attributes.
+    /// AWS_REMOTE_SERVICE identified from any other span attribute, other than AWS Remote attributes.</p>
     ///
     /// <p>After this, we look for the following low-cardinality span attributes that can be used to
-    /// determine the remote metric attributes:
+    /// determine the remote metric attributes:</p>
     ///
     /// <ul>
-    ///   <li>RPC
-    ///   <li>DB
-    ///   <li>FAAS
-    ///   <li>Messaging
+    ///   <li>RPC</li>
+    ///   <li>DB</li>
+    ///   <li>FAAS</li>
+    ///   <li>Messaging</li>
     ///   <li>GraphQL - Special case, if <see cref="AttributeGraphqlOperationType"/> is present,
-    ///       we use it for RemoteOperation and set RemoteService to <see cref="GraphQL"/>.
+    ///       we use it for RemoteOperation and set RemoteService to <see cref="GraphQL"/>.</li>
     /// </ul>
     ///
     /// <p>In each case, these span attributes were selected from the OpenTelemetry trace semantic
-    /// convention specifications as they adhere to the three following criteria:
+    /// convention specifications as they adhere to the three following criteria:</p>
     ///
     /// <ul>
-    ///   <li>Attributes are meaningfully indicative of remote service/operation names.
+    ///   <li>Attributes are meaningfully indicative of remote service/operation names.</li>
     ///   <li>Attributes are defined in the specification to be low cardinality, usually with a low-
-    ///       cardinality list of values.
-    ///   <li>Attributes are confirmed to have low-cardinality values, based on code analysis.
+    ///       cardinality list of values.</li>
+    ///   <li>Attributes are confirmed to have low-cardinality values, based on code analysis.</li>
     /// </ul>
     ///
     /// if the selected attributes are still producing the UnknownRemoteService or

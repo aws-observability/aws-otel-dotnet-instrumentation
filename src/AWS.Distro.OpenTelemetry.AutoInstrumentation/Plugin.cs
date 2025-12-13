@@ -401,11 +401,11 @@ public class Plugin
 #endif
     }
 
+#if !NETFRAMEWORK
     /// <summary>
     /// Used to call ShouldSampleParent function
     /// </summary>
     /// <param name="options"><see cref="AspNetCoreTraceInstrumentationOptions"/> options to configure</param>
-#if !NETFRAMEWORK
     public void ConfigureTracesOptions(AspNetCoreTraceInstrumentationOptions options)
     {
         options.EnrichWithHttpRequest = (activity, request) =>
@@ -499,10 +499,15 @@ public class Plugin
                 applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4316/v1/metrics";
                 protocol = OtlpExportProtocol.HttpProtobuf;
                 break;
+#if NET8_0_OR_GREATER
+            // error CS0618: 'OtlpExportProtocol.Grpc' is obsolete: 'CAUTION: OTLP/gRPC is no longer supported for
+            // .NET Framework or .NET Standard targets without supplying a properly configured HttpClientFactory.
+            // It is strongly encouraged that you migrate to using OTLP/HTTPPROTOBUF.
             case "grpc":
                 applicationSignalsEndpoint = applicationSignalsEndpoint ?? "http://localhost:4315";
                 protocol = OtlpExportProtocol.Grpc;
                 break;
+#endif
             default:
                 throw new NotSupportedException("Unsupported AWS Application Signals export protocol: " + protocolString);
         }
