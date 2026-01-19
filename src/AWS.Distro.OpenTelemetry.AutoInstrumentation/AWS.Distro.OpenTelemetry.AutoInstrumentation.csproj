@@ -26,6 +26,7 @@
     <PackageReference Include="OpenTelemetry.Api" Version="1.14.0" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
     <!-- TODO: Need to look into release those packages before GA -->
+
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.14.2" />
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.14.0" />
     <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.14.0" />
