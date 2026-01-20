@@ -12,6 +12,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+## v1.11.0 - 2026-01-20
+
 ## v1.10.1 - 2025-12-31
 - Ugraded OTel Instrumentation.AWS dependencies to 1.14.1
   ([#302](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/302))
