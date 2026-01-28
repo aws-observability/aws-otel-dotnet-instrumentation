@@ -236,12 +236,14 @@ jobs:
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: adot-autoinstrumentation-dotnet:pr-${{ env.NUMBER }}
+          trivyignore-file: .github/trivy/pr-build.trivyignore.yaml
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
           image-name: adot-autoinstrumentation-dotnet:pr-${{ env.NUMBER }}-windows2022
+          trivyignore-file: .github/trivy/pr-build.trivyignore.yaml
 
   contract-test:
     runs-on: ubuntu-latest

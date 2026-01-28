@@ -4,6 +4,10 @@ inputs:
   image-name:
     description: 'Docker image name'
     required: true
+  trivyignore-file:
+    description: 'Path to the .trivyignore.yaml file to use for this scan'
+    required: false
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -82,6 +86,7 @@ runs:
         severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
         logout: 'false'
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+        trivyignore-file: ${{ inputs.trivyignore-file }}
 
     - name: Scan arm64 image
       if: runner.os == 'Linux'
@@ -91,6 +96,7 @@ runs:
         severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
         logout: 'false'
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+        trivyignore-file: ${{ inputs.trivyignore-file }}
 
     - name: Scan Windows image
       if: runner.os == 'Windows'
@@ -100,3 +106,4 @@ runs:
         severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
         logout: 'false'
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
+        trivyignore-file: ${{ inputs.trivyignore-file }}
