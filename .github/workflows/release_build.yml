@@ -7,6 +7,7 @@ on:
         required: true
 
 env:
+  VERSION_INPUT: ${{ github.event.inputs.version }}
   AWS_DEFAULT_REGION: us-east-1
   AWS_PUBLIC_ECR_REGION: us-east-1
   AWS_PRIVATE_ECR_REGION: us-west-2
@@ -64,7 +65,7 @@ jobs:
 
       - name: Upload to Private S3 Bucket
         run: |
-          PREFIX="Release_v${{github.event.inputs.version}}"
+          PREFIX="Release_v${{ env.VERSION_INPUT }}"
 
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
@@ -78,20 +79,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         run: |
           gh release create --target "$GITHUB_REF_NAME" \
-             --title "Release v${{ github.event.inputs.version }}" \
-             "v${{ github.event.inputs.version }}" \
-              --notes "Release Verions v${{ github.event.inputs.version }}"
+             --title "Release v${{ env.VERSION_INPUT }}" \
+             "v${{ env.VERSION_INPUT }}" \
+              --notes "Release Verions v${{ env.VERSION_INPUT }}"
 
       - name: Upload artifacts to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREFIX="Release_v${{github.event.inputs.version}}_"
+          PREFIX="Release_v${{ env.VERSION_INPUT }}_"
 
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
           cp "$file" "$base"
-          gh release upload "v${{ github.event.inputs.version }}" \
+          gh release upload "v${{ env.VERSION_INPUT }}" \
             $base \
             --clobber
           done
@@ -176,10 +177,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 -f ./Dockerfile.linux .
-          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
-          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64
+          docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64 -f ./Dockerfile.linux .
+          docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64
+          docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64
+          docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64
 
       - name: Build Windows container
         if: runner.os == 'Windows'
@@ -187,16 +188,16 @@ jobs:
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.17763") {
             Echo "Build image for Windows Server 2019"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 -f ./Dockerfile.windows2019 .
-            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
-            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
-            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019
+            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019 -f ./Dockerfile.windows2019 .
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019
           } elseif ($osInfo -match "10.0.20348") {
             Echo "Build image for Windows Server 2022"
-            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 -f ./Dockerfile.windows2022 .
-            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+            docker build -t ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022 -f ./Dockerfile.windows2022 .
+            docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
+            docker tag ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
+            docker push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
           } else {
               Echo "Unknown Windows Server version: $osInfo"
               exit 1
@@ -231,12 +232,12 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon private ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
-          docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }} ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
+          docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}
+          docker manifest push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}
 
       - name: Create multi-platform image and push to Amazon public ECR
         run: |
-          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
-          docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
-          docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ github.event.inputs.version }}
+          docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }} ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2019 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
+          docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}
+          docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v${{ env.VERSION_INPUT }}
