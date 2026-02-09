@@ -8,6 +8,7 @@ on:
         required: true
 
 env:
+  VERSION_INPUT: ${{ github.event.inputs.version }}
   AWS_DEFAULT_REGION: us-east-1
 
 permissions:
@@ -27,8 +28,8 @@ jobs:
 
       - name: Extract Major.Minor Version and setup Env variable
         run: |
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          echo "MAJOR_MINOR=$(echo ${{ github.event.inputs.version }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
+          echo "VERSION=${{ env.VERSION_INPUT }}" >> $GITHUB_ENV
+          echo "MAJOR_MINOR=$(echo ${{ env.VERSION_INPUT }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
 
       - name: Get current major.minor version from main branch
         id: get_version
@@ -84,8 +85,8 @@ jobs:
 
       - name: Extract Major.Minor Version and setup Env variable
         run: |
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          echo "MAJOR_MINOR=$(echo ${{ github.event.inputs.version }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
+          echo "VERSION=${{ env.VERSION_INPUT }}" >> $GITHUB_ENV
+          echo "MAJOR_MINOR=$(echo ${{ env.VERSION_INPUT }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
 
       - name: Determine release branch and checkout
         run: |
@@ -96,10 +97,10 @@ jobs:
       - name: Update version to next development version in main
         # TODO update version in daily_scan.yml
         run: |
-          DEV_VERSION="${{ github.event.inputs.version }}.dev0"
+          DEV_VERSION="${{ env.VERSION_INPUT }}.dev0"
           sed -i "s/public static string version = \".*\";/public static string version = \"${DEV_VERSION}\";/" src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           sed -i "s/private readonly string version = \".*\";/private readonly string version = \"${DEV_VERSION}\";/" build/Build.InstallationScripts.cs
-          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${{ env.VERSION_INPUT }}"
           git add src/AWS.Distro.OpenTelemetry.AutoInstrumentation/Version.cs
           git add build/Build.InstallationScripts.cs
           git commit -m "Prepare main for next development cycle: Update version to $DEV_VERSION"
@@ -109,7 +110,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ env.BOT_TOKEN_GITHUB_RW_PATOKEN }}
         run: |
-          DEV_VERSION="${{ github.event.inputs.version }}.dev0"
+          DEV_VERSION="${{ env.VERSION_INPUT }}.dev0"
           gh pr create --title "Post release $VERSION: Update version to $DEV_VERSION" \
                        --body "This PR prepares the main branch for the next development cycle by updating the version to $DEV_VERSION and updating the image version to be scanned to the latest released.
 
