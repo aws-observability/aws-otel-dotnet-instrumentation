@@ -8,6 +8,17 @@ on:
         required: true
         type: string
 
+<<<<<<< HEAD
+=======
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  AWS_SIGNING_KEY_REGION: us-west-2
+  VERSION_INPUT: ${{ env.VERSION_INPUT }}
+
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318))
 jobs:
   build-test-publish:
     runs-on: ubuntu-latest
@@ -27,6 +38,7 @@ jobs:
           unzip aws-xray-daemon-linux-3.x.zip
           ./xray -o -n us-west-2 -f ./daemon-logs.log --log-level debug &
 
+<<<<<<< HEAD
       - name: Create NuGet.Config with multiple sources
         working-directory: sample-applications/udp-exporter-test-app
         run: |
@@ -43,26 +55,103 @@ jobs:
           
           # Show the created config
           cat NuGet.Config
+=======
+      - name: Pack nugets
+        run: >
+          dotnet pack
+          .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          /p:Version=${{ env.VERSION_INPUT }}
+          --no-build
+          -c Release
+          -o .\Deployment\nuget-packages
+
+      - name: Upload nugets to this GitHub Action run as an artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: udp-exporter-nuget-packages.zip
+          path: Deployment/nuget-packages/
+
+      - name: Assume nuget role
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
+        with:
+          role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Push packages to Nuget
+        run: >
+          $nugetKey = aws secretsmanager get-secret-value
+          --secret-id ${{ secrets.NUGET_SECRETS_ID }}
+          --region ${{ env.AWS_SIGNING_KEY_REGION }}
+          --output text
+          --query SecretString | ConvertFrom-Json
+
+          nuget push
+          .\Deployment\nuget-packages\*.nupkg
+          -Source https://api.nuget.org/v3/index.json
+          -ApiKey $nugetKey.Key
+
+      - name: Create Release Notes
+        run: |
+          @"
+          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ env.VERSION_INPUT }}
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318))
 
 
+<<<<<<< HEAD
       - name: Build & Package the UDP exporter locally
         working-directory: exporters/AWS.OpenTelemetry.Exporter.Otlp.Udp
         run: |
           dotnet pack -c Release
+=======
+          ## Package Information
+          - Package Name: AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
+          - Version: ${{ env.VERSION_INPUT }}
+
+          ## NuGet Package
+          The package is available on NuGet.org:
+          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/${{ env.VERSION_INPUT }}
+
+          ## Release Notes
+          - This exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP
+          "@ | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Create release package
+        run: |
+          New-Item -Path .\Deployment\release-assets -ItemType Directory -Force
+          Copy-Item -Path .\Deployment\nuget-packages\* -Destination .\Deployment\release-assets\
+          Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ env.VERSION_INPUT }}.zip
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318))
 
       - name: Run Sample App in Background
         working-directory: sample-applications/udp-exporter-test-app
         run: |
+<<<<<<< HEAD
           # Install the locally built version of the UDP exporter
           dotnet add package AWS.OpenTelemetry.Exporter.Otlp.Udp
           # Start validation app
           dotnet run &
           # Wait for validation app to initialize
           sleep 5
+=======
+          # Create SHA256 hash file
+          $hash = Get-FileHash -Path .\udp-exporter-${{ env.VERSION_INPUT }}.zip -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath .\udp-exporter-${{ env.VERSION_INPUT }}.zip.sha256 -Encoding utf8
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318))
 
       - name: Call Sample App Endpoint
         run: |
+<<<<<<< HEAD
           curl localhost:8080/test
+=======
+          gh release create `
+            --target "$env:GITHUB_REF_NAME" `
+            --title "Release ADOT X-Ray UDP Exporter v${{ env.VERSION_INPUT }}" `
+            --notes-file release_notes.md `
+            --draft `
+            "Exporter.Xray.Udp-${{ env.VERSION_INPUT }}" `
+            .\udp-exporter-${{ env.VERSION_INPUT }}.zip
+            .\udp-exporter-${{ env.VERSION_INPUT }}.zip.sha256
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318))
 
       - name: Verify X-Ray daemon received traces
         run: |
