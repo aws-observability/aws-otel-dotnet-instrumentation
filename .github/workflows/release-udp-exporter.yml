@@ -14,6 +14,7 @@ permissions:
 
 env:
   AWS_SIGNING_KEY_REGION: us-west-2
+  VERSION_INPUT: ${{ env.VERSION_INPUT }}
 
 jobs:
   validate-udp-exporter-e2e-test:
@@ -62,7 +63,7 @@ jobs:
         run: >
           dotnet pack
           .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
-          /p:Version=${{github.event.inputs.version}}
+          /p:Version=${{ env.VERSION_INPUT }}
           --no-build
           -c Release
           -o .\Deployment\nuget-packages
@@ -95,18 +96,18 @@ jobs:
       - name: Create Release Notes
         run: |
           @"
-          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ github.event.inputs.version }}
+          # AWS Distro for OpenTelemetry X-Ray UDP Exporter v${{ env.VERSION_INPUT }}
 
           ## Overview
           This release contains the AWS Distro for OpenTelemetry X-Ray UDP Exporter for .NET.
 
           ## Package Information
           - Package Name: AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
-          - Version: ${{ github.event.inputs.version }}
+          - Version: ${{ env.VERSION_INPUT }}
 
           ## NuGet Package
           The package is available on NuGet.org:
-          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/${{ github.event.inputs.version }}
+          https://www.nuget.org/packages/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/${{ env.VERSION_INPUT }}
 
           ## Release Notes
           - This exporter allows you to send OpenTelemetry traces to the AWS X-Ray daemon over UDP
@@ -116,13 +117,13 @@ jobs:
         run: |
           New-Item -Path .\Deployment\release-assets -ItemType Directory -Force
           Copy-Item -Path .\Deployment\nuget-packages\* -Destination .\Deployment\release-assets\
-          Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ github.event.inputs.version }}.zip
+          Compress-Archive -Path .\Deployment\release-assets\* -DestinationPath .\udp-exporter-${{ env.VERSION_INPUT }}.zip
 
       - name: Create SHA256 hash for release package
         run: |
           # Create SHA256 hash file
-          $hash = Get-FileHash -Path .\udp-exporter-${{ github.event.inputs.version }}.zip -Algorithm SHA256
-          $hash.Hash | Out-File -FilePath .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256 -Encoding utf8
+          $hash = Get-FileHash -Path .\udp-exporter-${{ env.VERSION_INPUT }}.zip -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath .\udp-exporter-${{ env.VERSION_INPUT }}.zip.sha256 -Encoding utf8
 
       - name: Create GH release (draft)
         env:
@@ -130,11 +131,11 @@ jobs:
         run: |
           gh release create `
             --target "$env:GITHUB_REF_NAME" `
-            --title "Release ADOT X-Ray UDP Exporter v${{ github.event.inputs.version }}" `
+            --title "Release ADOT X-Ray UDP Exporter v${{ env.VERSION_INPUT }}" `
             --notes-file release_notes.md `
             --draft `
-            "Exporter.Xray.Udp-${{ github.event.inputs.version }}" `
-            .\udp-exporter-${{ github.event.inputs.version }}.zip
-            .\udp-exporter-${{ github.event.inputs.version }}.zip.sha256
+            "Exporter.Xray.Udp-${{ env.VERSION_INPUT }}" `
+            .\udp-exporter-${{ env.VERSION_INPUT }}.zip
+            .\udp-exporter-${{ env.VERSION_INPUT }}.zip.sha256
 
           Remove-Item -Path release_notes.md -Force
