@@ -22,6 +22,8 @@ env:
   # Legacy list of commercial regions to deploy to. New regions should NOT be added here, and instead should be added to the `aws_region` default input to the workflow.
   LEGACY_COMMERCIAL_REGIONS: us-east-1, us-east-2, us-west-1, us-west-2, ap-south-1, ap-northeast-3, ap-northeast-2, ap-southeast-1, ap-southeast-2, ap-northeast-1, ca-central-1, eu-central-1, eu-west-1, eu-west-2, eu-west-3, eu-north-1, sa-east-1
   LAYER_NAME: AWSOpenTelemetryDistroDotNet
+  VERSION_INPUT: ${{ env.VERSION_INPUT }}
+  AWS_REGION_INPUT: ${{ env.AWS_REGION_INPUT }}
 
 permissions:
   id-token: write
@@ -77,7 +79,7 @@ jobs:
           
       - name: Pack nugets
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: >
           dotnet pack
           .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation
@@ -155,18 +157,18 @@ jobs:
         if: runner.os == 'Linux'
         uses: ./.github/actions/build-and-scan-image
         with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}
 
       - name: Build and scan Windows image
         if: runner.os == 'Windows'
         uses: ./.github/actions/build-and-scan-image
         with:
-          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ github.event.inputs.version }}-windows2022
+          image-name: ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v${{ env.VERSION_INPUT }}-windows2022
 
       - name: Push Linux x64 Image
         if: runner.os == 'Linux'
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           set -e
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64
@@ -176,7 +178,7 @@ jobs:
       - name: Push Linux arm64 Image
         if: runner.os == 'Linux'
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           set -e
           docker push ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64
@@ -186,7 +188,7 @@ jobs:
       - name: Push Windows Images
         if: runner.os == 'Windows'
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           $osInfo = systeminfo | Select-String "OS Version"
           if ($osInfo -match "10.0.20348") {
@@ -228,7 +230,7 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon private ECR
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           docker manifest create ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION-windows2022
           docker manifest inspect ${{ env.RELEASE_PRIVATE_REPOSITORY }}:v$VERSION
@@ -236,7 +238,7 @@ jobs:
 
       - name: Create multi-platform image and push to Amazon public ECR
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           docker manifest create ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-amd64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-arm64 ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION-windows2022
           docker manifest inspect ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
@@ -251,7 +253,7 @@ jobs:
       - name: Set up regions matrix
         id: set-matrix
         env:
-          AWS_REGIONS: ${{ github.event.inputs.aws_region }}
+          AWS_REGIONS: ${{ env.AWS_REGION_INPUT }}
         run: |
           IFS=',' read -ra REGIONS <<< "$AWS_REGIONS"
           MATRIX="["
@@ -307,7 +309,7 @@ jobs:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
       - name: publish
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           aws s3 mb s3://${{ env.BUCKET_NAME }}
           aws s3 cp aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip s3://${{ env.BUCKET_NAME }}
@@ -476,7 +478,7 @@ jobs:
 
       - name: Upload to Private S3 Bucket
         env:
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           PREFIX="Release_v$VERSION"
 
@@ -492,7 +494,7 @@ jobs:
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           # Extract version from Build.cs
           OTEL_INSTRUMENTATION_VERSION=$(grep "OpenTelemetryAutoInstrumentationDefaultVersion = " build/Build.cs | sed 's/.*= "\(.*\)";/\1/' | sed 's/^v//')
@@ -546,7 +548,7 @@ jobs:
       - name: Upload artifacts and checksum to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ env.VERSION_INPUT }}
         run: |
           find ./artifacts/ -name "*.zip" | while read file; do
           base=$(basename "$file")
