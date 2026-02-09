@@ -14,8 +14,13 @@ on:
 
 env:
   AWS_DEFAULT_REGION: us-east-1
+<<<<<<< HEAD:.github/workflows/pre_release_prepare.yml
   VERSION: ${{ inputs.version }}
   IS_PATCH: ${{ inputs.is_patch }}
+=======
+  VERSION_INPUT: ${{ env.VERSION_INPUT }}
+  IS_PATCH_INPUT: ${{ env.IS_PATCH_INPUT }}
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318)):.github/workflows/pre-release-prepare.yml
 
 permissions:
   contents: write
@@ -54,12 +59,21 @@ jobs:
 
       - name: Extract Major.Minor Version and setup Env variable
         run: |
+<<<<<<< HEAD:.github/workflows/pre_release_prepare.yml
           echo "VERSION=${{ env.VERSION }}" >> $GITHUB_ENV
           echo "MAJOR_MINOR=$(echo ${{ env.VERSION }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
 
       - name: Create branches
         run: |
           IS_PATCH=${{ env.IS_PATCH }}
+=======
+          echo "VERSION=${{ env.VERSION_INPUT }}" >> $GITHUB_ENV
+          echo "MAJOR_MINOR=$(echo ${{ env.VERSION_INPUT }} | sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+/\1/')" >> $GITHUB_ENV
+
+      - name: Create branches
+        run: |
+          IS_PATCH=${{ env.IS_PATCH_INPUT }}
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318)):.github/workflows/pre-release-prepare.yml
           if [[ "$IS_PATCH" != "true" && "$IS_PATCH" != "false" ]]; then
             echo "Invalid input for IS_PATCH. Must be 'true' or 'false'."
             exit 1
@@ -105,5 +119,9 @@ jobs:
                        --body "This PR updates the version to ${VERSION}.
           
           By submitting this pull request, I confirm that you can use, modify, copy, and redistribute this contribution, under the terms of your choice." \
+<<<<<<< HEAD:.github/workflows/pre_release_prepare.yml
                        --head v${{ env.VERSION }}_release \
+=======
+                       --head v${{ env.VERSION_INPUT }}_release \
+>>>>>>> 371c614 (fix: prevent script injection in workflows (#318)):.github/workflows/pre-release-prepare.yml
                        --base release/v${MAJOR_MINOR}.x
