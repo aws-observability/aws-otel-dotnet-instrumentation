@@ -7,6 +7,7 @@ on:
         required: true
 
 env:
+  VERSION_INPUT: ${{ github.event.inputs.version }}
   AWS_SIGNING_KEY_REGION: us-west-2
 
 permissions:
@@ -35,6 +36,6 @@ jobs:
           --output text
           --query SecretString | ConvertFrom-Json
 
-          nuget delete AWS.Distro.OpenTelemetry.AutoInstrumentation ${{github.event.inputs.version}}
+          nuget delete AWS.Distro.OpenTelemetry.AutoInstrumentation ${{ env.VERSION_INPUT }}
           -Source https://api.nuget.org/v3/index.json
           -ApiKey $nugetKey.Key
