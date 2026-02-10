@@ -1,5 +1,5 @@
 # This Docker file builds auto-instrumentation image for aws-otel-dotnet-instrumentation following upstream Docker build instruction:
-# https://github.com/open-telemetry/opentelemetry-operator/blob/main/autoinstrumentation/python/Dockerfile
+# https://github.com/open-telemetry/opentelemetry-operator/blob/main/autoinstrumentation/dotnet/Dockerfile
 #   The packages are installed in the `/autoinstrumentation` directory. This is required as when instrumenting the pod by CWOperator,
 #   one init container will be created to copy all the content in `/autoinstrumentation` directory to app's container. Then
 #   update the environment variables accordingly.
