@@ -69,6 +69,7 @@ runs:
         set -e
         docker build -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux .
         cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
+        cp -r tools ./arm64/tools
         cd ./arm64
         docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
 
