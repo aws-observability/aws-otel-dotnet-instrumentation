@@ -12,13 +12,13 @@ on:
       - "release/v*"
 
 permissions:
+  contents: read
+  id-token: write
 
 env:
   USER: ${{ github.event.pull_request.user.login }}
   LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
   NUMBER: ${{ github.event.number }}
-  contents: read
-  id-token: write
 
 jobs:
   static-code-checks:
