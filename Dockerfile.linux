@@ -5,14 +5,12 @@
 #   update the environment variables accordingly.
 
 # Stage 1: Build the cp-utility binary
-# Note: Use BUILDPLATFORM for the builder to run natively on the host (amd64),
-# then cross-compile to TARGETARCH (amd64 or arm64).
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/rust:1.89 AS builder
+FROM public.ecr.aws/docker/library/rust:1.89 AS builder
 
 WORKDIR /usr/src/cp-utility
 COPY ./tools/cp-utility .
 
-## TARGETARCH is defined by buildx
+## TARGETARCH is automatically defined by Docker when using --platform flag
 # https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
 ARG TARGETARCH
 
