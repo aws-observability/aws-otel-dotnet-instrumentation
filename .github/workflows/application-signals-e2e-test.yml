@@ -50,11 +50,16 @@ jobs:
       
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
         with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+      
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
+        with:
           name: ${{ inputs.ec2-windows-image-name }}
 
       - name: Upload main-build files to s3
         run: |
           aws s3 cp ./${{ inputs.ec2-default-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-default-image-name }}
+          aws s3 cp ./aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip s3://adot-autoinstrumentation-dotnet-staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
           aws s3 cp ./${{ inputs.ec2-windows-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-windows-image-name }}
 
   upload-main-build-image:
@@ -137,6 +142,21 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       dotnet-version: '8.0'
+
+  #
+  # CPU ARCHITECTURE COVERAGE
+  # DEFAULT SETTING: Dotnet 8.0, EC2, {CPU Architecture}
+  #
+  default-v8-arm64:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+      dotnet-version: '8.0'
+      cpu-architecture: 'arm64'
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
