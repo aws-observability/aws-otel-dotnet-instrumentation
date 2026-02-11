@@ -5,7 +5,7 @@
 #   update the environment variables accordingly.
 
 # Stage 1: Build the cp-utility binary
-FROM public.ecr.aws/docker/library/rust:1.89 AS builder
+FROM --platform=$TARGETPLATFORM public.ecr.aws/docker/library/rust:1.89 AS builder
 
 WORKDIR /usr/src/cp-utility
 COPY ./tools/cp-utility .
