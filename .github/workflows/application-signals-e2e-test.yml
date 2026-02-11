@@ -105,6 +105,10 @@ jobs:
         run: |
           unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
 
+      - name: Set up Docker Buildx
+        if: runner.os == 'Linux'
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 #3.11.1
+
       - name: Unzip Windows Artifact
         if: runner.os == 'Windows'
         run: |
@@ -115,7 +119,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          docker build -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.linux .
+          docker buildx build --platform linux/amd64 -t ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }} -f ./Dockerfile.linux --load .
           docker push ${{ secrets.RELEASE_STAIGNG_REPO }}:staging-linux-amd64-${{ steps.short_sha.outputs.SHORT_SHA }}
       
       - name: Build Windows container
