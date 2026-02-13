@@ -14,7 +14,7 @@ permissions:
 
 env:
   AWS_SIGNING_KEY_REGION: us-west-2
-  VERSION_INPUT: ${{ env.VERSION_INPUT }}
+  VERSION_INPUT: ${{ github.event.inputs.version }}
 
 jobs:
   validate-udp-exporter-e2e-test:
