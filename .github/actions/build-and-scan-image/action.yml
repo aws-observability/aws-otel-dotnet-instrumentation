@@ -62,15 +62,17 @@ runs:
       run: |
         Expand-Archive -LiteralPath .\artifacts\windows\aws-distro-opentelemetry-dotnet-instrumentation-windows.zip -DestinationPath .\OpenTelemetryDistribution -Force
 
+    - name: Set up Docker Buildx
+      if: runner.os == 'Linux'
+      uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 #3.11.1
+
     - name: Build Linux containers
       if: runner.os == 'Linux'
       shell: bash
       run: |
         set -e
-        docker build -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux .
-        cp THIRD-PARTY-LICENSES ./arm64/THIRD-PARTY-LICENSES
-        cd ./arm64
-        docker build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ../Dockerfile.linux .
+        docker buildx build --platform linux/amd64 -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux --load .
+        docker buildx build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ./Dockerfile.linux --load .
 
     - name: Build Windows container
       if: runner.os == 'Windows'

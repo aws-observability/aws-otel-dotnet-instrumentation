@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Migrate dotnet linux image to scratch base to avoid vulnerability scan tickets
+  ([#358](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/358))
 
 ## v1.11.0 - 2026-01-20
 - Ugraded OTel Instrumentation.AWS dependencies to 1.14.2
