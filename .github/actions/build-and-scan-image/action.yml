@@ -4,9 +4,11 @@ inputs:
   image-name:
     description: 'Docker image name'
     required: true
+    type: string
   trivyignore-file:
     description: 'Path to the .trivyignore.yaml file to use for this scan'
     required: false
+    type: string
     default: ''
 runs:
   using: 'composite'
