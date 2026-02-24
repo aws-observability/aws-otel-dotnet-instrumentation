@@ -24,6 +24,8 @@ env:
   # Legacy list of commercial regions to deploy to. New regions should NOT be added here, and instead should be added to the `aws_region` default input to the workflow.
   LEGACY_COMMERCIAL_REGIONS: us-east-1, us-east-2, us-west-1, us-west-2, ap-south-1, ap-northeast-3, ap-northeast-2, ap-southeast-1, ap-southeast-2, ap-northeast-1, ca-central-1, eu-central-1, eu-west-1, eu-west-2, eu-west-3, eu-north-1, sa-east-1
   LAYER_NAME: AWSOpenTelemetryDistroDotNet
+  VERSION_INPUT: ${{ github.event.inputs.version }}
+  AWS_REGION_INPUT: ${{ github.event.inputs.aws_region }}
 
 permissions:
   id-token: write
@@ -532,8 +534,6 @@ jobs:
           ## Lambda Layer
 
           This release includes the AWS OpenTelemetry Lambda Layer for .NET version $VERSION-$(echo $GITHUB_SHA | cut -c1-7).
-
-          **Note: the new Lambda Layer versions are not yet deployed to the Lambda and CloudWatch Application Signals consoles. You can add them to your Lambda functions using the AWS CLI.**
 
           Lambda Layer ARNs:
           ${{ needs.generate-lambda-release-note.outputs.layer-note }}

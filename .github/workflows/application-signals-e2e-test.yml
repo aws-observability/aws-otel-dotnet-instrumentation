@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: '${{ github.workflow }} @ ${{ inputs.aws-region }}'
+  group: '${{ github.workflow }}'
   cancel-in-progress: false
 
 jobs:
