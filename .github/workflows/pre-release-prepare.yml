@@ -13,8 +13,6 @@ on:
         default: 'false'
 
 env:
-  VERSION_INPUT: ${{ github.event.inputs.version }}
-  IS_PATCH_INPUT: ${{ github.event.inputs.is_patch }}
   AWS_DEFAULT_REGION: us-east-1
   VERSION_INPUT: ${{ github.event.inputs.version }}
   IS_PATCH_INPUT: ${{ github.event.inputs.is_patch }}

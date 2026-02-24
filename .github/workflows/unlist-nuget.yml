@@ -7,7 +7,6 @@ on:
         required: true
 
 env:
-  VERSION_INPUT: ${{ github.event.inputs.version }}
   AWS_SIGNING_KEY_REGION: us-west-2
   VERSION_INPUT: ${{ github.event.inputs.version }}
 

@@ -20,11 +20,6 @@ env:
   LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
   NUMBER: ${{ github.event.number }}
 
-env:
-  USER: ${{ github.event.pull_request.user.login }}
-  LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-  NUMBER: ${{ github.event.number }}
-
 jobs:
   static-code-checks:
     runs-on: ubuntu-latest
