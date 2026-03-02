@@ -8,7 +8,7 @@ using Nuke.Common.IO;
 internal partial class Build : NukeBuild
 {
     private readonly AbsolutePath installationScriptsFolder = RootDirectory / "bin" / "InstallationScripts";
-    private readonly string version = "1.11.0.dev0";
+    private readonly string version = "1.11.1.dev0";
 
     public Target BuildInstallationScripts => _ => _
         .After(this.Clean)

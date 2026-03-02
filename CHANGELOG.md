@@ -11,6 +11,7 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+## v1.11.1 - 2026-02-11
 - Migrate dotnet linux image to scratch base to avoid vulnerability scan tickets
   ([#358](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/358))
 
