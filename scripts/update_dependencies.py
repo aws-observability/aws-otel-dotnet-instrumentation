@@ -156,7 +156,8 @@ def main():
     files_to_update = [
         'src/AWS.Distro.OpenTelemetry.AutoInstrumentation/AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj',
         'exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj',
-        'test/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.csproj'
+        'test/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests/AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.csproj',
+        'sample-applications/udp-exporter-test-app/dotnet-sample-app.csproj'
     ]
     
     csproj_dir = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation'
