@@ -28,7 +28,7 @@ To build the dll files for the `AWS.Distro.OpenTelemetry.AutoInstrumentation` pr
 dotnet build
 ```
 
-This will build the dll under `src/AWS.Distro.OpenTelemetry.AutoInstrumentation/bin/Debug/net8.0`.
+This will build the dll under `src/AWS.Distro.OpenTelemetry.AutoInstrumentation/bin/Debug/net10.0` (and also for `net8.0` and `net9.0`).
 
 ### Building For Release
 

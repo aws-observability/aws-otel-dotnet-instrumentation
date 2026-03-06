@@ -1,13 +1,16 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS base
+ARG DOTNET_VERSION=8.0
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS base
 WORKDIR /app
 EXPOSE 8080
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG DOTNET_VERSION=8.0
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+ARG DOTNET_VERSION
 WORKDIR /src
 COPY ./contract-tests/images/applications/TestSimpleApp.AWSSDK.Core .
 RUN dotnet restore
-RUN dotnet build "TestSimpleApp.AWSSDK.Core.csproj" -c Release -o /app/build
-RUN dotnet publish "TestSimpleApp.AWSSDK.Core.csproj" -c Release -o /app/publish
+RUN dotnet build "TestSimpleApp.AWSSDK.Core.csproj" -c Release -f net${DOTNET_VERSION} -o /app/build
+RUN dotnet publish "TestSimpleApp.AWSSDK.Core.csproj" -c Release -f net${DOTNET_VERSION} -o /app/publish
 
 FROM base AS final
 WORKDIR /app

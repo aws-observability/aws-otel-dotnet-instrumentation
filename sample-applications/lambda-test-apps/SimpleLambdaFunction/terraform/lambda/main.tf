@@ -5,7 +5,7 @@ locals {
 resource "aws_lambda_layer_version" "sdk_layer" {
   layer_name          = var.sdk_layer_name
   filename            = "${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip"
-  compatible_runtimes = ["dotnet8"]
+  compatible_runtimes = ["dotnet8", "dotnet9", "dotnet10"]
   license_info        = "Apache-2.0"
   source_code_hash    = filebase64sha256("${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip")
 }

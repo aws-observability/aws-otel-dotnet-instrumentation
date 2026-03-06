@@ -1,15 +1,15 @@
-#See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-# Meant to be run from aws-otel-dotnet-instrumentation/test
-
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+ARG DOTNET_VERSION=8.0
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS base
 WORKDIR /app
 EXPOSE 80
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG DOTNET_VERSION=8.0
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+ARG DOTNET_VERSION
 WORKDIR /src
 COPY ./contract-tests/images/applications/TestSimpleApp.EfCore .
-RUN dotnet build "TestSimpleApp.EfCore.csproj" -c Release -o /app/build
-RUN dotnet publish "TestSimpleApp.EfCore.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet build "TestSimpleApp.EfCore.csproj" -c Release -f net${DOTNET_VERSION} -o /app/build
+RUN dotnet publish "TestSimpleApp.EfCore.csproj" -c Release -f net${DOTNET_VERSION} -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
