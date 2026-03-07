@@ -1,16 +1,13 @@
-ARG DOTNET_VERSION=8.0
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS base
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS base
 WORKDIR /app
 EXPOSE 8080
 
-ARG DOTNET_VERSION=8.0
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
-ARG DOTNET_VERSION
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ./contract-tests/images/applications/AppSignals.NetCore .
-RUN dotnet restore -p:TargetFramework=net${DOTNET_VERSION}
-RUN dotnet build "AppSignals.NetCore.csproj" -c Release -f net${DOTNET_VERSION} -o /app/build --no-restore
-RUN dotnet publish "AppSignals.NetCore.csproj" -c Release -f net${DOTNET_VERSION} -o /app/publish --no-restore
+RUN dotnet restore
+RUN dotnet build "AppSignals.NetCore.csproj" -c Release -o /app/build
+RUN dotnet publish "AppSignals.NetCore.csproj" -c Release -o /app/publish
 
 FROM base AS final
 WORKDIR /app
