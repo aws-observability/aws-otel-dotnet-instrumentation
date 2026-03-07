@@ -8,7 +8,7 @@ FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
 ARG DOTNET_VERSION
 WORKDIR /src
 COPY ./contract-tests/images/applications/TestSimpleApp.AWSSDK.Core .
-RUN dotnet restore
+RUN dotnet restore -p:TargetFramework=net${DOTNET_VERSION}
 RUN dotnet build "TestSimpleApp.AWSSDK.Core.csproj" -c Release -f net${DOTNET_VERSION} -o /app/build
 RUN dotnet publish "TestSimpleApp.AWSSDK.Core.csproj" -c Release -f net${DOTNET_VERSION} -o /app/publish
 
