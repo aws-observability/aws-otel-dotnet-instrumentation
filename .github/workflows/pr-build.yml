@@ -292,6 +292,8 @@ jobs:
           python-version: '3.10'
 
       - name: Set up and run contract tests with pytest
+        env:
+          DOTNET_VERSIONS: "8.0 9.0 10.0"
         run: |
           cd test
           bash ./build-and-install-distro.sh
