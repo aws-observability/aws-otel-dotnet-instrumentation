@@ -1,6 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-import os
 import time
 import re
 from logging import INFO, Logger, getLogger
@@ -20,7 +19,6 @@ from amazon.utils.application_signals_constants import ERROR_METRIC, FAULT_METRI
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 
 NETWORK_NAME: str = "aws-application-signals-network"
-DOTNET_TEST_VERSION: str = os.environ.get("DOTNET_TEST_VERSION", "")
 
 _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
@@ -87,11 +85,8 @@ class ContractTestBase(TestCase):
         application_networking_config: Dict[str, EndpointConfig] = {
             NETWORK_NAME: EndpointConfig(version="1.22", aliases=self.get_application_network_aliases())
         }
-        image_name = self.get_application_image_name()
-        if DOTNET_TEST_VERSION:
-            image_name = f"{image_name}-{DOTNET_TEST_VERSION}"
         self.application: DockerContainer = (
-            DockerContainer(image_name)
+            DockerContainer(self.get_application_image_name())
             .with_exposed_ports(self.get_application_port())
             .with_env("OTEL_METRIC_EXPORT_INTERVAL", "50")
             .with_env("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "true")
@@ -110,7 +105,7 @@ class ContractTestBase(TestCase):
             .with_env("CORECLR_PROFILER", "{918728DD-259F-4A6A-AC2B-B85E1B658318}")
             .with_env("RESOURCE_DETECTORS_ENABLED", "false")
             .with_kwargs(network=NETWORK_NAME, networking_config=application_networking_config)
-            .with_name(image_name)
+            .with_name(self.get_application_image_name())
         )
 
         extra_env: Dict[str, str] = self.get_application_extra_environment_variables()

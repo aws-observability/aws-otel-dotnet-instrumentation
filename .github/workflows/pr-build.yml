@@ -291,28 +291,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Set up contract tests
-        env:
-          DOTNET_VERSIONS: "8.0 9.0 10.0"
+      - name: Set up and run contract tests with pytest
         run: |
           cd test
           bash ./build-and-install-distro.sh
           bash ./set-up-contract-tests.sh
-
-      - name: Run contract tests for .NET 8.0
-        env:
-          DOTNET_TEST_VERSION: "8.0"
-        run: cd test && pytest contract-tests/tests
-
-      - name: Run contract tests for .NET 9.0
-        env:
-          DOTNET_TEST_VERSION: "9.0"
-        run: cd test && pytest contract-tests/tests
-
-      - name: Run contract tests for .NET 10.0
-        env:
-          DOTNET_TEST_VERSION: "10.0"
-        run: cd test && pytest contract-tests/tests
+          pytest contract-tests/tests
 
 
   all-pr-checks-pass:
