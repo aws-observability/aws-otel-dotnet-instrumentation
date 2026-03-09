@@ -5,12 +5,11 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Amazon.Lambda.Core;
-using Newtonsoft.Json.Linq;
+using Amazon.Lambda.Serialization.SystemTextJson;
 using OpenTelemetry.Instrumentation.AWSLambda;
 using OpenTelemetry.Trace;
 
-// Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
-[assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.Json.JsonSerializer))]
+[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -21,6 +20,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 public class LambdaWrapper
 {
     private static readonly TracerProvider? TracerProvider;
+    private static readonly DefaultLambdaJsonSerializer Serializer = new DefaultLambdaJsonSerializer();
 
     static LambdaWrapper()
     {
@@ -53,10 +53,10 @@ public class LambdaWrapper
     /// <summary>
     /// Wrapper function handler for that handles all types of events.
     /// </summary>
-    /// <param name="input">Input as JObject which will be converted to the correct object type during runtime</param>
+    /// <param name="input">Input as raw Stream which will be deserialized to the correct object type during runtime</param>
     /// <param name="context">ILambdaContext lambda context</param>
     /// <returns>returns an object that will be contain the same structure as the original handler output type</returns>
-    public Task<object?> TracingFunctionHandler(JObject input, ILambdaContext context)
+    public Task<object?> TracingFunctionHandler(Stream input, ILambdaContext context)
     => AWSLambdaWrapper.TraceAsync(TracerProvider, this.FunctionHandler, input, context);
 
     /// <summary>
@@ -65,12 +65,12 @@ public class LambdaWrapper
     ///     * Parameter Order: If both parameters are used, the event input parameter must come first, followed by the ILambdaContext.
     ///     * Return Types: The handler can return void, a specific type, or a Task/Task[T] for asynchronous methods.
     /// </summary>
-    /// <param name="input">Input JObject to be converted to the correct object type.</param>
+    /// <param name="input">Input Stream to be deserialized to the correct object type.</param>
     /// <param name="context">Lambda context for the function execution.</param>
-    /// <returns>Task containing the result object from the original handler.</returns>
+    /// <returns>Task containing the result stream from the original handler.</returns>
     /// <exception cref="Exception">Multiple exceptions that act as safe gaurds in case any of the
     /// assumptions are wrong or if for any reason reflection is failing to get the original function and it's info.</exception>
-    private async Task<object?> FunctionHandler(JObject input, ILambdaContext context)
+    private async Task<object?> FunctionHandler(Stream input, ILambdaContext context)
     {
         if (input == null)
         {
@@ -89,7 +89,9 @@ public class LambdaWrapper
         if (parameters.Length == 2)
         {
             Type inputParameterType = parameters[0].ParameterType;
-            object? inputObject = input.ToObject(inputParameterType);
+
+            // object? inputObject = this.DeserializeInput(memoryStream, inputParameterType);
+            object? inputObject = this.DeserializeInput(input, inputParameterType);
 
             if (inputObject == null)
             {
@@ -101,7 +103,9 @@ public class LambdaWrapper
         else if (parameters.Length == 1)
         {
             Type inputParameterType = parameters[0].ParameterType;
-            object? inputObject = input.ToObject(inputParameterType);
+
+            // object? inputObject = this.DeserializeInput(memoryStream, inputParameterType);
+            object? inputObject = this.DeserializeInput(input, inputParameterType);
 
             if (inputObject == null)
             {
@@ -125,23 +129,25 @@ public class LambdaWrapper
             throw new Exception($"originalHandlerResult of type: {returnType} returned from the original handler is null!");
         }
 
-        // AsyncStateMachineAttribute can be used to determine whether the original handler method is
-        // asynchronous vs synchronous
-        Type asyncAttribType = typeof(AsyncStateMachineAttribute);
-        var asyncAttrib = (AsyncStateMachineAttribute?)handlerMethod.GetCustomAttribute(asyncAttribType);
-
-        // The return type of the original lambda function is Task<T> or Task so we await for it
-        if (asyncAttrib != null && originalHandlerResult != null)
+        if (originalHandlerResult is Task task)
         {
-            await (Task)originalHandlerResult;
-            var resultProperty = originalHandlerResult.GetType().GetProperty("Result");
-            object? wrappedHandlerResult = resultProperty?.GetValue(originalHandlerResult);
+            // Await the task
+            await task;
 
-            return wrappedHandlerResult;
+            // If the return type is non-generic Task, return null
+            if (returnType == typeof(Task))
+            {
+                return null;
+            }
+
+            // If it's Task<T>, extract the Result property
+            var resultProperty = originalHandlerResult.GetType().GetProperty("Result");
+            var taskResult = resultProperty?.GetValue(originalHandlerResult);
+
+            return taskResult;
         }
 
-        // The original handler method is not async so the return type is just T. In this case,
-        // we wrap it with a task just to maintain to one-wrapper-fits-all methodology
+        // The original handler method is not async so the return type is just T
         else if (originalHandlerResult != null)
         {
             return await Task.Run(() => originalHandlerResult);
@@ -152,6 +158,22 @@ public class LambdaWrapper
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Deserializes the input stream to the target type using the Lambda JSON serializer.
+    /// </summary>
+    /// <param name="stream">The input stream to deserialize.</param>
+    /// <param name="targetType">The target type to deserialize to.</param>
+    /// <returns>The deserialized object.</returns>
+    private object? DeserializeInput(Stream stream, Type targetType)
+    {
+        stream.Position = 0;
+
+        // Use reflection to call the generic Deserialize<T> method with the runtime type
+        var deserializeMethod = typeof(DefaultLambdaJsonSerializer).GetMethod("Deserialize", new[] { typeof(Stream) });
+        var genericMethod = deserializeMethod!.MakeGenericMethod(targetType);
+        return genericMethod.Invoke(Serializer, new object[] { stream });
     }
 
     private (MethodInfo HandlerMethod, object HandlerInstance) ExtractOriginalHandler()
