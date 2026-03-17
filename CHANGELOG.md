@@ -13,6 +13,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 ## Unreleased
 - OTel dependency update: Upgrade Core to 1.15.0 and Instrumentation to v1.13.0
   ([311](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/311))
+- add dotnet9 and dotnet10 support
+  ([373](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/373))
 
 ## v1.11.1 - 2026-02-11
 - Migrate dotnet linux image to scratch base to avoid vulnerability scan tickets
