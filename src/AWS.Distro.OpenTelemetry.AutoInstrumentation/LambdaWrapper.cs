@@ -90,7 +90,6 @@ public class LambdaWrapper
         {
             Type inputParameterType = parameters[0].ParameterType;
 
-            // object? inputObject = this.DeserializeInput(memoryStream, inputParameterType);
             object? inputObject = this.DeserializeInput(input, inputParameterType);
 
             if (inputObject == null)
@@ -104,7 +103,6 @@ public class LambdaWrapper
         {
             Type inputParameterType = parameters[0].ParameterType;
 
-            // object? inputObject = this.DeserializeInput(memoryStream, inputParameterType);
             object? inputObject = this.DeserializeInput(input, inputParameterType);
 
             if (inputObject == null)
