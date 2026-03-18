@@ -141,6 +141,26 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       dotnet-version: '8.0'
+
+  default-v9:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '9.0'
+
+  default-v10:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '10.0'
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
@@ -212,7 +232,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       - name: Setup .NET Lambda Tools
         shell: bash
