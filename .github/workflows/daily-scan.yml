@@ -50,6 +50,14 @@ jobs:
             OSS_INDEX, ${{ secrets.OSS_INDEX_SECRET_ARN }}
           parse-json-secrets: true
 
+      - name: Install published package for scanning
+        run: |
+          mkdir -p scan-target
+          dotnet new console -o scan-target --no-restore --force --framework net8.0
+          cd scan-target
+          dotnet add package AWS.Distro.OpenTelemetry.AutoInstrumentation
+          dotnet restore --packages ./packages
+
       # See http://jeremylong.github.io/DependencyCheck/dependency-check-cli/ for installation explanation
       - name: Install and run dependency scan
         id: dep_scan
@@ -64,7 +72,7 @@ jobs:
           
       - name: Run Dependency Check
         run: |
-          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --failOnCVSS 0 --out . --scan "**/*.csproj"
+          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --failOnCVSS 0 --out . -s "scan-target/"
 
       - name: Print dependency scan results on failure
         if: ${{ steps.dep_scan.outcome != 'success' }}
