@@ -72,7 +72,7 @@ jobs:
           
       - name: Run Dependency Check
         run: |
-          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --failOnCVSS 0 --out . -s "scan-target/"
+          ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --failOnCVSS 0 --suppression .github/dependency-check-suppressions.xml --out . -s "scan-target/"
 
       - name: Print dependency scan results on failure
         if: ${{ steps.dep_scan.outcome != 'success' }}
