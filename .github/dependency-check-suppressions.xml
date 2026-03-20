@@ -3,7 +3,7 @@
     <!--False positive: OpenTracing NuGet package incorrectly maps to priority-software:priority CPE-->
     <suppress>
         <notes><![CDATA[OpenTracing 0.12.1 is not Priority Software - completely unrelated products]]></notes>
-        <packageUrl regex="true">^pkg:nuget/OpenTracing@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:(nuget|generic)/OpenTracing@.*$</packageUrl>
         <cpe>cpe:/a:priority-software:priority</cpe>
     </suppress>
 </suppressions>
