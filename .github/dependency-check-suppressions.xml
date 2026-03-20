@@ -6,4 +6,36 @@
         <packageUrl regex="true">^pkg:nuget/OpenTracing@.*$</packageUrl>
         <cpe>cpe:/a:priority-software:priority</cpe>
     </suppress>
+
+    <!--False positive: CVE-2020-7768 is JavaScript prototype pollution in npm grpc-js, not applicable to .NET OTel GrpcNetClient-->
+    <suppress>
+        <notes><![CDATA[CVE-2020-7768 is a JavaScript prototype pollution vulnerability in npm grpc-js, not applicable to .NET GrpcNetClient]]></notes>
+        <filePath regex="true">.*GrpcNetClient.*</filePath>
+        <cpe>cpe:/a:grpc:grpc</cpe>
+    </suppress>
+
+    <!--False positive: Go otelgrpc CVE cross-matched to .NET OTel packages-->
+    <suppress>
+        <notes><![CDATA[CVE-2023-47108 is a Go otelgrpc vulnerability, not applicable to .NET OTel packages]]></notes>
+        <cve>CVE-2023-47108</cve>
+    </suppress>
+
+    <!--False positive: Go/Python OTel CVE cross-matched to .NET OTel packages-->
+    <suppress>
+        <notes><![CDATA[CVE-2023-43810 is a Go/Python opentelemetry-instrumentation vulnerability, not applicable to .NET OTel packages]]></notes>
+        <cve>CVE-2023-43810</cve>
+    </suppress>
+
+    <!--False positive: Go otelhttp CVE cross-matched to .NET OTel packages-->
+    <suppress>
+        <notes><![CDATA[CVE-2023-45142 is a Go otelhttp vulnerability, not applicable to .NET OTel packages]]></notes>
+        <cve>CVE-2023-45142</cve>
+    </suppress>
+
+    <!--False positive: CVE-2026-21517 is for Windows App Installer EoP, not the NuGet package-->
+    <suppress>
+        <notes><![CDATA[CVE-2026-21517 is a Windows App Installer elevation of privilege vulnerability, not applicable to System.Security.Principal.Windows NuGet package]]></notes>
+        <filePath regex="true">.*system\.security\.principal\.windows.*</filePath>
+        <cve>CVE-2026-21517</cve>
+    </suppress>
 </suppressions>
