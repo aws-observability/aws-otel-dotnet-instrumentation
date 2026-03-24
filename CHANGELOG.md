@@ -10,10 +10,10 @@ For any change that affects end users of this package, please add an entry under
 
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 ## Unreleased
-- KafkaEvent input type support for Lambda and Task<unit> return type serialization issue fix for f#
-([#368](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/368))
 
-## Unreleased
+## v1.12.0 - 2026-03-19
+- KafkaEvent input type support for Lambda and Task<unit> return type serialization issue fix for f#
+  ([#368](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/368))
 - OTel dependency update: Upgrade Core to 1.15.0 and Instrumentation to v1.13.0
   ([311](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/311))
 - add dotnet9 and dotnet10 support
