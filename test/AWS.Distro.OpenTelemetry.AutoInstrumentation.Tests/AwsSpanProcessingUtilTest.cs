@@ -526,4 +526,233 @@ public class AwsSpanProcessingUtilTest
             Assert.True(keyword.Length <= AwsSpanProcessingUtil.MaxKeywordLength);
         }
     }
+
+    // --- Tests for OTEL_AWS_HTTP_OPERATION_PATHS and ApplyOperationPathSpanName ---
+    [Fact]
+    public void TestApplyOperationPathMatchesUrlPath()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{id}/leaderboard,/api/contests/{id},/api/contests");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests/123/leaderboard");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/contests/{id}/leaderboard", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathFallsBackToHttpTarget()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/teams/{id},/api/teams");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeHttpTarget, "/api/teams/5?include=roster");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/teams/{id}", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathLongestMatchWins()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{id}/leaderboard,/api/contests/{id},/api/contests,/api");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests/42");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/contests/{id}", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathSameLengthFirstConfigWins()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/v1/{userId},/api/{version}/user1");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/v1/user1");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/v1/{userId}", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathNoMatchReturnsOriginal()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{id}");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /unknown", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/unknown/path");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /unknown", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathEmptyConfigReturnsOriginal()
+    {
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+        var result = AwsSpanProcessingUtil.ApplyOperationPathSpanName(span!);
+        Assert.Equal(span, result);
+    }
+
+    [Fact]
+    public void TestApplyOperationPathNoHttpMethod()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("/api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("/api/contests", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathTrailingSlashNormalized()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests/");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/contests", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathQueryStringStripped()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests?page=1&size=10");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/contests", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathColonParamWildcard()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/users/:userId/stats");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/users/42/stats");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/users/:userId/stats", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathStarWildcard()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/*/users/*");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/v2/users/42");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api/*/users/*", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+
+    [Fact]
+    public void TestApplyOperationPathPatternLongerThanUrl()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{id}");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            using var span = this.testSource.StartActivity("GET /api", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            AwsSpanProcessingUtil.ApplyOperationPathSpanName(span);
+            Assert.Equal("GET /api", span.DisplayName);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
 }
