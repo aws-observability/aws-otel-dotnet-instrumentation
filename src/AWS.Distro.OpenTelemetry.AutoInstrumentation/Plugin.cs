@@ -304,7 +304,7 @@ public class Plugin
         var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
         if (AwsSpanProcessingUtil.IsLambdaEnvironment()
             && !string.IsNullOrEmpty(logsExporter)
-            && logsExporter.Contains("console", StringComparison.OrdinalIgnoreCase))
+            && logsExporter.IndexOf("console", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             Logger.Log(LogLevel.Information, "Lambda environment detected, using CompactConsoleLogRecordExporter for logs.");
             options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
