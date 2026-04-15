@@ -22,7 +22,9 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Console.Logs;
 public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
 {
     private static readonly JsonWriterOptions CompactWriterOptions = new JsonWriterOptions { Indented = false };
+#pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory LogFactory = LoggerFactory.Create(builder => builder.AddProvider(new Logging.ConsoleLoggerProvider()));
+#pragma warning restore CS0436 // Type conflicts with imported type
     private static readonly ILogger Logger = LogFactory.CreateLogger<CompactConsoleLogRecordExporter>();
 
     private readonly TextWriter output;
