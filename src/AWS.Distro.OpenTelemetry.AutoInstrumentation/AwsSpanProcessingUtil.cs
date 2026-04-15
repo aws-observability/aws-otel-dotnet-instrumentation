@@ -203,59 +203,6 @@ internal sealed class AwsSpanProcessingUtil
         return span;
     }
 
-    /// <summary>Return the URL path from server span attributes, preferring url.path over http.target.</summary>
-    private static string? GetUrlPath(Activity span)
-    {
-        return (string?)span.GetTagItem(AttributeUrlPath) ?? (string?)span.GetTagItem(AttributeHttpTarget);
-    }
-
-    /// <summary>Get the HTTP method from the span, checking new and deprecated semconv attributes.</summary>
-    private static string? GetHttpMethod(Activity span)
-    {
-        return (string?)span.GetTagItem(AttributeHttpRequestMethod) ?? (string?)span.GetTagItem(AttributeHttpMethod);
-    }
-
-    /// <summary>
-    /// Check if URL segments match a pattern's segments. Only pattern segments can be wildcards
-    /// ({param}, :param, or *). The pattern acts as a prefix — extra URL segments are allowed.
-    /// </summary>
-    private static bool SegmentsMatch(string[] urlSegments, string[] patternSegments)
-    {
-        for (int i = 0; i < patternSegments.Length; i++)
-        {
-            if (i >= urlSegments.Length)
-            {
-                return false;
-            }
-
-            string ps = patternSegments[i];
-            string us = urlSegments[i];
-
-            if (IsWildcardSegment(ps))
-            {
-                if (string.IsNullOrEmpty(us))
-                {
-                    return false;
-                }
-
-                continue;
-            }
-
-            if (ps != us)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>A segment is a wildcard if it uses {param}, :param, or * format.</summary>
-    private static bool IsWildcardSegment(string segment)
-    {
-        return (segment.StartsWith("{") && segment.EndsWith("}")) || segment.StartsWith(":") || segment == "*";
-    }
-
     // Ingress operation (i.e. operation for Server and Consumer spans) will be generated from
     // "http.method + http.target/with the first API path parameter" if the default span name equals
     // null, UnknownOperation or http.method value.
@@ -457,6 +404,52 @@ internal sealed class AwsSpanProcessingUtil
     // TODO: Verify this after AWS SDK AutoInstrumentation
     // Can also use this instead to check the service name
     // https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/
+    private static string? GetUrlPath(Activity span)
+    {
+        return (string?)span.GetTagItem(AttributeUrlPath) ?? (string?)span.GetTagItem(AttributeHttpTarget);
+    }
+
+    private static string? GetHttpMethod(Activity span)
+    {
+        return (string?)span.GetTagItem(AttributeHttpRequestMethod) ?? (string?)span.GetTagItem(AttributeHttpMethod);
+    }
+
+    private static bool SegmentsMatch(string[] urlSegments, string[] patternSegments)
+    {
+        for (int i = 0; i < patternSegments.Length; i++)
+        {
+            if (i >= urlSegments.Length)
+            {
+                return false;
+            }
+
+            string ps = patternSegments[i];
+            string us = urlSegments[i];
+
+            if (IsWildcardSegment(ps))
+            {
+                if (string.IsNullOrEmpty(us))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (ps != us)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsWildcardSegment(string segment)
+    {
+        return (segment.StartsWith("{") && segment.EndsWith("}")) || segment.StartsWith(":") || segment == "*";
+    }
+
     private static bool IsSqsReceiveMessageConsumerSpan(Activity span)
     {
         string? messagingOperation = (string?)span.GetTagItem(AttributeMessagingOperation);
