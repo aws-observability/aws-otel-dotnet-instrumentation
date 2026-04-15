@@ -14,6 +14,12 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 - Support environment-configured endpoint visibility for HTTP operation names
   ([#392](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/392))
 
+- Fix(lambda-layer): Align CompactConsoleLogRecordExporter output with CloudWatch OTLP backend schema.
+  Field renames: `timestamp` → `timeUnixNano`, `observedTimestamp` → `observedTimeUnixNano`,
+  `instrumentationScope` → `scope`, `traceFlags` → `flags`. Attribute values preserve native
+  types. Added `exportPath: "console"` discriminator field.
+([#394](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/394))
+
 ## v1.12.0 - 2026-03-19
 - KafkaEvent input type support for Lambda and Task<unit> return type serialization issue fix for f#
   ([#368](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/368))
