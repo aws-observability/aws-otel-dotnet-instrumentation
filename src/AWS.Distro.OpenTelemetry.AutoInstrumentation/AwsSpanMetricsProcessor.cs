@@ -74,6 +74,10 @@ public class AwsSpanMetricsProcessor : BaseProcessor<Activity>
     /// <param name="activity"><see cref="Activity"/> to configure</param>
     public override void OnEnd(Activity activity)
     {
+        // If OTEL_AWS_HTTP_OPERATION_PATHS is configured, override the span name so that
+        // metrics use the configured operation path instead of the original span name.
+        AwsSpanProcessingUtil.ApplyOperationPathSpanName(activity);
+
         Dictionary<string, ActivityTagsCollection> attributeDictionary =
             this.generator.GenerateMetricAttributeMapFromSpan(activity, this.resource);
 

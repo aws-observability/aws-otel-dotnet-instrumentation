@@ -9,7 +9,10 @@ For any change that affects end users of this package, please add an entry under
   ([#137](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/137))
 
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
+
 ## Unreleased
+- Support environment-configured endpoint visibility for HTTP operation names
+  ([#392](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/392))
 
 ## v1.12.0 - 2026-03-19
 - KafkaEvent input type support for Lambda and Task<unit> return type serialization issue fix for f#
