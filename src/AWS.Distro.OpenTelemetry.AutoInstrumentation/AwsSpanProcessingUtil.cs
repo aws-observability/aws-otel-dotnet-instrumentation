@@ -167,22 +167,23 @@ internal sealed class AwsSpanProcessingUtil
         }
 
         // Strip query string and fragment (relevant for http.target)
+        string path = urlPath!;
         foreach (char sep in new[] { '?', '#' })
         {
-            int idx = urlPath.IndexOf(sep);
+            int idx = path.IndexOf(sep);
             if (idx >= 0)
             {
-                urlPath = urlPath.Substring(0, idx);
+                path = path.Substring(0, idx);
             }
         }
 
         // Normalize trailing slashes
-        while (urlPath.EndsWith("/") && urlPath.Length > 1)
+        while (path.EndsWith("/") && path.Length > 1)
         {
-            urlPath = urlPath.Substring(0, urlPath.Length - 1);
+            path = path.Substring(0, path.Length - 1);
         }
 
-        string[] urlSegments = urlPath.Split('/');
+        string[] urlSegments = path.Split('/');
         foreach (string pattern in paths)
         {
             string normalizedPattern = pattern;
