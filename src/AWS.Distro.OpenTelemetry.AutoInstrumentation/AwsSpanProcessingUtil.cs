@@ -66,11 +66,17 @@ internal sealed class AwsSpanProcessingUtil
 
     internal static readonly string SqlDialectPattern = "^(?:" + string.Join("|", GetDialectKeywords()) + ")\\b";
 
+    // Environment variable for configurable operation name paths
+    internal static readonly string OtelAwsHttpOperationPathsConfig = "OTEL_AWS_HTTP_OPERATION_PATHS";
+
     private static readonly string HttpRouteDataParsingEnabledConfig = "HTTP_ROUTE_DATA_PARSING_ENABLED";
     private static readonly string HttpRouteDataParsingEnabled = System.Environment.GetEnvironmentVariable(HttpRouteDataParsingEnabledConfig) ?? "false";
 
     private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
     private static readonly string? AwsLambdaFunctionName = Environment.GetEnvironmentVariable(AwsLambdaFunctionNameConfig);
+
+    // Cached parsed operation paths (sorted longest first)
+    private static List<string>? operationPaths;
 
     internal static List<string> GetDialectKeywords()
     {
@@ -103,6 +109,151 @@ internal sealed class AwsSpanProcessingUtil
         {
             return new List<string>();
         }
+    }
+
+    /// <summary>
+    /// Parse the OTEL_AWS_HTTP_OPERATION_PATHS env var into a sorted list of path templates
+    /// (longest first by segment count). Returns an empty list if the env var is not set.
+    /// </summary>
+    internal static List<string> GetOperationPaths()
+    {
+        if (operationPaths == null)
+        {
+            string? config = Environment.GetEnvironmentVariable(OtelAwsHttpOperationPathsConfig);
+            if (string.IsNullOrWhiteSpace(config))
+            {
+                operationPaths = new List<string>();
+            }
+            else
+            {
+                var paths = config.Split(',')
+                    .Select(p => p.Trim())
+                    .Where(p => p.Length > 0)
+                    .ToList();
+
+                // Sort longest first (by segment count) for longest-prefix-match.
+                // For patterns with the same number of segments, original config order is preserved (stable sort).
+                paths.Sort((a, b) => b.Split('/').Length.CompareTo(a.Split('/').Length));
+                operationPaths = paths;
+            }
+        }
+
+        return operationPaths;
+    }
+
+    /// <summary>Reset cached operation paths (for testing).</summary>
+    internal static void ResetOperationPaths()
+    {
+        operationPaths = null;
+    }
+
+    /// <summary>
+    /// If OTEL_AWS_HTTP_OPERATION_PATHS is configured and a pattern matches the span's URL path,
+    /// mutates the span's DisplayName to "METHOD /path/template". Returns the span unchanged if
+    /// no config is set or no pattern matches.
+    /// </summary>
+    internal static Activity ApplyOperationPathSpanName(Activity span)
+    {
+        var paths = GetOperationPaths();
+        if (paths.Count == 0)
+        {
+            return span;
+        }
+
+        string? urlPath = GetUrlPath(span);
+        if (string.IsNullOrEmpty(urlPath))
+        {
+            return span;
+        }
+
+        // Strip query string and fragment (relevant for http.target)
+        foreach (char sep in new[] { '?', '#' })
+        {
+            int idx = urlPath.IndexOf(sep);
+            if (idx >= 0)
+            {
+                urlPath = urlPath.Substring(0, idx);
+            }
+        }
+
+        // Normalize trailing slashes
+        while (urlPath.EndsWith("/") && urlPath.Length > 1)
+        {
+            urlPath = urlPath.Substring(0, urlPath.Length - 1);
+        }
+
+        string[] urlSegments = urlPath.Split('/');
+        foreach (string pattern in paths)
+        {
+            string normalizedPattern = pattern;
+            while (normalizedPattern.EndsWith("/") && normalizedPattern.Length > 1)
+            {
+                normalizedPattern = normalizedPattern.Substring(0, normalizedPattern.Length - 1);
+            }
+
+            if (SegmentsMatch(urlSegments, normalizedPattern.Split('/')))
+            {
+                string? httpMethod = GetHttpMethod(span);
+                string newName = httpMethod != null ? httpMethod + " " + pattern : pattern;
+                span.DisplayName = newName;
+                return span;
+            }
+        }
+
+        return span;
+    }
+
+    /// <summary>Return the URL path from server span attributes, preferring url.path over http.target.</summary>
+    private static string? GetUrlPath(Activity span)
+    {
+        return (string?)span.GetTagItem(AttributeUrlPath) ?? (string?)span.GetTagItem(AttributeHttpTarget);
+    }
+
+    /// <summary>Get the HTTP method from the span, checking new and deprecated semconv attributes.</summary>
+    private static string? GetHttpMethod(Activity span)
+    {
+        return (string?)span.GetTagItem(AttributeHttpRequestMethod) ?? (string?)span.GetTagItem(AttributeHttpMethod);
+    }
+
+    /// <summary>
+    /// Check if URL segments match a pattern's segments. Only pattern segments can be wildcards
+    /// ({param}, :param, or *). The pattern acts as a prefix — extra URL segments are allowed.
+    /// </summary>
+    private static bool SegmentsMatch(string[] urlSegments, string[] patternSegments)
+    {
+        for (int i = 0; i < patternSegments.Length; i++)
+        {
+            if (i >= urlSegments.Length)
+            {
+                return false;
+            }
+
+            string ps = patternSegments[i];
+            string us = urlSegments[i];
+
+            if (IsWildcardSegment(ps))
+            {
+                if (string.IsNullOrEmpty(us))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (ps != us)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>A segment is a wildcard if it uses {param}, :param, or * format.</summary>
+    private static bool IsWildcardSegment(string segment)
+    {
+        return (segment.StartsWith("{") && segment.EndsWith("}")) || segment.StartsWith(":") || segment == "*";
     }
 
     // Ingress operation (i.e. operation for Server and Consumer spans) will be generated from
@@ -352,10 +503,10 @@ internal sealed class AwsSpanProcessingUtil
             return false;
         }
 
-        if (IsKeyPresent(span, AttributeHttpRequestMethod))
+        string? httpMethod = GetHttpMethod(span);
+        if (httpMethod != null)
         {
-            object? httpMethod = span.GetTagItem(AttributeHttpRequestMethod);
-            return !operation.Equals((string?)httpMethod);
+            return !operation.Equals(httpMethod);
         }
 
         return true;
