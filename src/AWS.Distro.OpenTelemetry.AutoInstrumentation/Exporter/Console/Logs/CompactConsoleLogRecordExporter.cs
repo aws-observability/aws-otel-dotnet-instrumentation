@@ -43,13 +43,9 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
     public override ExportResult Export(in Batch<LogRecord> batch)
     {
         // Lazily resolve resource from the parent provider
-        if (this.resource == null && this.ParentProvider != null)
+        if (this.resource == null && this.ParentProvider is LoggerProvider loggerProvider)
         {
-            // Search for Resource property on the actual runtime type (LoggerProviderSdk)
-            var resourceProp = this.ParentProvider.GetType().GetProperty(
-                "Resource",
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            this.resource = resourceProp?.GetValue(this.ParentProvider) as Resource;
+            this.resource = loggerProvider.GetResource() ?? Resource.Empty;
         }
 
         foreach (var logRecord in batch)
@@ -118,6 +114,15 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
                 break;
             case null:
                 writer.WriteNull(key);
+                break;
+            case System.Collections.IEnumerable arr when value is not string:
+                writer.WriteStartArray(key);
+                foreach (var item in arr)
+                {
+                    JsonSerializer.Serialize(writer, item);
+                }
+
+                writer.WriteEndArray();
                 break;
             default:
                 writer.WriteString(key, Convert.ToString(value) ?? string.Empty);
