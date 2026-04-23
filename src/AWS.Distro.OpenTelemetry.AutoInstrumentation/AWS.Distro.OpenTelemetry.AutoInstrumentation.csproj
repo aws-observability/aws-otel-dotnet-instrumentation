@@ -25,9 +25,9 @@
     <PackageReference Include="AWSSDK.XRay" Version="3.7.300" />
     <PackageReference Include="Amazon.Lambda.Serialization.Json" Version="2.2.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OpenTelemetry" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.15.2" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.15.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.2" />
     <!-- TODO: Need to look into release those packages before GA -->
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.15.0" />
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.15.0" />
