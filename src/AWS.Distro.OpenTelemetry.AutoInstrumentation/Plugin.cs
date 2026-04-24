@@ -295,6 +295,24 @@ public class Plugin
     }
 
     /// <summary>
+    /// To configure logs SDK. When running in Lambda with OTEL_LOGS_EXPORTER=console,
+    /// adds the CompactConsoleLogRecordExporter to produce canonical JSON output on stdout.
+    /// </summary>
+    /// <param name="options">The OpenTelemetry logger options</param>
+    public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
+    {
+        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment()
+            && !string.IsNullOrEmpty(logsExporter)
+            && logsExporter.Split(',').Any(e => e.Trim().Equals("console", StringComparison.OrdinalIgnoreCase)))
+        {
+            Logger.Log(LogLevel.Debug, "Lambda environment detected, using CompactConsoleLogRecordExporter for logs.");
+            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
+                new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+        }
+    }
+
+    /// <summary>
     /// To configure Resource with resource detectors and <see cref="DistroAttributes"/>
     /// Check <see cref="ResourceBuilderCustomizer"/> for more information.
     /// </summary>
