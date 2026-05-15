@@ -58,8 +58,9 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
             }
             catch (Exception ex)
             {
-                Logger.LogDebug(ex, "Failed to serialize log record with standardized format, writing raw body as fallback");
-                this.output.WriteLine(logRecord.Body ?? logRecord.FormattedMessage ?? string.Empty);
+                Logger.LogDebug(ex, "Failed to serialize log record with standardized format, writing minimal JSON fallback");
+                var body = logRecord.Body ?? logRecord.FormattedMessage ?? string.Empty;
+                this.output.WriteLine(JsonSerializer.Serialize(new { body, error = "serialization_failed" }));
                 this.output.Flush();
             }
         }
@@ -74,7 +75,10 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
             return 0;
         }
 
-        var utc = timestamp.ToUniversalTime();
+        // Treat Unspecified as UTC to avoid silent timezone shifts
+        var utc = timestamp.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+            : timestamp.ToUniversalTime();
         var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         return (utc - epoch).Ticks * 100; // 1 tick = 100 nanoseconds
     }
@@ -104,10 +108,16 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
                 writer.WriteNumber(key, l);
                 break;
             case double d:
-                writer.WriteNumber(key, d);
+                if (double.IsFinite(d))
+                    writer.WriteNumber(key, d);
+                else
+                    writer.WriteString(key, d.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 break;
             case float f:
-                writer.WriteNumber(key, f);
+                if (float.IsFinite(f))
+                    writer.WriteNumber(key, f);
+                else
+                    writer.WriteString(key, f.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 break;
             case bool b:
                 writer.WriteBoolean(key, b);
@@ -125,7 +135,7 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
                 writer.WriteEndArray();
                 break;
             default:
-                writer.WriteString(key, Convert.ToString(value) ?? string.Empty);
+                writer.WriteString(key, Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
                 break;
         }
     }
@@ -184,8 +194,8 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
         // timeUnixNano
         writer.WriteNumber("timeUnixNano", DateTimeToUnixNano(logRecord.Timestamp));
 
-        // observedTimeUnixNano — not exposed on .NET LogRecord
-        writer.WriteNumber("observedTimeUnixNano", 0);
+        // observedTimeUnixNano — not directly exposed on .NET LogRecord, fall back to timestamp
+        writer.WriteNumber("observedTimeUnixNano", DateTimeToUnixNano(logRecord.Timestamp));
 
         // traceId, spanId, traceFlags
         var traceId = logRecord.TraceId;
@@ -195,7 +205,10 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
         writer.WriteString("traceId", isValid ? traceId.ToString() : string.Empty);
         writer.WriteString("spanId", isValid ? spanId.ToString() : string.Empty);
         writer.WriteNumber("flags", (int)logRecord.TraceFlags);
-        writer.WriteString("exportPath", "console");
+        if ("true".Equals(Environment.GetEnvironmentVariable("ADOT_TEST_EXPORT_PATH_ENABLED"), StringComparison.OrdinalIgnoreCase))
+        {
+            writer.WriteString("exportPath", "console");
+        }
 
         writer.WriteEndObject();
         writer.Flush();
