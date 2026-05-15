@@ -108,7 +108,7 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
                 writer.WriteNumber(key, l);
                 break;
             case double d:
-                if (double.IsFinite(d))
+                if (!double.IsNaN(d) && !double.IsInfinity(d))
                 {
                     writer.WriteNumber(key, d);
                 }
@@ -119,7 +119,7 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
 
                 break;
             case float f:
-                if (float.IsFinite(f))
+                if (!float.IsNaN(f) && !float.IsInfinity(f))
                 {
                     writer.WriteNumber(key, f);
                 }
