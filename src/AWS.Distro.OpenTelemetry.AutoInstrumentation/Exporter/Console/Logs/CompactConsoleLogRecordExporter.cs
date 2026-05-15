@@ -109,15 +109,25 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
                 break;
             case double d:
                 if (double.IsFinite(d))
+                {
                     writer.WriteNumber(key, d);
+                }
                 else
+                {
                     writer.WriteString(key, d.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+
                 break;
             case float f:
                 if (float.IsFinite(f))
+                {
                     writer.WriteNumber(key, f);
+                }
                 else
+                {
                     writer.WriteString(key, f.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+
                 break;
             case bool b:
                 writer.WriteBoolean(key, b);
