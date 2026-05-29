@@ -202,6 +202,10 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_METRICS_EXPORTER="none";
     fi
 
+    if [ -z "${OTEL_LOGS_EXPORTER}" ]; then
+      export OTEL_LOGS_EXPORTER="none";
+    fi
+
     if [ -z "${OTEL_RESOURCE_ATTRIBUTES}" ]; then
       export OTEL_RESOURCE_ATTRIBUTES=$LAMBDA_RESOURCE_ATTRIBUTES;
     else
