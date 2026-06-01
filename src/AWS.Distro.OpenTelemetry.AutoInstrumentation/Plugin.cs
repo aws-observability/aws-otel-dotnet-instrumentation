@@ -517,9 +517,9 @@ public class Plugin
             return headers;
         }
 
-        foreach (var pair in headersString.Split(','))
+        foreach (var pair in headersString!.Split(','))
         {
-            var parts = pair.Split('=', 2);
+            var parts = pair.Split(new[] { '=' }, 2);
             if (parts.Length == 2)
             {
                 headers[parts[0].Trim()] = parts[1].Trim();
