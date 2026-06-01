@@ -42,9 +42,11 @@ public class Plugin
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
     private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
+    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
+    private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
     private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
@@ -295,20 +297,30 @@ public class Plugin
     }
 
     /// <summary>
-    /// To configure logs SDK. In Lambda, replaces the default console exporter with
-    /// CompactConsoleLogRecordExporter for canonical JSON output on stdout.
-    /// The Lambda layer sets OTEL_LOGS_EXPORTER=none to suppress the upstream console exporter,
-    /// and this plugin registers our compact exporter as the sole log export path.
-    /// This mirrors Java's approach where customizeLogsExporter replaces SystemOutLogRecordExporter.
+    /// To configure logs SDK. In Lambda, registers CompactConsoleLogRecordExporter for console
+    /// output and a SigV4-signed OTLP exporter (via SimpleLogRecordExportProcessor for
+    /// synchronous flush before Lambda freezes the container).
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
     {
-        if (AwsSpanProcessingUtil.IsLambdaEnvironment())
+        if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
-            Logger.Log(LogLevel.Debug, "Lambda environment detected, using CompactConsoleLogRecordExporter for logs.");
-            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
-                new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+            return;
+        }
+
+        options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
+            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+
+        string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
+        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
+            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+        {
+            string region = new Uri(logsEndpoint).Host.Split('.')[1];
+            var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
+            var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
+            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
+            Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
         }
     }
 
@@ -495,6 +507,26 @@ public class Plugin
             LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
         Logger.Log(
             LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
+    }
+
+    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
+    {
+        var headers = new Dictionary<string, string>();
+        if (string.IsNullOrEmpty(headersString))
+        {
+            return headers;
+        }
+
+        foreach (var pair in headersString!.Split(','))
+        {
+            var parts = pair.Split(new[] { '=' }, 2);
+            if (parts.Length == 2)
+            {
+                headers[parts[0].Trim()] = parts[1].Trim();
+            }
+        }
+
+        return headers;
     }
 
     // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)
