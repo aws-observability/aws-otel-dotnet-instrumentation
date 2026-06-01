@@ -20,7 +20,8 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
 {
     private static readonly string ServiceName = "logs";
-    private readonly HttpClient client = new HttpClient();
+    private static readonly int DefaultTimeoutMilliseconds = 10000;
+    private readonly HttpClient client;
     private readonly Uri endpoint;
     private readonly string region;
     private readonly Dictionary<string, string> customHeaders;
@@ -31,10 +32,16 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
         this.endpoint = endpoint;
         this.region = region;
         this.customHeaders = customHeaders;
+        this.client = new HttpClient()
+        {
+            Timeout = TimeSpan.FromMilliseconds(GetTimeoutMilliseconds()),
+        };
     }
 
     public override ExportResult Export(in Batch<LogRecord> batch)
     {
+        using var scope = SuppressInstrumentationScope.Begin();
+
         if (this.resource == null && this.ParentProvider is LoggerProvider provider)
         {
             this.resource = provider.GetResource() ?? Resource.Empty;
@@ -99,6 +106,17 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
         {
             return ExportResult.Failure;
         }
+    }
+
+    private static int GetTimeoutMilliseconds()
+    {
+        string? timeout = System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT");
+        if (int.TryParse(timeout, out int result))
+        {
+            return result;
+        }
+
+        return DefaultTimeoutMilliseconds;
     }
 
     private class EmptyAmazonWebServiceRequest : AmazonWebServiceRequest

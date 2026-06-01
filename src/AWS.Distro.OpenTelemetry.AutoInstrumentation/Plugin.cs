@@ -324,27 +324,6 @@ public class Plugin
         }
     }
 
-
-    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
-    {
-        var headers = new Dictionary<string, string>();
-        if (string.IsNullOrEmpty(headersString))
-        {
-            return headers;
-        }
-
-        foreach (var pair in headersString.Split(','))
-        {
-            var parts = pair.Split('=', 2);
-            if (parts.Length == 2)
-            {
-                headers[parts[0].Trim()] = parts[1].Trim();
-            }
-        }
-
-        return headers;
-    }
-
     /// <summary>
     /// To configure Resource with resource detectors and <see cref="DistroAttributes"/>
     /// Check <see cref="ResourceBuilderCustomizer"/> for more information.
@@ -528,6 +507,26 @@ public class Plugin
             LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
         Logger.Log(
             LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
+    }
+
+    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
+    {
+        var headers = new Dictionary<string, string>();
+        if (string.IsNullOrEmpty(headersString))
+        {
+            return headers;
+        }
+
+        foreach (var pair in headersString.Split(','))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2)
+            {
+                headers[parts[0].Trim()] = parts[1].Trim();
+            }
+        }
+
+        return headers;
     }
 
     // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)
