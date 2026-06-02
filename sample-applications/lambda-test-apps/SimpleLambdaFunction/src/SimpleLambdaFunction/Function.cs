@@ -1,6 +1,7 @@
 using Amazon.Lambda.Core;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.S3;
+using Microsoft.Extensions.Logging;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -11,6 +12,9 @@ public class Function
 {
     private static readonly HttpClient httpClient = new HttpClient();
     private static readonly AmazonS3Client s3Client = new AmazonS3Client();
+    private static readonly ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+        builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug));
+    private static readonly ILogger<Function> logger = loggerFactory.CreateLogger<Function>();
 
     /// <summary>
     /// This function handles API Gateway requests and returns results from an HTTP request and S3 call.
@@ -20,10 +24,15 @@ public class Function
     /// <returns></returns>
     public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest apigProxyEvent, ILambdaContext context)
     {
-        context.Logger.LogLine("Making HTTP call to https://aws.amazon.com/");
+        logger.LogDebug("debug-level-test-message");
+        logger.LogInformation("info-level-test-message");
+        logger.LogWarning("warn-level-test-message");
+        logger.LogError("error-level-test-message");
+
+        logger.LogInformation("Making HTTP call to https://aws.amazon.com/");
         await httpClient.GetAsync("https://aws.amazon.com/");
 
-        context.Logger.LogLine("Making AWS S3 ListBuckets call");
+        logger.LogInformation("Making AWS S3 ListBuckets call");
         int bucketCount = await ListS3Buckets().ConfigureAwait(false);
 
         var traceId = Environment.GetEnvironmentVariable("_X_AMZN_TRACE_ID");

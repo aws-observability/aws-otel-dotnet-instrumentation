@@ -192,7 +192,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_SERVICE_NAME=$AWS_LAMBDA_FUNCTION_NAME;
     fi
     
-    export LAMBDA_RESOURCE_ATTRIBUTES="cloud.region=$AWS_REGION,cloud.provider=aws,faas.name=$AWS_LAMBDA_FUNCTION_NAME,faas.version=$AWS_LAMBDA_FUNCTION_VERSION,faas.instance=$AWS_LAMBDA_LOG_STREAM_NAME,aws.log.group.names=$AWS_LAMBDA_LOG_GROUP_NAME";
+    export LAMBDA_RESOURCE_ATTRIBUTES="cloud.region=$AWS_REGION,cloud.provider=aws,cloud.platform=aws_lambda,faas.name=$AWS_LAMBDA_FUNCTION_NAME,faas.version=$AWS_LAMBDA_FUNCTION_VERSION,faas.instance=$AWS_LAMBDA_LOG_STREAM_NAME,aws.log.group.names=$AWS_LAMBDA_LOG_GROUP_NAME";
 
     if [ -z "${OTEL_AWS_APPLICATION_SIGNALS_ENABLED}" ]; then
       export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true";
@@ -200,6 +200,10 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
 
     if [ -z "${OTEL_METRICS_EXPORTER}" ]; then
       export OTEL_METRICS_EXPORTER="none";
+    fi
+
+    if [ -z "${OTEL_LOGS_EXPORTER}" ]; then
+      export OTEL_LOGS_EXPORTER="none";
     fi
 
     if [ -z "${OTEL_RESOURCE_ATTRIBUTES}" ]; then
