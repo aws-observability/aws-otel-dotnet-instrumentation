@@ -61,7 +61,7 @@ class EfCoreTest(ContractTestBase):
             if resource_scope_span.span.kind == Span.SPAN_KIND_SERVER:
                 target_spans.append(resource_scope_span.span)
 
-        self.assertEqual(len(target_spans), 1)
+        self.assertEqual(len(target_spans), 1, f"target_spans is {str(target_spans)}, although only one value was expected")
         self._assert_aws_attributes(target_spans[0].attributes, kwargs.get("request_method"), kwargs.get("local_operation"))
 
     def _assert_aws_attributes(self, attributes_list: List[KeyValue], method: str, local_operation: str) -> None:
@@ -105,37 +105,23 @@ class EfCoreTest(ContractTestBase):
         for resource_scope_metric in resource_scope_metrics:
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
-        if (len(target_metrics) == 2):
-            dependency_target_metric: Metric = target_metrics[0]
-            service_target_metric: Metric = target_metrics[1]
-            # Test dependency metric
-            dep_dp_list: List[ExponentialHistogramDataPoint] = dependency_target_metric.exponential_histogram.data_points
-            dep_dp_list_count: int = kwargs.get("dp_count", 1)
-            self.assertEqual(len(dep_dp_list), dep_dp_list_count)
-            dependency_dp: ExponentialHistogramDataPoint = dep_dp_list[0]
-            service_dp_list = service_target_metric.exponential_histogram.data_points
-            service_dp_list_count = kwargs.get("dp_count", 1)
-            self.assertEqual(len(service_dp_list), service_dp_list_count)
-            service_dp: ExponentialHistogramDataPoint = service_dp_list[0]
-            if len(service_dp_list[0].attributes) > len(dep_dp_list[0].attributes):
-                dependency_dp = service_dp_list[0]
-                service_dp = dep_dp_list[0]
-            self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
-            self._assert_service_dp_attributes(service_dp, expected_sum, metric_name, **kwargs)
-        elif (len(target_metrics) == 1):
-            target_metric: Metric = target_metrics[0]
-            dp_list: List[ExponentialHistogramDataPoint] = target_metric.exponential_histogram.data_points
-            dp_list_count: int = kwargs.get("dp_count", 2)
-            self.assertEqual(len(dp_list), dp_list_count)
-            dependency_dp: ExponentialHistogramDataPoint = dp_list[0]
-            service_dp: ExponentialHistogramDataPoint = dp_list[1]
-            if len(dp_list[1].attributes) > len(dp_list[0].attributes):
-                dependency_dp = dp_list[1]
-                service_dp = dp_list[0]
-            self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
-            self._assert_service_dp_attributes(service_dp, expected_sum, metric_name, **kwargs)
-        else:
-            raise AssertionError("Target metrics count is incorrect")
+
+        # Collect all data points across metric batches
+        dp_list: List[ExponentialHistogramDataPoint] = [
+            dp for target_metric in target_metrics for dp in target_metric.exponential_histogram.data_points
+        ]
+
+        # With OTel auto-instrumentation v1.15.0+, there are 2 CLIENT spans
+        # (EF Core + SQLITE) plus 1 SERVER span, producing 3 data points:
+        # 2 dependency (CLIENT) + 1 service (LOCAL_ROOT)
+        self.assertGreaterEqual(len(dp_list), 2, f"Expected at least 2 data points, got {len(dp_list)}")
+
+        # Find service dp (LOCAL_ROOT has fewest attributes) and dependency dp (CLIENT has most)
+        service_dp: ExponentialHistogramDataPoint = min(dp_list, key=lambda x: len(x.attributes))
+        dependency_dp: ExponentialHistogramDataPoint = max(dp_list, key=lambda x: len(x.attributes))
+
+        self._assert_dependency_dp_attributes(dependency_dp, expected_sum, metric_name, **kwargs)
+        self._assert_service_dp_attributes(service_dp, expected_sum, metric_name, **kwargs)
     
     def _assert_dependency_dp_attributes(self, dependency_dp: ExponentialHistogramDataPoint, expected_sum: int, metric_name: str, **kwargs):
         attribute_dict = self._get_attributes_dict(dependency_dp.attributes)
