@@ -11,9 +11,10 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Update OpenTelemetry dependencies - Core: 1.15.3, Instrumentation: 1.15.0
+  ([#414](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/414))
 - Support environment-configured endpoint visibility for HTTP operation names
   ([#392](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/392))
-
 - Enhancement(lambda-layer): Align CompactConsoleLogRecordExporter output with CloudWatch OTLP backend schema.
   Field renames: `timestamp` → `timeUnixNano`, `observedTimestamp` → `observedTimeUnixNano`,
   `instrumentationScope` → `scope`, `traceFlags` → `flags`. Attribute values preserve native

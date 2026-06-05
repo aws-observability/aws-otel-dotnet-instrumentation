@@ -172,8 +172,6 @@ class Psycopg2Test(DatabaseContractTestBase):
         dp_list: List[ExponentialHistogramDataPoint] = [
             dp for target_metric in target_metrics for dp in target_metric.exponential_histogram.data_points
         ]
-        # With 1 CLIENT span (Npgsql) + 1 SERVER span, we expect 2 data points:
-        # 1 dependency (CLIENT) + 1 service (LOCAL_ROOT)
         self.assertEqual(len(dp_list), 2)
 
         dependency_dp: ExponentialHistogramDataPoint = max(dp_list, key=lambda x: len(x.attributes))
