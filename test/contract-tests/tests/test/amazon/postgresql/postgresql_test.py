@@ -105,8 +105,6 @@ class Psycopg2Test(DatabaseContractTestBase):
             if resource_scope_span.span.kind == Span.SPAN_KIND_CLIENT:
                 target_spans.append(resource_scope_span.span)
 
-        # With OTel auto-instrumentation v1.15.0+, EF Core instrumentation skips the
-        # Npgsql provider to avoid duplicate spans, so only the Npgsql span remains.
         self.assertEqual(
             len(target_spans), 1, f"target_spans is {str(target_spans)}, although only one value was expected"
         )

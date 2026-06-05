@@ -106,15 +106,10 @@ class EfCoreTest(ContractTestBase):
             if resource_scope_metric.metric.name.lower() == metric_name.lower():
                 target_metrics.append(resource_scope_metric.metric)
 
-        # Collect all data points across metric batches
         dp_list: List[ExponentialHistogramDataPoint] = [
             dp for target_metric in target_metrics for dp in target_metric.exponential_histogram.data_points
         ]
-
-        # With OTel auto-instrumentation v1.15.0+, there are 2 CLIENT spans
-        # (EF Core + SQLITE) plus 1 SERVER span, producing 3 data points:
-        # 2 dependency (CLIENT) + 1 service (LOCAL_ROOT)
-        self.assertGreaterEqual(len(dp_list), 2, f"Expected at least 2 data points, got {len(dp_list)}")
+        self.assertEqual(len(dp_list), 3, f"Expected 3 data points, got {len(dp_list)}: {dp_list}")
 
         # Find service dp (LOCAL_ROOT has fewest attributes) and dependency dp (CLIENT has most)
         service_dp: ExponentialHistogramDataPoint = min(dp_list, key=lambda x: len(x.attributes))
