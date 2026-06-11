@@ -106,12 +106,9 @@ class Psycopg2Test(DatabaseContractTestBase):
                 target_spans.append(resource_scope_span.span)
 
         self.assertEqual(
-            len(target_spans), 2, f"target_spans is {str(target_spans)}, although only one value was expected"
+            len(target_spans), 1, f"target_spans is {str(target_spans)}, although only one value was expected"
         )
-        target_span: Span = target_spans[1]
-        if len(target_spans[0].attributes) > len(target_spans[1].attributes):
-            target_span = target_spans[0]
-        self._assert_aws_attributes(target_span.attributes, **kwargs)
+        self._assert_aws_attributes(target_spans[0].attributes, **kwargs)
 
     @override
     def _assert_semantic_conventions_span_attributes(
@@ -123,9 +120,8 @@ class Psycopg2Test(DatabaseContractTestBase):
             if resource_scope_span.span.kind == Span.SPAN_KIND_CLIENT:
                 target_spans.append(resource_scope_span.span)
 
-        target_span: Span = target_spans[1]
-        if len(target_spans[0].attributes) > len(target_spans[1].attributes):
-            target_span = target_spans[0]
+        self.assertEqual(len(target_spans), 1)
+        target_span: Span = target_spans[0]
 
         if status_code == 200:
             self.assertEqual(target_span.status.code, StatusCode.OK.value)
@@ -171,16 +167,16 @@ class Psycopg2Test(DatabaseContractTestBase):
         self.assertLessEqual(
             len(target_metrics),
             3,
-            f"target_metrics is {str(target_metrics)}, although we expect less than or equal to 2 metrics",
+            f"target_metrics is {str(target_metrics)}, although we expect less than or equal to 3 metrics",
         )
         dp_list: List[ExponentialHistogramDataPoint] = [
             dp for target_metric in target_metrics for dp in target_metric.exponential_histogram.data_points
         ]
-        self.assertEqual(len(dp_list), 3)
+        self.assertEqual(len(dp_list), 2)
 
         dependency_dp: ExponentialHistogramDataPoint = max(dp_list, key=lambda x: len(x.attributes))
         service_dp: ExponentialHistogramDataPoint = min(dp_list, key=lambda x: len(x.attributes))
-        
+
         self._assert_aws_attributes(dependency_dp.attributes, SPAN_KIND_CLIENT, **kwargs)
         if metric_name == LATENCY_METRIC:
             self.check_sum(metric_name, dependency_dp.sum, expected_sum)
