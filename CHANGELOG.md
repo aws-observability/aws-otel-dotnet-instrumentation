@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+
+## v1.13.0 - 2026-06-06
 - Update OpenTelemetry dependencies - Core: 1.15.3, Instrumentation: 1.15.0
   ([#414](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/414))
 - Support environment-configured endpoint visibility for HTTP operation names
