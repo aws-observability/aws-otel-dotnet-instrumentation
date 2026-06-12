@@ -18,7 +18,6 @@ internal sealed class AnomalyDetector
     private readonly AdaptiveSamplingConfig config;
     private readonly TokenBucketRateLimiter? rateLimiter;
     private readonly MemoryCache traceCache;
-    private readonly BoostStatistics stats = new();
 
     internal AnomalyDetector(AdaptiveSamplingConfig config)
     {
@@ -42,24 +41,85 @@ internal sealed class AnomalyDetector
         }
     }
 
-    internal bool IsAnomaly(Activity span)
+    internal AnomalyDetectionResult? GetAnomalyMatch(Activity span, bool defaultAnomalyDetectionDisabled)
     {
+        bool forBoost = false;
+        bool forCapture = false;
+
         var conditions = this.config.AnomalyConditions;
-        if (conditions == null || conditions.Count == 0)
+        if (conditions != null && conditions.Count > 0)
         {
-            return false;
+            foreach (var condition in conditions)
+            {
+                if (forBoost && condition.Usage == UsageType.SamplingBoost)
+                {
+                    continue;
+                }
+
+                if (forCapture && condition.Usage == UsageType.AnomalyTraceCapture)
+                {
+                    continue;
+                }
+
+                if (!this.MatchesCondition(condition, span))
+                {
+                    continue;
+                }
+
+                switch (condition.Usage)
+                {
+                    case UsageType.Both:
+                        forBoost = true;
+                        forCapture = true;
+                        break;
+                    case UsageType.SamplingBoost:
+                        forBoost = true;
+                        break;
+                    case UsageType.AnomalyTraceCapture:
+                        forCapture = true;
+                        break;
+                }
+
+                if (forBoost && forCapture)
+                {
+                    break;
+                }
+            }
+        }
+        else if (!defaultAnomalyDetectionDisabled)
+        {
+            // Default anomaly detection: 5xx or StatusCode.ERROR
+            var statusCode = this.GetHttpStatusCode(span);
+            if (statusCode != null && statusCode.Value > 499)
+            {
+                forBoost = true;
+                forCapture = true;
+            }
+            else if (statusCode == null && span.Status == ActivityStatusCode.Error)
+            {
+                forBoost = true;
+                forCapture = true;
+            }
         }
 
-        return conditions.Any(c => this.MatchesCondition(c, span));
+        if (!forBoost && !forCapture)
+        {
+            return null;
+        }
+
+        return new AnomalyDetectionResult(forBoost, forCapture);
     }
 
     internal bool ShouldCaptureAnomaly(string traceId)
     {
+        // If trace is already in cache, it was already accepted — capture ALL spans of this trace
+        // Matches Python: once a trace is flagged for capture, all its spans are captured
         if (this.traceCache.TryGetValue(traceId, out _))
         {
-            return false;
+            return true;
         }
 
+        // Rate-limit new traces
         if (this.rateLimiter != null)
         {
             using var lease = this.rateLimiter.AttemptAcquire();
@@ -69,6 +129,7 @@ internal sealed class AnomalyDetector
             }
         }
 
+        // Mark this trace as accepted for capture
         this.traceCache.Set(traceId, true, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TraceCacheTtl,
@@ -76,25 +137,6 @@ internal sealed class AnomalyDetector
         });
 
         return true;
-    }
-
-    internal void RecordTrace()
-    {
-        this.stats.IncrementTotal();
-    }
-
-    internal void RecordAnomaly(bool isSampled)
-    {
-        this.stats.IncrementAnomaly();
-        if (isSampled)
-        {
-            this.stats.IncrementSampledAnomaly();
-        }
-    }
-
-    internal BoostStatistics SnapshotAndResetStatistics()
-    {
-        return this.stats.SnapshotAndReset();
     }
 
     private bool MatchesCondition(AnomalyCondition condition, Activity span)
@@ -113,51 +155,41 @@ internal sealed class AnomalyDetector
             }
         }
 
-        bool hasAnyCriteria = false;
+        bool isAnomaly = false;
 
-        if (condition.ErrorCodeRegex != null)
+        var errorCodeRegex = condition.ErrorCodeRegex;
+        if (errorCodeRegex != null)
         {
-            hasAnyCriteria = true;
-            if (!this.MatchesErrorCode(condition.ErrorCodeRegex, span))
+            var statusCode = this.GetHttpStatusCode(span);
+            if (statusCode != null)
             {
-                return false;
+                isAnomaly = this.MatchesErrorCode(errorCodeRegex, statusCode.Value);
             }
         }
 
-        if (condition.HighLatencyMs.HasValue)
+        var highLatencyMs = condition.HighLatencyMs;
+        if (highLatencyMs.HasValue)
         {
-            hasAnyCriteria = true;
-            if (!this.MatchesHighLatency(condition.HighLatencyMs.Value, span))
-            {
-                return false;
-            }
+            bool latencyMatch = span.Duration.TotalMilliseconds >= highLatencyMs.Value;
+
+            // If both error code and latency defined, both must agree (matches Python)
+            isAnomaly = (errorCodeRegex == null || isAnomaly) && latencyMatch;
         }
 
-        return hasAnyCriteria;
+        return isAnomaly;
     }
 
-    private bool MatchesErrorCode(string regex, Activity span)
+    private bool MatchesErrorCode(string regex, int statusCode)
     {
-        var statusCode = this.GetHttpStatusCode(span);
-        if (statusCode == null)
-        {
-            return false;
-        }
-
         try
         {
             string anchored = regex.StartsWith("^") && regex.EndsWith("$") ? regex : $"^(?:{regex})$";
-            return Regex.IsMatch(statusCode.Value.ToString(), anchored);
+            return Regex.IsMatch(statusCode.ToString(), anchored);
         }
         catch
         {
             return false;
         }
-    }
-
-    private bool MatchesHighLatency(int thresholdMs, Activity span)
-    {
-        return span.Duration.TotalMilliseconds > thresholdMs;
     }
 
     private int? GetHttpStatusCode(Activity span)

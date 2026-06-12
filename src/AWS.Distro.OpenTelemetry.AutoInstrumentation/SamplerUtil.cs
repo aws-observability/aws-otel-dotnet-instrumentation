@@ -91,6 +91,8 @@ public class SamplerUtil
         return TracesSampler != null && TracesSampler.Equals("xray");
     }
 
+    internal static global::OpenTelemetry.Sampler.AWS.AWSXRayRemoteSampler? LastCreatedXRaySampler { get; private set; }
+
     private static Sampler ConfigureXraySampler(string? tracesSamplerArg, Resource resource)
     {
         // Example env var value
@@ -143,9 +145,11 @@ public class SamplerUtil
         Logger.Log(LogLevel.Information, "XRay Sampler Endpoint: {0}", endpoint);
         Logger.Log(LogLevel.Information, "XRay Sampler Polling Interval:: {0}", pollingInterval);
 
-        return AWSXRayRemoteSampler.Builder(resource) // you must provide a resource
+        var builder = AWSXRayRemoteSampler.Builder(resource)
             .SetPollingInterval(TimeSpan.FromSeconds(pollingInterval))
-            .SetEndpoint(endpoint)
-            .Build();
+            .SetEndpoint(endpoint);
+        var result = builder.Build();
+        LastCreatedXRaySampler = builder.InnerSampler;
+        return result;
     }
 }

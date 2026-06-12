@@ -150,6 +150,30 @@ public class Plugin
             }
         }
 
+        // Adaptive sampling: parse config, create processor, wire AwsBatchUnsampledSpanProcessor for capture
+        var xraySampler = SamplerUtil.LastCreatedXRaySampler;
+        if (this.IsApplicationSignalsEnabled() && xraySampler != null)
+        {
+            var adaptiveConfig = AdaptiveSamplingConfigParser.Parse(
+                System.Environment.GetEnvironmentVariable(AdaptiveSamplingConfigParser.EnvVar));
+            if (adaptiveConfig != null)
+            {
+                var adaptiveSampler = new AdaptiveSampler(adaptiveConfig, xraySampler);
+
+                // Anomaly-captured spans are unsampled (traceFlags=0) so they need
+                // AwsBatchUnsampledSpanProcessor which exports regardless of sampling flag.
+                Resource captureResource = tracerProvider.GetResource();
+                var captureExporter = new XrayUdpExporter(captureResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                var captureProcessor = new AwsBatchUnsampledSpanExportProcessor(exporter: captureExporter);
+                tracerProvider.AddProcessor(captureProcessor);
+
+                adaptiveSampler.SetSpanBatcher(span => captureProcessor.OnEnd(span));
+                tracerProvider.AddProcessor(new AdaptiveSamplingSpanProcessor(adaptiveSampler));
+
+                Logger.Log(LogLevel.Information, "Adaptive sampling enabled with anomaly capture via AwsBatchUnsampledSpanExportProcessor");
+            }
+        }
+
         // We want to be adding the exporter as the last processor in the traceProvider since processors
         // are executed in the order they were added to the provider.
         if (AwsSpanProcessingUtil.IsLambdaEnvironment())

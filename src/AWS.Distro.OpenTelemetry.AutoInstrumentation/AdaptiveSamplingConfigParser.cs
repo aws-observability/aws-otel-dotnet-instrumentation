@@ -117,7 +117,7 @@ internal static class AdaptiveSamplingConfigParser
         {
             "both" or null => UsageType.Both,
             "sampling-boost" => UsageType.SamplingBoost,
-            "anomaly-span-capture" or "anomaly_trace_capture" => UsageType.AnomalyTraceCapture,
+            "anomaly-trace-capture" => UsageType.AnomalyTraceCapture,
             "neither" => UsageType.Neither,
             _ => LogAndReturnNull(usageStr),
         };
