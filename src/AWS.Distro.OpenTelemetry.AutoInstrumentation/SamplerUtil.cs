@@ -86,12 +86,12 @@ public class SamplerUtil
         }
     }
 
+    internal static global::OpenTelemetry.Sampler.AWS.AWSXRayRemoteSampler? LastCreatedXRaySampler { get; private set; }
+
     internal static bool IsXraySampler()
     {
         return TracesSampler != null && TracesSampler.Equals("xray");
     }
-
-    internal static global::OpenTelemetry.Sampler.AWS.AWSXRayRemoteSampler? LastCreatedXRaySampler { get; private set; }
 
     private static Sampler ConfigureXraySampler(string? tracesSamplerArg, Resource resource)
     {

@@ -158,7 +158,7 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
         Justification = "using insecure random is fine here since clientId doesn't need to be secure.")]
     private static string GenerateClientId()
     {
-        char[] hex = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+        char[] hex = new[] { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
         var clientIdChars = new char[24];
         for (var i = 0; i < clientIdChars.Length; i++)
         {
@@ -234,7 +234,7 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
         var response = await this.Client.GetSamplingTargets(request).ConfigureAwait(false);
         if (response != null)
         {
-            Dictionary<string, SamplingTargetDocument> targets = [];
+            Dictionary<string, SamplingTargetDocument> targets = new();
             foreach (var target in response.SamplingTargetDocuments)
             {
                 if (target.RuleName != null)

@@ -26,7 +26,7 @@ internal class RulesCache : IDisposable
         this.ClientId = clientId;
         this.Resource = resource;
         this.FallbackSampler = fallbackSampler;
-        this.RuleAppliers = [];
+        this.RuleAppliers = new();
         this.UpdatedAt = this.Clock.Now();
     }
 
@@ -60,7 +60,7 @@ internal class RulesCache : IDisposable
         // sort the new rules
         newRules.Sort((x, y) => x.CompareTo(y));
 
-        List<SamplingRuleApplier> newRuleAppliers = [];
+        List<SamplingRuleApplier> newRuleAppliers = new();
         foreach (var rule in newRules)
         {
             // If the ruleApplier already exists in the current list of appliers, then we reuse it.
@@ -120,7 +120,7 @@ internal class RulesCache : IDisposable
 
     public List<SamplingStatisticsDocument> Snapshot(DateTimeOffset now)
     {
-        List<SamplingStatisticsDocument> snapshots = [];
+        List<SamplingStatisticsDocument> snapshots = new();
         foreach (var ruleApplier in this.RuleAppliers)
         {
             snapshots.Add(ruleApplier.Snapshot(now));
@@ -131,7 +131,7 @@ internal class RulesCache : IDisposable
 
     public void UpdateTargets(Dictionary<string, SamplingTargetDocument> targets)
     {
-        List<SamplingRuleApplier> newRuleAppliers = [];
+        List<SamplingRuleApplier> newRuleAppliers = new();
         foreach (var ruleApplier in this.RuleAppliers)
         {
             targets.TryGetValue(ruleApplier.RuleName, out var target);
@@ -238,7 +238,8 @@ internal class RulesCache : IDisposable
 
     public static string HashRuleName(string ruleName)
     {
-        byte[] hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(ruleName));
+        using var sha = SHA256.Create();
+        byte[] hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(ruleName));
         var sb = new StringBuilder(16);
         for (int i = 0; i < 8; i++)
         {
