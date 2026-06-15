@@ -31,8 +31,8 @@ internal static class AdaptiveSamplingConfigParser
 
         string content = envValue!.Trim();
 
-        // If it looks like a file path, read the file
-        if (!content.StartsWith("{") && File.Exists(content))
+        // Only treat as file path if it ends with .yaml or .yml
+        if (!content.StartsWith("{") && (content.EndsWith(".yaml") || content.EndsWith(".yml")) && File.Exists(content))
         {
             try
             {
@@ -84,9 +84,27 @@ internal static class AdaptiveSamplingConfigParser
                     return null;
                 }
 
+                System.Text.RegularExpressions.Regex? compiledRegex = null;
+                if (cond.ErrorCodeRegex != null)
+                {
+                    try
+                    {
+                        string anchored = cond.ErrorCodeRegex.StartsWith("^") && cond.ErrorCodeRegex.EndsWith("$")
+                            ? cond.ErrorCodeRegex
+                            : $"^(?:{cond.ErrorCodeRegex})$";
+                        compiledRegex = new System.Text.RegularExpressions.Regex(anchored, System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+                    catch (System.ArgumentException e)
+                    {
+                        Logger.LogWarning("AWS_XRAY_ADAPTIVE_SAMPLING_CONFIG: invalid errorCodeRegex '{Regex}': {Error}", cond.ErrorCodeRegex, e.Message);
+                        return null;
+                    }
+                }
+
                 result.AnomalyConditions.Add(new AnomalyCondition
                 {
                     ErrorCodeRegex = cond.ErrorCodeRegex,
+                    CompiledErrorCodeRegex = compiledRegex,
                     Operations = cond.Operations,
                     HighLatencyMs = cond.HighLatencyMs,
                     Usage = usage.Value,
@@ -96,9 +114,9 @@ internal static class AdaptiveSamplingConfigParser
 
         if (yaml.AnomalyCaptureLimit != null)
         {
-            if (yaml.AnomalyCaptureLimit.AnomalyTracesPerSecond < 0)
+            if (yaml.AnomalyCaptureLimit.AnomalyTracesPerSecond <= 0)
             {
-                Logger.LogWarning("AWS_XRAY_ADAPTIVE_SAMPLING_CONFIG: anomalyTracesPerSecond must be non-negative");
+                Logger.LogWarning("AWS_XRAY_ADAPTIVE_SAMPLING_CONFIG: anomalyTracesPerSecond must be positive");
                 return null;
             }
 

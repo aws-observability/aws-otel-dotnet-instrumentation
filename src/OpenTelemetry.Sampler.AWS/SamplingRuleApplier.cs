@@ -257,12 +257,10 @@ internal class SamplingRuleApplier
                 return;
             }
 
-            if (this.seenTraceIds.Count >= MaxSeenTraceIds)
+            if (this.seenTraceIds.Count < MaxSeenTraceIds)
             {
-                return;
+                this.seenTraceIds.Add(traceId);
             }
-
-            this.seenTraceIds.Add(traceId);
         }
 
         Interlocked.Increment(ref this.totalCount);

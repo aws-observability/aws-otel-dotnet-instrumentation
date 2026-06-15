@@ -98,21 +98,23 @@ internal class RulesCache : IDisposable
 
     public SamplingResult ShouldSample(in SamplingParameters samplingParameters)
     {
-        foreach (var ruleApplier in this.RuleAppliers)
+        this.rwLock.EnterReadLock();
+        List<SamplingRuleApplier> appliers;
+        try
+        {
+            appliers = this.RuleAppliers;
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
+
+        foreach (var ruleApplier in appliers)
         {
             if (ruleApplier.Matches(samplingParameters, this.Resource))
             {
-                this.isFallBackEventToWriteSwitch = true;
                 return ruleApplier.ShouldSample(in samplingParameters);
             }
-        }
-
-        // ideally the default rule should have matched.
-        // if we are here then likely due to a bug.
-        if (this.isFallBackEventToWriteSwitch)
-        {
-            this.isFallBackEventToWriteSwitch = false;
-            AWSSamplerEventSource.Log.InfoUsingFallbackSampler();
         }
 
         return this.FallbackSampler.ShouldSample(in samplingParameters);
@@ -173,7 +175,18 @@ internal class RulesCache : IDisposable
 
     public SamplingRuleApplier? GetMatchedRule(in SamplingParameters samplingParameters)
     {
-        foreach (var ruleApplier in this.RuleAppliers)
+        this.rwLock.EnterReadLock();
+        List<SamplingRuleApplier> appliers;
+        try
+        {
+            appliers = this.RuleAppliers;
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
+
+        foreach (var ruleApplier in appliers)
         {
             if (ruleApplier.Matches(samplingParameters, this.Resource))
             {

@@ -173,6 +173,7 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
         if (disposing)
         {
             this.RulePollerTimer?.Dispose();
+            this.TargetPollerTimer?.Dispose();
             this.Client?.Dispose();
             this.RulesCache?.Dispose();
         }
@@ -180,12 +181,24 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
 
     private async void GetAndUpdateRules(object? state)
     {
-        var rules = await this.Client.GetSamplingRules().ConfigureAwait(false);
-
-        this.RulesCache.UpdateRules(rules);
-
-        // schedule the next rule poll.
-        this.RulePollerTimer.Change(this.PollingInterval.Add(this.RulePollerJitter), Timeout.InfiniteTimeSpan);
+        try
+        {
+            var rules = await this.Client.GetSamplingRules().ConfigureAwait(false);
+            this.RulesCache.UpdateRules(rules);
+        }
+        catch (Exception)
+        {
+        }
+        finally
+        {
+            try
+            {
+                this.RulePollerTimer.Change(this.PollingInterval.Add(this.RulePollerJitter), Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
     }
 
     private static string? GetTraceStateValue(string? traceState, string key)
@@ -224,47 +237,59 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
 
     private async void GetAndUpdateTargets(object? state)
     {
-        var statistics = this.RulesCache.Snapshot(this.Clock.Now());
-
-        var serviceName = (string?)this.Resource.Attributes.FirstOrDefault(kvp =>
-            kvp.Key.Equals("service.name", StringComparison.Ordinal)).Value ?? string.Empty;
-        var boostStats = this.RulesCache.SnapshotBoostStatistics(serviceName);
-
-        var request = new GetSamplingTargetsRequest(statistics, boostStats.Count > 0 ? boostStats : null);
-        var response = await this.Client.GetSamplingTargets(request).ConfigureAwait(false);
-        if (response != null)
+        try
         {
-            Dictionary<string, SamplingTargetDocument> targets = new();
-            foreach (var target in response.SamplingTargetDocuments)
+            var statistics = this.RulesCache.Snapshot(this.Clock.Now());
+
+            var serviceName = (string?)this.Resource.Attributes.FirstOrDefault(kvp =>
+                kvp.Key.Equals("service.name", StringComparison.Ordinal)).Value ?? string.Empty;
+            var boostStats = this.RulesCache.SnapshotBoostStatistics(serviceName);
+
+            var request = new GetSamplingTargetsRequest(statistics, boostStats.Count > 0 ? boostStats : null);
+            var response = await this.Client.GetSamplingTargets(request).ConfigureAwait(false);
+            if (response != null)
             {
-                if (target.RuleName != null)
+                Dictionary<string, SamplingTargetDocument> targets = new();
+                foreach (var target in response.SamplingTargetDocuments)
                 {
-                    targets[target.RuleName] = target;
+                    if (target.RuleName != null)
+                    {
+                        targets[target.RuleName] = target;
+                    }
                 }
-            }
 
-            this.RulesCache.UpdateTargets(targets);
+                this.RulesCache.UpdateTargets(targets);
 
-            if (response.LastRuleModification > 0)
-            {
-                var lastRuleModificationTime = this.Clock.ToDateTime(response.LastRuleModification);
-
-                if (lastRuleModificationTime > this.RulesCache.GetUpdatedAt())
+                if (response.LastRuleModification > 0)
                 {
-                    // rules have been updated. fetch the new ones right away.
-                    this.RulePollerTimer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                    var lastRuleModificationTime = this.Clock.ToDateTime(response.LastRuleModification);
+
+                    if (lastRuleModificationTime > this.RulesCache.GetUpdatedAt())
+                    {
+                        this.RulePollerTimer.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                    }
                 }
             }
         }
-
-        // schedule next target poll
-        var nextTargetFetchTime = this.RulesCache.NextTargetFetchTime();
-        var nextTargetFetchInterval = nextTargetFetchTime.Subtract(this.Clock.Now());
-        if (nextTargetFetchInterval < TimeSpan.Zero)
+        catch (Exception)
         {
-            nextTargetFetchInterval = DefaultTargetInterval;
         }
+        finally
+        {
+            try
+            {
+                var nextTargetFetchTime = this.RulesCache.NextTargetFetchTime();
+                var nextTargetFetchInterval = nextTargetFetchTime.Subtract(this.Clock.Now());
+                if (nextTargetFetchInterval < TimeSpan.Zero)
+                {
+                    nextTargetFetchInterval = DefaultTargetInterval;
+                }
 
-        this.TargetPollerTimer.Change(nextTargetFetchInterval.Add(this.TargetPollerJitter), Timeout.InfiniteTimeSpan);
+                this.TargetPollerTimer.Change(nextTargetFetchInterval.Add(this.TargetPollerJitter), Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
     }
 }

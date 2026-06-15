@@ -162,10 +162,10 @@ public class Plugin
 
                 // Anomaly-captured spans are unsampled (traceFlags=0) so they need
                 // AwsBatchUnsampledSpanProcessor which exports regardless of sampling flag.
+                // Not registered on TracerProvider to avoid exporting ALL unsampled spans globally.
                 Resource captureResource = tracerProvider.GetResource();
                 var captureExporter = new XrayUdpExporter(captureResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
                 var captureProcessor = new AwsBatchUnsampledSpanExportProcessor(exporter: captureExporter);
-                tracerProvider.AddProcessor(captureProcessor);
 
                 adaptiveSampler.SetSpanBatcher(span => captureProcessor.OnEnd(span));
                 tracerProvider.AddProcessor(new AdaptiveSamplingSpanProcessor(adaptiveSampler));

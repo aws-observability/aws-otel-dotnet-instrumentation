@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -155,41 +154,30 @@ internal sealed class AnomalyDetector
             }
         }
 
+        bool hasAnyCriteria = condition.CompiledErrorCodeRegex != null || condition.HighLatencyMs.HasValue;
+        if (!hasAnyCriteria)
+        {
+            return true;
+        }
+
         bool isAnomaly = false;
 
-        var errorCodeRegex = condition.ErrorCodeRegex;
-        if (errorCodeRegex != null)
+        if (condition.CompiledErrorCodeRegex != null)
         {
             var statusCode = this.GetHttpStatusCode(span);
             if (statusCode != null)
             {
-                isAnomaly = this.MatchesErrorCode(errorCodeRegex, statusCode.Value);
+                isAnomaly = condition.CompiledErrorCodeRegex.IsMatch(statusCode.Value.ToString());
             }
         }
 
-        var highLatencyMs = condition.HighLatencyMs;
-        if (highLatencyMs.HasValue)
+        if (condition.HighLatencyMs.HasValue)
         {
-            bool latencyMatch = span.Duration.TotalMilliseconds >= highLatencyMs.Value;
-
-            // If both error code and latency defined, both must agree (matches Python)
-            isAnomaly = (errorCodeRegex == null || isAnomaly) && latencyMatch;
+            bool latencyMatch = span.Duration.TotalMilliseconds >= condition.HighLatencyMs.Value;
+            isAnomaly = (condition.CompiledErrorCodeRegex == null || isAnomaly) && latencyMatch;
         }
 
         return isAnomaly;
-    }
-
-    private bool MatchesErrorCode(string regex, int statusCode)
-    {
-        try
-        {
-            string anchored = regex.StartsWith("^") && regex.EndsWith("$") ? regex : $"^(?:{regex})$";
-            return Regex.IsMatch(statusCode.ToString(), anchored);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private int? GetHttpStatusCode(Activity span)
