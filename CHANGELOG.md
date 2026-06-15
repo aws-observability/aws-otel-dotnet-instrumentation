@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Add adaptive sampling support for anomaly detection and trace capture
+  ([#410](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/410))
 
 ## v1.13.0 - 2026-06-06
 - Update OpenTelemetry dependencies - Core: 1.15.3, Instrumentation: 1.15.0

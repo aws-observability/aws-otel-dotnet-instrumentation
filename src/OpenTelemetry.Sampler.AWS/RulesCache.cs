@@ -17,7 +17,6 @@ internal class RulesCache : IDisposable
     private readonly ReaderWriterLockSlim rwLock;
     private Dictionary<string, string> ruleToHashMap = new();
     private Dictionary<string, string> hashToRuleMap = new();
-    private bool isFallBackEventToWriteSwitch = true;
 
     public RulesCache(Clock clock, string clientId, Resource resource, Trace.Sampler fallbackSampler)
     {
