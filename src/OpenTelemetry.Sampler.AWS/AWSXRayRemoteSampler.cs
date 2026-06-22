@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.CodeAnalysis;
+using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -112,12 +113,18 @@ public sealed class AWSXRayRemoteSampler : Trace.Sampler, IDisposable
         var parentContext = samplingParameters.ParentContext;
         string? upstreamXrsr = GetTraceStateValue(parentContext.TraceState, RulesCache.XrsrTraceStateKey);
 
+        // Baggage fallback: if tracestate doesn't carry xrsr, check baggage
+        if (upstreamXrsr == null && parentContext.IsValid())
+        {
+            upstreamXrsr = Baggage.Current.GetBaggage(RulesCache.XrsrTraceStateKey);
+        }
+
         string? hashedRuleName = null;
         if (upstreamXrsr != null)
         {
             hashedRuleName = upstreamXrsr;
         }
-        else if (parentContext != default)
+        else if (parentContext.IsValid())
         {
             hashedRuleName = null;
         }

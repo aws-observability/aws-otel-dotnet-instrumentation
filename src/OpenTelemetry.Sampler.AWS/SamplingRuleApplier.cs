@@ -169,7 +169,7 @@ internal class SamplingRuleApplier
         }
 
         if (this.boostedFixedRateSampler != null &&
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < this.boostEndTimeMillis)
+            this.Clock.Now().ToUnixTimeMilliseconds() < this.boostEndTimeMillis)
         {
             result = this.boostedFixedRateSampler.ShouldSample(samplingParameters);
         }
@@ -238,8 +238,8 @@ internal class SamplingRuleApplier
             newReservoirEndTime,
             newNextSnapshotTime);
 
-        // Apply boost rate from target response
-        if (target.SamplingBoost != null)
+        // Apply boost rate from target response only if it raises the effective rate
+        if (target.SamplingBoost != null && target.SamplingBoost.BoostRate >= this.Rule.FixedRate)
         {
             applier.boostedFixedRateSampler = new TraceIdRatioBasedSampler(target.SamplingBoost.BoostRate);
             applier.boostEndTimeMillis = (long)(target.SamplingBoost.BoostRateTTL * 1000);

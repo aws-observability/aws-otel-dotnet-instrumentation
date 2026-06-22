@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using OpenTelemetry;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
 
@@ -84,9 +85,26 @@ internal sealed class AdaptiveSampler
         return null;
     }
 
+    private static bool IsParentValid(Activity span)
+    {
+        if (span.HasRemoteParent)
+        {
+            return true;
+        }
+
+        return span.Parent != null && span.Parent.Context.IsValid();
+    }
+
     private SamplingRuleApplier? ResolveEffectiveApplier(Activity span)
     {
         string? xrsrHash = GetTraceStateValue(span.TraceStateString, "xrsr");
+
+        // Baggage fallback: if tracestate doesn't carry xrsr, check baggage
+        if (xrsrHash == null)
+        {
+            xrsrHash = Baggage.Current.GetBaggage("xrsr");
+        }
+
         if (xrsrHash != null)
         {
             var applier = this.sampler.GetRuleApplierByHash(xrsrHash);
@@ -96,7 +114,7 @@ internal sealed class AdaptiveSampler
             }
         }
 
-        bool isRootSpan = span.Parent == null && !span.HasRemoteParent && span.ParentId == null;
+        bool isRootSpan = !IsParentValid(span);
         if (isRootSpan)
         {
             var samplingParams = new SamplingParameters(
