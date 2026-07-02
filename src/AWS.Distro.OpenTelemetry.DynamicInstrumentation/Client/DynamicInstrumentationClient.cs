@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenTelemetry;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
@@ -14,9 +15,7 @@ public class DynamicInstrumentationClient
 {
     private const int MaxPages = 3;
 
-    private static readonly ILoggerFactory LogFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Debug));
-    private static readonly ILogger Log = LogFactory.CreateLogger<DynamicInstrumentationClient>();
-
+    private readonly ILogger _log;
     private readonly HttpClient _httpClient;
     private readonly string _apiUrl;
     private readonly string _serviceName;
@@ -29,12 +28,13 @@ public class DynamicInstrumentationClient
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, string serviceName, string environment)
+    public DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, string serviceName, string environment, ILogger? logger = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _apiUrl = apiUrl;
         _serviceName = serviceName;
         _environment = environment;
+        _log = logger ?? NullLogger.Instance;
     }
 
     public async Task<FetchConfigurationsResponse> FetchConfigurationsAsync(
@@ -61,7 +61,7 @@ public class DynamicInstrumentationClient
                 $"{_apiUrl}/list-instrumentation-configurations", request, ct);
 
             if (response == null)
-                return new FetchConfigurationsResponse(false, syncedAt ?? 0, null, Array.Empty<JsonElement>());
+                return FetchConfigurationsResponse.Failed;
 
             changed = response.Changed;
             responseSyncedAt = response.SyncedAt;
@@ -78,7 +78,7 @@ public class DynamicInstrumentationClient
                 break;
         }
 
-        return new FetchConfigurationsResponse(changed, responseSyncedAt ?? 0, syncInterval, allConfigs.ToArray());
+        return new FetchConfigurationsResponse(true, changed, responseSyncedAt ?? 0, syncInterval, allConfigs.ToArray());
     }
 
     public async Task ReportStatusAsync(List<StatusEntry> statuses, CancellationToken ct = default)
@@ -120,7 +120,7 @@ public class DynamicInstrumentationClient
         }
         catch (Exception ex)
         {
-            Log.LogDebug(ex, "DI client request to {Url} failed", url);
+            _log.LogDebug(ex, "DI client request to {Url} failed", url);
             return default;
         }
     }
@@ -156,10 +156,15 @@ internal record FetchConfigurationsRawResponse
 }
 
 public record FetchConfigurationsResponse(
+    bool Success,
     bool Changed,
     long SyncedAt,
+    // TODO: wire SyncInterval into ConfigurationPoller for dynamic backpressure
     int? SyncInterval,
-    JsonElement[] Configurations);
+    JsonElement[] Configurations)
+{
+    public static readonly FetchConfigurationsResponse Failed = new(false, false, 0, null, Array.Empty<JsonElement>());
+}
 
 public record StatusEntry
 {

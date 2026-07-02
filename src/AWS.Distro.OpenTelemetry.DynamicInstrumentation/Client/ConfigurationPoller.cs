@@ -103,6 +103,9 @@ public sealed class ConfigurationPoller : IDisposable
         var syncedAt = type == InstrumentationType.PROBE ? _probeSyncedAt : _breakpointSyncedAt;
         var response = await _client.FetchConfigurationsAsync(type, syncedAt > 0 ? syncedAt : null, _ct);
 
+        if (!response.Success)
+            return false;
+
         if (!response.Changed)
             return true;
 

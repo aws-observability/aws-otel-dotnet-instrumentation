@@ -32,7 +32,7 @@ public class DynamicInstrumentationConfigTests : IDisposable
         config.ProbePollIntervalSeconds.Should().Be(600);
         config.BreakpointPollIntervalSeconds.Should().Be(60);
         config.LogsEndpoint.Should().BeEmpty();
-        config.ServiceName.Should().Be("unknown_service");
+        config.ServiceName.Should().StartWith("unknown_service:");
         config.Environment.Should().BeEmpty();
     }
 
@@ -78,6 +78,18 @@ public class DynamicInstrumentationConfigTests : IDisposable
     }
 
     [Fact]
+    public void FromEnvironment_ClampsZeroPollIntervalToMinimum()
+    {
+        SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL", "0");
+        SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL", "-5");
+
+        var config = DynamicInstrumentationConfig.FromEnvironment();
+
+        config.ProbePollIntervalSeconds.Should().Be(10);
+        config.BreakpointPollIntervalSeconds.Should().Be(10);
+    }
+
+    [Fact]
     public void FromEnvironment_ResolvesServiceNameFromOtelServiceName()
     {
         SetEnv("OTEL_SERVICE_NAME", "my-dotnet-app");
@@ -116,7 +128,7 @@ public class DynamicInstrumentationConfigTests : IDisposable
 
         var config = DynamicInstrumentationConfig.FromEnvironment();
 
-        config.ServiceName.Should().Be("unknown_service");
+        config.ServiceName.Should().StartWith("unknown_service:");
         config.Environment.Should().BeEmpty();
     }
 }

@@ -32,7 +32,7 @@ internal sealed class HitState
         _maxHits = maxHits;
         _maxCapturesPerSecond = maxCapturesPerSecond;
         _expiresAtTicks = expiresAt.HasValue
-            ? Stopwatch.GetTimestamp() + (long)((expiresAt.Value - DateTimeOffset.UtcNow).TotalSeconds * TicksPerSecond)
+            ? ComputeExpiresAtTicks(expiresAt.Value)
             : 0;
         _windowStartTicks = Stopwatch.GetTimestamp();
     }
@@ -116,6 +116,16 @@ internal sealed class HitState
     public void ResetHitInLastPeriod()
     {
         _hitInLastPeriod = false;
+    }
+
+    private static long ComputeExpiresAtTicks(DateTimeOffset expiresAt)
+    {
+        var secondsUntilExpiry = (expiresAt - DateTimeOffset.UtcNow).TotalSeconds;
+        if (secondsUntilExpiry <= 0)
+            return Stopwatch.GetTimestamp();
+        var maxSeconds = long.MaxValue / TicksPerSecond;
+        var clampedSeconds = Math.Min(secondsUntilExpiry, maxSeconds);
+        return Stopwatch.GetTimestamp() + (long)(clampedSeconds * TicksPerSecond);
     }
 }
 

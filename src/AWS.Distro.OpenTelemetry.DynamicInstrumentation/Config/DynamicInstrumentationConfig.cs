@@ -14,12 +14,14 @@ public sealed record DynamicInstrumentationConfig(
 {
     private const string Prefix = "OTEL_AWS_DYNAMIC_INSTRUMENTATION_";
 
+    private const int MinPollIntervalSeconds = 10;
+
     public static DynamicInstrumentationConfig FromEnvironment()
     {
         var enabled = GetBool($"{Prefix}ENABLED", false);
         var apiUrl = GetString($"{Prefix}API_URL", "http://localhost:2000");
-        var probePoll = GetInt($"{Prefix}PROBE_POLL_INTERVAL", 600);
-        var breakpointPoll = GetInt($"{Prefix}BREAKPOINT_POLL_INTERVAL", 60);
+        var probePoll = Math.Max(MinPollIntervalSeconds, GetInt($"{Prefix}PROBE_POLL_INTERVAL", 600));
+        var breakpointPoll = Math.Max(MinPollIntervalSeconds, GetInt($"{Prefix}BREAKPOINT_POLL_INTERVAL", 60));
         var logsEndpoint = GetString($"{Prefix}LOGS_ENDPOINT", null);
         var serviceName = ResolveServiceName();
         var environment = ResolveEnvironment();
@@ -35,7 +37,7 @@ public sealed record DynamicInstrumentationConfig(
             return name;
 
         var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? "";
-        return ExtractResourceAttribute(attrs, "service.name") ?? "unknown_service";
+        return ExtractResourceAttribute(attrs, "service.name") ?? $"unknown_service:{GetProcessName()}";
     }
 
     private static string ResolveEnvironment()
@@ -68,5 +70,17 @@ public sealed record DynamicInstrumentationConfig(
     {
         var val = System.Environment.GetEnvironmentVariable(name);
         return val != null && int.TryParse(val, out var result) ? result : defaultValue;
+    }
+
+    private static string GetProcessName()
+    {
+        try
+        {
+            return System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+        }
+        catch
+        {
+            return "dotnet";
+        }
     }
 }

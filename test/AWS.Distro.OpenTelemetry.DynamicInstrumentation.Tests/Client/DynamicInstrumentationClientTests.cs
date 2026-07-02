@@ -37,6 +37,7 @@ public class DynamicInstrumentationClientTests
 
         var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
 
+        result.Success.Should().BeTrue();
         result.Changed.Should().BeTrue();
         result.SyncedAt.Should().Be(1000);
         result.SyncInterval.Should().Be(60);
@@ -119,26 +120,57 @@ public class DynamicInstrumentationClientTests
     }
 
     [Fact]
-    public async Task FetchConfigurations_ReturnsEmpty_OnHttpError()
+    public async Task FetchConfigurations_MidPaginationFailure_ReturnsFailure()
+    {
+        int callCount = 0;
+        var handler = new MockHttpHandler(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                        "Changed": true,
+                        "SyncedAt": 1000,
+                        "NextToken": "page2",
+                        "LatestConfigurations": [{ "LocationHash": "config1" }]
+                    }
+                    """, Encoding.UTF8, "application/json")
+                };
+            }
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        var client = CreateClient(handler);
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Success.Should().BeFalse();
+        result.Configurations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_ReturnsFailure_OnHttpError()
     {
         var handler = new MockHttpHandler(HttpStatusCode.InternalServerError, "");
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
 
-        result.Changed.Should().BeFalse();
+        result.Success.Should().BeFalse();
         result.Configurations.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task FetchConfigurations_ReturnsEmpty_OnException()
+    public async Task FetchConfigurations_ReturnsFailure_OnException()
     {
         var handler = new MockHttpHandler(_ => throw new HttpRequestException("connection refused"));
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
 
-        result.Changed.Should().BeFalse();
+        result.Success.Should().BeFalse();
         result.Configurations.Should().BeEmpty();
     }
 

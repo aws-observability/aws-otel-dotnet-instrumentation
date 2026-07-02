@@ -48,7 +48,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
             try
             {
                 // 1. HTTP Client
-                _httpClient = new HttpClient();
+                _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
                 _client = new DynamicInstrumentationClient(
                     _httpClient, config.ApiUrl, config.ServiceName, config.Environment);
 
@@ -96,9 +96,15 @@ public sealed class DynamicInstrumentationManager : IDisposable
         if (!_initialized)
             return;
 
-        _cts?.Cancel();
-        _initialized = false;
-        Cleanup();
+        lock (_initLock)
+        {
+            if (!_initialized)
+                return;
+
+            _cts?.Cancel();
+            _initialized = false;
+            Cleanup();
+        }
     }
 
     private void Cleanup()
