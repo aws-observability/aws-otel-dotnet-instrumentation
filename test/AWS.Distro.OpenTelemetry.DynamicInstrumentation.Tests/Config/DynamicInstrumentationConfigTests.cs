@@ -5,6 +5,7 @@ using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Config;
 
+[Collection("SerialProcessState")]
 public class DynamicInstrumentationConfigTests : IDisposable
 {
     private readonly List<string> _envVarsSet = new();

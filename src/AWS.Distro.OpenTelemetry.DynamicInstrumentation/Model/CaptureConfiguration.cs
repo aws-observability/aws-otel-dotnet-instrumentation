@@ -14,7 +14,7 @@ public sealed record CaptureConfiguration(
     int MaxObjectDepth,
     int MaxFieldsPerObject,
     int MaxStackFrames,
-    int MaxHits)
+    int? MaxHits)
 {
     private const int DefaultMaxStringLength = 255;
     private const int DefaultMaxCollectionWidth = 20;
@@ -23,6 +23,8 @@ public sealed record CaptureConfiguration(
     private const int DefaultMaxFieldsPerObject = 20;
     private const int DefaultMaxStackFrames = 20;
     private const int DefaultMaxHits = 100;
+
+    public bool HasHitLimit => MaxHits.HasValue;
 
     public static CaptureConfiguration Default => new(
         CaptureArguments: Array.Empty<string>(),

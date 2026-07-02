@@ -11,8 +11,6 @@ public sealed class ConfigurationPoller : IDisposable
     private static readonly int[] BackoffDelaysMs = { 10_000, 30_000, 120_000 };
     private const int DegradedIntervalMs = 300_000;
     private const double JitterFactor = 0.25;
-    private const long ProbeStalenessMs = 30 * 60 * 1000;
-    private const long BreakpointStalenessMs = 5 * 60 * 1000;
 
     private readonly DynamicInstrumentationClient _client;
     private readonly int _probeIntervalMs;
@@ -25,8 +23,7 @@ public sealed class ConfigurationPoller : IDisposable
 
     private long _probeSyncedAt;
     private long _breakpointSyncedAt;
-    private long _probeLastSuccessMs;
-    private long _breakpointLastSuccessMs;
+    // TODO: staleness tracking — force full resync when no success for 30m (probes) / 5m (breakpoints)
     private HashSet<string> _lastFingerprint = new();
 
     private readonly object _configLock = new();
@@ -50,7 +47,11 @@ public sealed class ConfigurationPoller : IDisposable
     public void Start()
     {
         _probeThread = new Thread(() => PollLoop(InstrumentationType.PROBE)) { IsBackground = true, Name = "DI-ProbePoller" };
-        _breakpointThread = new Thread(() => PollLoop(InstrumentationType.BREAKPOINT)) { IsBackground = true, Name = "DI-BreakpointPoller" };
+        _breakpointThread = new Thread(() =>
+        {
+            WaitWithCancellation(500);
+            PollLoop(InstrumentationType.BREAKPOINT);
+        }) { IsBackground = true, Name = "DI-BreakpointPoller" };
         _probeThread.Start();
         _breakpointThread.Start();
     }
@@ -58,7 +59,6 @@ public sealed class ConfigurationPoller : IDisposable
     private void PollLoop(InstrumentationType type)
     {
         var intervalMs = type == InstrumentationType.PROBE ? _probeIntervalMs : _breakpointIntervalMs;
-        var stalenessMs = type == InstrumentationType.PROBE ? ProbeStalenessMs : BreakpointStalenessMs;
         int failedAttempts = 0;
         bool degraded = false;
 
@@ -72,9 +72,6 @@ public sealed class ConfigurationPoller : IDisposable
                 {
                     failedAttempts = 0;
                     degraded = false;
-                    var lastSuccess = type == InstrumentationType.PROBE
-                        ? ref _probeLastSuccessMs : ref _breakpointLastSuccessMs;
-                    lastSuccess = Environment.TickCount64;
                 }
                 else
                 {
@@ -122,7 +119,8 @@ public sealed class ConfigurationPoller : IDisposable
             .Cast<InstrumentationConfiguration>()
             .ToList();
 
-        // Update cache and merge
+        // Update cache and merge — snapshot under lock, invoke callback outside
+        List<InstrumentationConfiguration> snapshot;
         lock (_configLock)
         {
             if (type == InstrumentationType.PROBE)
@@ -140,9 +138,10 @@ public sealed class ConfigurationPoller : IDisposable
                 return true;
 
             _lastFingerprint = fingerprint;
-            _onConfigurationsChanged(allConfigs);
+            snapshot = allConfigs;
         }
 
+        _onConfigurationsChanged(snapshot);
         return true;
     }
 

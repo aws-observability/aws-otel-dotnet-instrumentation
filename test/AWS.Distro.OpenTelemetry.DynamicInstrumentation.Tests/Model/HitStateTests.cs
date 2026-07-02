@@ -55,7 +55,7 @@ public class HitStateTests
     [Fact]
     public void TryHit_Expired_DisablesAndReturnsFalse()
     {
-        var state = new HitState(maxHits: int.MaxValue, expiresAt: DateTimeOffset.UtcNow.AddMilliseconds(-100));
+        var state = new HitState(maxHits: null, expiresAt: DateTimeOffset.UtcNow.AddMilliseconds(-100));
 
         state.TryHit().Should().BeFalse();
         state.IsDisabled.Should().BeTrue();
@@ -65,7 +65,7 @@ public class HitStateTests
     [Fact]
     public void TryHit_NotExpired_Allows()
     {
-        var state = new HitState(maxHits: int.MaxValue, expiresAt: DateTimeOffset.UtcNow.AddHours(1));
+        var state = new HitState(maxHits: null, expiresAt: DateTimeOffset.UtcNow.AddHours(1));
 
         state.TryHit().Should().BeTrue();
     }
@@ -73,7 +73,7 @@ public class HitStateTests
     [Fact]
     public void TryHit_RateLimiter_BlocksExcessInSameWindow()
     {
-        var state = new HitState(maxHits: int.MaxValue, expiresAt: null, maxCapturesPerSecond: 3);
+        var state = new HitState(maxHits: null, expiresAt: null, maxCapturesPerSecond: 3);
 
         state.TryHit().Should().BeTrue();  // 1
         state.TryHit().Should().BeTrue();  // 2
@@ -99,7 +99,7 @@ public class HitStateTests
     [Fact]
     public void TryHit_UnlimitedMaxHits_NeverDisablesFromCount()
     {
-        var state = new HitState(maxHits: int.MaxValue, expiresAt: null, maxCapturesPerSecond: 1000);
+        var state = new HitState(maxHits: null, expiresAt: null, maxCapturesPerSecond: 1000);
 
         for (int i = 0; i < 500; i++)
             state.TryHit().Should().BeTrue();

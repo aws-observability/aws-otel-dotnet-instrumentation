@@ -1,11 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
-using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
-using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 using OpenTelemetry.Trace;
 
@@ -14,6 +11,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 public sealed class DynamicInstrumentationManager : IDisposable
 {
     private static readonly Lazy<DynamicInstrumentationManager> LazyInstance = new(() => new DynamicInstrumentationManager());
+    private readonly object _initLock = new();
     private volatile bool _initialized;
     private DynamicInstrumentationConfig? _config;
     private CancellationTokenSource? _cts;
@@ -21,8 +19,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private HttpClient? _httpClient;
     private DynamicInstrumentationClient? _client;
     private ConfigurationPoller? _poller;
-    private InstrumentationRegistry? _registry;
-    private ProfilerTranslator? _profilerTranslator;
+    // TODO (PR 2): InstrumentationRegistry, ProfilerTranslator fields
+    // TODO (PR 3): DISnapshotCollector, DISnapshotOtlpEmitter, StatusReporter fields
 
     private DynamicInstrumentationManager() { }
 
@@ -32,51 +30,50 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
     public DynamicInstrumentationConfig? Config => _config;
 
-    internal InstrumentationRegistry? Registry => _registry;
-
     public void Initialize(DynamicInstrumentationConfig config)
     {
+        ArgumentNullException.ThrowIfNull(config);
+
         if (_initialized)
             return;
 
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _cts = new CancellationTokenSource();
-
-        try
+        lock (_initLock)
         {
-            // 1. Registry
-            _registry = new InstrumentationRegistry();
+            if (_initialized)
+                return;
 
-            // 2. Wire DiIntegrationHelper to registry
-            DiIntegrationHelper.Configure(_registry);
+            _config = config;
+            _cts = new CancellationTokenSource();
 
-            // 3. HTTP Client
-            _httpClient = new HttpClient();
-            _client = new DynamicInstrumentationClient(
-                _httpClient, config.ApiUrl, config.ServiceName, config.Environment);
+            try
+            {
+                // 1. HTTP Client
+                _httpClient = new HttpClient();
+                _client = new DynamicInstrumentationClient(
+                    _httpClient, config.ApiUrl, config.ServiceName, config.Environment);
 
-            // 4. Profiler Translator
-            _profilerTranslator = new ProfilerTranslator();
+                // 2. Configuration Poller (starts 2 background threads)
+                _poller = new ConfigurationPoller(
+                    _client,
+                    config.ProbePollIntervalSeconds,
+                    config.BreakpointPollIntervalSeconds,
+                    OnConfigurationsChanged,
+                    _cts.Token);
+                _poller.Start();
 
-            // 5. Configuration Poller (starts 2 background threads)
-            _poller = new ConfigurationPoller(
-                _client,
-                config.ProbePollIntervalSeconds,
-                config.BreakpointPollIntervalSeconds,
-                OnConfigurationsChanged,
-                _cts.Token);
-            _poller.Start();
+                // TODO: InstrumentationRegistry (PR 2)
+                // TODO: ProfilerTranslator + DiIntegrationHelper (PR 2)
+                // TODO: DISnapshotCollector (PR 3)
+                // TODO: DISnapshotOtlpEmitter (PR 3)
+                // TODO: StatusReporter (PR 3)
 
-            // 6. TODO: DISnapshotCollector (drain thread)
-            // 7. TODO: DISnapshotOtlpEmitter (LoggerProvider)
-            // 8. TODO: StatusReporter (60s timer)
-
-            _initialized = true;
-        }
-        catch (Exception)
-        {
-            Cleanup();
-            throw;
+                _initialized = true;
+            }
+            catch (Exception)
+            {
+                Cleanup();
+                throw;
+            }
         }
     }
 
@@ -87,30 +84,11 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
     /// <summary>
     /// Called by ConfigurationPoller when configs change.
-    /// Applies new instrumentations and removes stale ones.
+    /// PR 2 will wire registry + profiler translator here.
     /// </summary>
     internal void OnConfigurationsChanged(List<InstrumentationConfiguration> configs)
     {
-        if (_registry == null || _profilerTranslator == null)
-            return;
-
-        var activeKeys = new HashSet<string>();
-
-        foreach (var config in configs)
-        {
-            // Skip unsupported targets
-            if (ProfilerTranslator.IsUnsupportedTarget(config))
-                continue;
-
-            _registry.Register(config);
-            activeKeys.Add(config.InstrumentationKey);
-
-            // Apply instrumentation via native profiler
-            _profilerTranslator.ApplyInstrumentation(config);
-        }
-
-        // Remove configs no longer in the active set
-        _registry.RemoveStale(activeKeys);
+        // TODO (PR 2): Register configs, apply via ProfilerTranslator, remove stale
     }
 
     public void Shutdown()
@@ -131,8 +109,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
         _poller = null;
         _client = null;
         _httpClient = null;
-        _registry = null;
-        _profilerTranslator = null;
+        // TODO (PR 2): nullify registry, profilerTranslator
+        // TODO (PR 3): dispose/nullify snapshotCollector, otlpEmitter, statusReporter
     }
 
     public void Dispose()

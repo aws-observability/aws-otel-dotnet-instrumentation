@@ -259,7 +259,7 @@ public class InstrumentationConfigurationTests
     }
 
     [Fact]
-    public void Parse_ProbeMaxHits_IsIntMaxValue()
+    public void Parse_ProbeMaxHits_IsUnlimited()
     {
         var json = """
         {
@@ -276,7 +276,7 @@ public class InstrumentationConfigurationTests
 
         var config = InstrumentationConfiguration.Parse(Parse(json));
 
-        config!.Capture.MaxHits.Should().Be(int.MaxValue);
+        config!.Capture.MaxHits.Should().BeNull();
     }
 
     [Fact]

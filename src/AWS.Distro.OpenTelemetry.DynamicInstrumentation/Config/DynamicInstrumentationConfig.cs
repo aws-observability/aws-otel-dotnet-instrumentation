@@ -50,7 +50,7 @@ public sealed record DynamicInstrumentationConfig(
         {
             var parts = pair.Split('=', 2);
             if (parts.Length == 2 && parts[0].Trim() == key)
-                return parts[1].Trim();
+                return Uri.UnescapeDataString(parts[1].Trim());
         }
         return null;
     }

@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
@@ -12,6 +13,9 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 public class DynamicInstrumentationClient
 {
     private const int MaxPages = 3;
+
+    private static readonly ILoggerFactory LogFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Debug));
+    private static readonly ILogger Log = LogFactory.CreateLogger<DynamicInstrumentationClient>();
 
     private readonly HttpClient _httpClient;
     private readonly string _apiUrl;
@@ -110,8 +114,13 @@ public class DynamicInstrumentationClient
 
             return JsonSerializer.Deserialize<TResponse>(content, JsonOptions);
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.LogDebug(ex, "DI client request to {Url} failed", url);
             return default;
         }
     }

@@ -6,6 +6,7 @@ using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests;
 
+[Collection("SerialProcessState")]
 public class DynamicInstrumentationManagerTests
 {
     private static DynamicInstrumentationConfig CreateConfig(bool enabled = true) =>

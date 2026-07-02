@@ -13,19 +13,21 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 internal sealed class HitState
 {
     private const int DefaultMaxCapturesPerSecond = 5;
+    private const int HitCountCap = int.MaxValue - 1;
     private static readonly long TicksPerSecond = Stopwatch.Frequency;
 
-    private readonly int _maxHits;
+    private readonly int? _maxHits; // null = unlimited (probes)
     private readonly long _expiresAtTicks; // 0 = no expiry
     private readonly int _maxCapturesPerSecond;
 
     private int _hitCount;
-    private volatile bool _disabled;
+    private int _disabled; // 0 = active, 1 = disabled (atomic via CompareExchange)
+    private volatile int _reason; // 0 = none, maps to DisableReason+1
     private long _windowStartTicks;
     private int _windowCount;
     private volatile bool _hitInLastPeriod;
 
-    public HitState(int maxHits, DateTimeOffset? expiresAt, int maxCapturesPerSecond = DefaultMaxCapturesPerSecond)
+    public HitState(int? maxHits, DateTimeOffset? expiresAt, int maxCapturesPerSecond = DefaultMaxCapturesPerSecond)
     {
         _maxHits = maxHits;
         _maxCapturesPerSecond = maxCapturesPerSecond;
@@ -35,24 +37,23 @@ internal sealed class HitState
         _windowStartTicks = Stopwatch.GetTimestamp();
     }
 
-    public int HitCount => _hitCount;
-    public bool IsDisabled => _disabled;
+    public int HitCount => Volatile.Read(ref _hitCount);
+    public bool IsDisabled => Volatile.Read(ref _disabled) == 1;
     public bool HitInLastPeriod => _hitInLastPeriod;
-    public DisableReason? Reason { get; private set; }
+    public DisableReason? Reason => _reason == 0 ? null : (DisableReason)(_reason - 1);
 
     /// <summary>
     /// Attempt to record a hit. Returns true if the capture should proceed.
     /// </summary>
     public bool TryHit()
     {
-        if (_disabled)
+        if (Volatile.Read(ref _disabled) == 1)
             return false;
 
         // Check expiry
         if (_expiresAtTicks > 0 && Stopwatch.GetTimestamp() > _expiresAtTicks)
         {
-            _disabled = true;
-            Reason = DisableReason.EXPIRED_AT;
+            TryDisable(DisableReason.EXPIRED_AT);
             return false;
         }
 
@@ -65,13 +66,8 @@ internal sealed class HitState
             if (Interlocked.CompareExchange(ref _windowStartTicks, now, windowStart) == windowStart)
             {
                 Interlocked.Exchange(ref _windowCount, 1);
-                var c = Interlocked.Increment(ref _hitCount);
-                if (c > _maxHits)
-                {
-                    _disabled = true;
-                    Reason = DisableReason.MAX_HITS_EXCEEDED;
+                if (!IncrementAndCheckMaxHits())
                     return false;
-                }
                 _hitInLastPeriod = true;
                 return true;
             }
@@ -85,16 +81,33 @@ internal sealed class HitState
         }
 
         // Only count toward maxHits if rate limiter allowed it
-        var count = Interlocked.Increment(ref _hitCount);
-        if (count > _maxHits)
-        {
-            _disabled = true;
-            Reason = DisableReason.MAX_HITS_EXCEEDED;
+        if (!IncrementAndCheckMaxHits())
             return false;
-        }
 
         _hitInLastPeriod = true;
         return true;
+    }
+
+    private bool IncrementAndCheckMaxHits()
+    {
+        var count = Interlocked.Increment(ref _hitCount);
+        if (count > HitCountCap)
+        {
+            Interlocked.Exchange(ref _hitCount, HitCountCap);
+            count = HitCountCap;
+        }
+        if (_maxHits.HasValue && count > _maxHits.Value)
+        {
+            TryDisable(DisableReason.MAX_HITS_EXCEEDED);
+            return false;
+        }
+        return true;
+    }
+
+    private void TryDisable(DisableReason reason)
+    {
+        if (Interlocked.CompareExchange(ref _disabled, 1, 0) == 0)
+            Volatile.Write(ref _reason, (int)reason + 1);
     }
 
     /// <summary>

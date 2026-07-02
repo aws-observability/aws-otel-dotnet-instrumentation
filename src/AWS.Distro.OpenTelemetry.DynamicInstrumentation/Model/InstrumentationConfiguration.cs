@@ -110,7 +110,7 @@ public sealed class InstrumentationConfiguration
         int maxObjectDepth = CaptureConfiguration.Default.MaxObjectDepth;
         int maxFieldsPerObject = CaptureConfiguration.Default.MaxFieldsPerObject;
         int maxStackFrames = CaptureConfiguration.Default.MaxStackFrames;
-        int maxHits = type == InstrumentationType.PROBE ? int.MaxValue : CaptureConfiguration.Default.MaxHits;
+        int? maxHits = type == InstrumentationType.PROBE ? null : CaptureConfiguration.Default.MaxHits;
 
         if (codeCapture.TryGetProperty("CaptureLimits", out var limits))
         {
@@ -130,7 +130,7 @@ public sealed class InstrumentationConfiguration
             if (type == InstrumentationType.BREAKPOINT)
             {
                 maxHits = CaptureConfiguration.ClampMaxHits(
-                    GetIntOrDefault(limits, "MaxHits", maxHits));
+                    GetIntOrDefault(limits, "MaxHits", maxHits ?? CaptureConfiguration.Default.MaxHits!.Value));
             }
         }
 
