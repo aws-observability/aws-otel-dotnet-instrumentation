@@ -6,6 +6,7 @@ using System.Reflection;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 
 namespace AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
@@ -16,11 +17,15 @@ public class OtlpExporterUtils
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpExporterUtils>();
 
     private static readonly MethodInfo? WriteTraceDataMethod;
+    private static readonly MethodInfo? WriteLogsDataMethod;
     private static readonly object? SdkLimitOptions;
+    private static readonly object? ExperimentalOptions;
 
     static OtlpExporterUtils() {
         Type? otlpSerializerType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer.ProtobufOtlpTraceSerializer, OpenTelemetry.Exporter.OpenTelemetryProtocol");
+        Type? otlpLogSerializerType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer.ProtobufOtlpLogSerializer, OpenTelemetry.Exporter.OpenTelemetryProtocol");
         Type? sdkLimitOptionsType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.SdkLimitOptions, OpenTelemetry.Exporter.OpenTelemetryProtocol");
+        Type? experimentalOptionsType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExperimentalOptions, OpenTelemetry.Exporter.OpenTelemetryProtocol");
 
         if (sdkLimitOptionsType == null)
         {
@@ -38,7 +43,7 @@ public class OtlpExporterUtils
             "WriteTraceData",
             BindingFlags.NonPublic | BindingFlags.Static,
             null,
-            new[] 
+            new[]
             {
                 typeof(byte[]).MakeByRefType(),    // ref byte[] buffer
                 typeof(int),                       // int writePosition
@@ -47,7 +52,21 @@ public class OtlpExporterUtils
                 typeof(Batch<Activity>).MakeByRefType() // in Batch<Activity>
             },
             null)
-            ?? throw new MissingMethodException("WriteTraceData not found");  // :contentReference[oaicite:1]{index=1}
+            ?? throw new MissingMethodException("WriteTraceData not found");
+
+        if (otlpLogSerializerType != null)
+        {
+            WriteLogsDataMethod = otlpLogSerializerType.GetMethod(
+                "WriteLogsData",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                null,
+                experimentalOptionsType != null
+                    ? new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, experimentalOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() }
+                    : new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() },
+                null);
+
+            ExperimentalOptions = experimentalOptionsType != null ? Activator.CreateInstance(experimentalOptionsType) : null;
+        }
 
         SdkLimitOptions = GetSdkLimitOptions();
     }
@@ -77,6 +96,27 @@ public class OtlpExporterUtils
         // Unpack ref-buffer
         buffer = (byte[])args[0];
 
+        return result;
+    }
+
+
+    public static int WriteLogsData(
+        ref byte[] buffer,
+        int writePosition,
+        Resource? resource,
+        in Batch<LogRecord> batch)
+    {
+        if (SdkLimitOptions == null || WriteLogsDataMethod == null)
+        {
+            return -1;
+        }
+
+        object[] args = ExperimentalOptions != null && WriteLogsDataMethod.GetParameters().Length == 6
+            ? new object[] { buffer, writePosition, SdkLimitOptions, ExperimentalOptions, resource!, batch! }
+            : new object[] { buffer, writePosition, SdkLimitOptions, resource!, batch! };
+
+        var result = (int)WriteLogsDataMethod.Invoke(obj: null, parameters: args)!;
+        buffer = (byte[])args[0];
         return result;
     }
 
