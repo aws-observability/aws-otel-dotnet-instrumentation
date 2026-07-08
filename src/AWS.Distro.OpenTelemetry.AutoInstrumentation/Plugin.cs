@@ -21,8 +21,10 @@ using OpenTelemetry.Instrumentation.AspNet;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
+#if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+#endif
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
@@ -96,7 +98,9 @@ public class Plugin
     /// </summary>public void Initializing()
     public void Initializing()
     {
+#if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
+#endif
     }
 
     /// <summary>
@@ -190,8 +194,10 @@ public class Plugin
             tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
         }
 
+#if !NETFRAMEWORK
         // No-op unless Dynamic Instrumentation was initialized in Initializing().
         DynamicInstrumentationManager.OnTracerProviderInitialized(tracerProvider);
+#endif
     }
 
     /// <summary>
@@ -535,10 +541,12 @@ public class Plugin
         return headers;
     }
 
+#if !NETFRAMEWORK
     // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
-    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent).
+    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
+    // DI is a modern-profiler feature not shipped in the net462 build.
     private void InitializeDynamicInstrumentation()
     {
         try
@@ -561,6 +569,7 @@ public class Plugin
             Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
         }
     }
+#endif
 
     // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)
     // are finally available from the http instrumentation libraries. The sampler hooked into the Opentelemetry SDK
