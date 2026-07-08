@@ -3,8 +3,14 @@
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 
+/// <summary>
+/// The kind of dynamic instrumentation: a permanent probe or a temporary breakpoint.
+/// </summary>
 public enum InstrumentationType
 {
+    /// <summary>A permanent instrumentation that persists until explicitly removed.</summary>
     PROBE,
-    BREAKPOINT
+
+    /// <summary>A temporary instrumentation that auto-expires.</summary>
+    BREAKPOINT,
 }

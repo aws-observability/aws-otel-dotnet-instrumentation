@@ -8,119 +8,144 @@ using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 
+/// <summary>
+/// Singleton orchestrator for Dynamic Instrumentation. Owns the HTTP client, configuration
+/// poller, and (in later PRs) the capture engine and output subsystems.
+/// </summary>
 public sealed class DynamicInstrumentationManager : IDisposable
 {
     private static readonly Lazy<DynamicInstrumentationManager> LazyInstance = new(() => new DynamicInstrumentationManager());
-    private readonly object _initLock = new();
-    private volatile bool _initialized;
-    private DynamicInstrumentationConfig? _config;
-    private CancellationTokenSource? _cts;
 
-    private HttpClient? _httpClient;
-    private DynamicInstrumentationClient? _client;
-    private ConfigurationPoller? _poller;
+    private readonly object initLock = new();
+    private volatile bool initialized;
+    private DynamicInstrumentationConfig? config;
+    private CancellationTokenSource? cts;
+
+    private HttpClient? httpClient;
+    private DynamicInstrumentationClient? client;
+    private ConfigurationPoller? poller;
+
     // TODO (PR 2): InstrumentationRegistry, ProfilerTranslator fields
     // TODO (PR 3): DISnapshotCollector, DISnapshotOtlpEmitter, StatusReporter fields
+    private DynamicInstrumentationManager()
+    {
+    }
 
-    private DynamicInstrumentationManager() { }
-
+    /// <summary>Gets the singleton instance.</summary>
     public static DynamicInstrumentationManager Instance => LazyInstance.Value;
 
-    public bool IsInitialized => _initialized;
+    /// <summary>Gets a value indicating whether the manager has been initialized.</summary>
+    public bool IsInitialized => this.initialized;
 
-    public DynamicInstrumentationConfig? Config => _config;
+    /// <summary>Gets the active configuration, if initialized.</summary>
+    public DynamicInstrumentationConfig? Config => this.config;
 
+    /// <summary>Hook invoked once the TracerProvider is built. Currently a no-op.</summary>
+    /// <param name="provider">The initialized tracer provider.</param>
+    public static void OnTracerProviderInitialized(TracerProvider provider)
+    {
+        // TracerProvider available — could extract Resource attributes if needed.
+    }
+
+    /// <summary>Initializes the manager and starts configuration polling. Idempotent.</summary>
+    /// <param name="config">The resolved configuration.</param>
     public void Initialize(DynamicInstrumentationConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
 
-        if (_initialized)
-            return;
-
-        lock (_initLock)
+        if (this.initialized)
         {
-            if (_initialized)
-                return;
+            return;
+        }
 
-            _config = config;
-            _cts = new CancellationTokenSource();
+        lock (this.initLock)
+        {
+            if (this.initialized)
+            {
+                return;
+            }
+
+            this.config = config;
+            this.cts = new CancellationTokenSource();
 
             try
             {
                 // 1. HTTP Client
-                _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                _client = new DynamicInstrumentationClient(
-                    _httpClient, config.ApiUrl, config.ServiceName, config.Environment);
+                this.httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                this.client = new DynamicInstrumentationClient(
+                    this.httpClient, config.ApiUrl, config.ServiceName, config.Environment);
 
                 // 2. Configuration Poller (starts 2 background threads)
-                _poller = new ConfigurationPoller(
-                    _client,
+                this.poller = new ConfigurationPoller(
+                    this.client,
                     config.ProbePollIntervalSeconds,
                     config.BreakpointPollIntervalSeconds,
-                    OnConfigurationsChanged,
-                    _cts.Token);
-                _poller.Start();
+                    this.OnConfigurationsChanged,
+                    this.cts.Token);
+                this.poller.Start();
 
                 // TODO: InstrumentationRegistry (PR 2)
                 // TODO: ProfilerTranslator + DiIntegrationHelper (PR 2)
                 // TODO: DISnapshotCollector (PR 3)
                 // TODO: DISnapshotOtlpEmitter (PR 3)
                 // TODO: StatusReporter (PR 3)
-
-                _initialized = true;
+                this.initialized = true;
             }
             catch (Exception)
             {
-                Cleanup();
+                this.Cleanup();
                 throw;
             }
         }
     }
 
-    public void OnTracerProviderInitialized(TracerProvider provider)
+    /// <summary>Stops polling and releases resources. Idempotent.</summary>
+    public void Shutdown()
     {
-        // TracerProvider available — could extract Resource attributes if needed.
+        if (!this.initialized)
+        {
+            return;
+        }
+
+        lock (this.initLock)
+        {
+            if (!this.initialized)
+            {
+                return;
+            }
+
+            this.cts?.Cancel();
+            this.initialized = false;
+            this.Cleanup();
+        }
+    }
+
+    /// <summary>Disposes the manager by shutting it down.</summary>
+    public void Dispose()
+    {
+        this.Shutdown();
     }
 
     /// <summary>
-    /// Called by ConfigurationPoller when configs change.
-    /// PR 2 will wire registry + profiler translator here.
+    /// Called by <see cref="ConfigurationPoller"/> when the active configuration set changes.
+    /// PR 2 will wire the registry and profiler translator here.
     /// </summary>
+    /// <param name="configs">The merged active configuration set.</param>
     internal void OnConfigurationsChanged(List<InstrumentationConfiguration> configs)
     {
         // TODO (PR 2): Register configs, apply via ProfilerTranslator, remove stale
     }
 
-    public void Shutdown()
-    {
-        if (!_initialized)
-            return;
-
-        lock (_initLock)
-        {
-            if (!_initialized)
-                return;
-
-            _cts?.Cancel();
-            _initialized = false;
-            Cleanup();
-        }
-    }
-
     private void Cleanup()
     {
-        _poller?.Dispose();
-        _httpClient?.Dispose();
-        _cts?.Dispose();
-        _poller = null;
-        _client = null;
-        _httpClient = null;
+        this.poller?.Dispose();
+        this.httpClient?.Dispose();
+        this.cts?.Dispose();
+        this.poller = null;
+        this.client = null;
+        this.httpClient = null;
+
         // TODO (PR 2): nullify registry, profilerTranslator
         // TODO (PR 3): dispose/nullify snapshotCollector, otlpEmitter, statusReporter
-    }
-
-    public void Dispose()
-    {
-        Shutdown();
     }
 }

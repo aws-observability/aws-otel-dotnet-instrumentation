@@ -11,6 +11,8 @@
     <Description>Dynamic Instrumentation plugin for AWS Distro for OpenTelemetry .NET.</Description>
     <AssemblyName>AWS.Distro.OpenTelemetry.DynamicInstrumentation</AssemblyName>
     <RootNamespace>AWS.Distro.OpenTelemetry.DynamicInstrumentation</RootNamespace>
+    <!-- Held to the same StyleCop bar as the main AutoInstrumentation project. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

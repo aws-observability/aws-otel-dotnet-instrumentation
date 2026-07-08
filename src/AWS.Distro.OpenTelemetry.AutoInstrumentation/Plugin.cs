@@ -99,33 +99,6 @@ public class Plugin
         this.InitializeDynamicInstrumentation();
     }
 
-    // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
-    // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
-    // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
-    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent).
-    private void InitializeDynamicInstrumentation()
-    {
-        try
-        {
-            if (AwsSpanProcessingUtil.IsLambdaEnvironment())
-            {
-                return;
-            }
-
-            var config = DynamicInstrumentationConfig.FromEnvironment();
-            if (!config.Enabled)
-            {
-                return;
-            }
-
-            DynamicInstrumentationManager.Instance.Initialize(config);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
-        }
-    }
-
     /// <summary>
     /// To access TracerProvider right after TracerProviderBuilder.Build() is executed.
     /// </summary>
@@ -218,7 +191,7 @@ public class Plugin
         }
 
         // No-op unless Dynamic Instrumentation was initialized in Initializing().
-        DynamicInstrumentationManager.Instance.OnTracerProviderInitialized(tracerProvider);
+        DynamicInstrumentationManager.OnTracerProviderInitialized(tracerProvider);
     }
 
     /// <summary>
@@ -560,6 +533,33 @@ public class Plugin
         }
 
         return headers;
+    }
+
+    // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
+    // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
+    // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
+    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent).
+    private void InitializeDynamicInstrumentation()
+    {
+        try
+        {
+            if (AwsSpanProcessingUtil.IsLambdaEnvironment())
+            {
+                return;
+            }
+
+            var config = DynamicInstrumentationConfig.FromEnvironment();
+            if (!config.Enabled)
+            {
+                return;
+            }
+
+            DynamicInstrumentationManager.Instance.Initialize(config);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
+        }
     }
 
     // This new function runs the sampler a second time after the needed attributes (such as UrlPath and HttpTarget)

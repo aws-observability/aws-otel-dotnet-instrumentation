@@ -3,6 +3,16 @@
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
 
+/// <summary>
+/// Dynamic Instrumentation configuration resolved from environment variables.
+/// </summary>
+/// <param name="Enabled">Whether the feature is enabled.</param>
+/// <param name="ApiUrl">Base URL of the configuration API (the local CloudWatch Agent).</param>
+/// <param name="ProbePollIntervalSeconds">Seconds between probe configuration polls.</param>
+/// <param name="BreakpointPollIntervalSeconds">Seconds between breakpoint configuration polls.</param>
+/// <param name="LogsEndpoint">Optional OTLP logs endpoint for emitting snapshots.</param>
+/// <param name="ServiceName">Resolved service name.</param>
+/// <param name="Environment">Resolved deployment environment.</param>
 public sealed record DynamicInstrumentationConfig(
     bool Enabled,
     string ApiUrl,
@@ -16,6 +26,8 @@ public sealed record DynamicInstrumentationConfig(
 
     private const int MinPollIntervalSeconds = 10;
 
+    /// <summary>Builds a configuration from the process environment variables.</summary>
+    /// <returns>The resolved configuration.</returns>
     public static DynamicInstrumentationConfig FromEnvironment()
     {
         var enabled = GetBool($"{Prefix}ENABLED", false);
@@ -34,19 +46,22 @@ public sealed record DynamicInstrumentationConfig(
     {
         var name = System.Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME");
         if (!string.IsNullOrEmpty(name))
+        {
             return name;
+        }
 
-        var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? "";
+        var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? string.Empty;
         return ExtractResourceAttribute(attrs, "service.name") ?? $"unknown_service:{GetProcessName()}";
     }
 
     private static string ResolveEnvironment()
     {
-        var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? "";
+        var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? string.Empty;
+
         // Newer stable key, falling back to the legacy key.
         return ExtractResourceAttribute(attrs, "deployment.environment.name")
             ?? ExtractResourceAttribute(attrs, "deployment.environment")
-            ?? "";
+            ?? string.Empty;
     }
 
     private static string? ExtractResourceAttribute(string attrs, string key)
@@ -55,8 +70,11 @@ public sealed record DynamicInstrumentationConfig(
         {
             var parts = pair.Split('=', 2);
             if (parts.Length == 2 && parts[0].Trim() == key)
+            {
                 return Uri.UnescapeDataString(parts[1].Trim());
+            }
         }
+
         return null;
     }
 
@@ -67,7 +85,7 @@ public sealed record DynamicInstrumentationConfig(
     }
 
     private static string GetString(string name, string? defaultValue) =>
-        System.Environment.GetEnvironmentVariable(name) ?? defaultValue ?? "";
+        System.Environment.GetEnvironmentVariable(name) ?? defaultValue ?? string.Empty;
 
     private static int GetInt(string name, int defaultValue)
     {

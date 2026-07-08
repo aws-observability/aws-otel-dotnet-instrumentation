@@ -224,10 +224,10 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_SendsCorrectRequestBody()
     {
-        string? capturedBody = null;
+        HttpContent? capturedContent = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            capturedContent = req.Content;
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json")
@@ -238,8 +238,9 @@ public class DynamicInstrumentationClientTests
         await client.FetchConfigurationsAsync(
             InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
 
-        capturedBody.Should().NotBeNull();
-        var doc = JsonDocument.Parse(capturedBody!);
+        capturedContent.Should().NotBeNull();
+        var capturedBody = await capturedContent!.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(capturedBody);
         // Request fields must be PascalCase to match the API (and the Java/Python/Node SDKs).
         // A case-sensitive backend treats camelCase as missing → empty/unfiltered configs.
         doc.RootElement.GetProperty("Service").GetString().Should().Be("test-service");
@@ -252,10 +253,10 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task ReportStatus_SendsRequest()
     {
-        string? capturedBody = null;
+        HttpContent? capturedContent = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            capturedContent = req.Content;
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
@@ -265,7 +266,8 @@ public class DynamicInstrumentationClientTests
             new() { LocationHash = "hash1", Status = "READY", InstrumentationType = "PROBE" }
         });
 
-        capturedBody.Should().NotBeNull();
+        capturedContent.Should().NotBeNull();
+        var capturedBody = await capturedContent!.ReadAsStringAsync();
         capturedBody.Should().Contain("hash1");
         capturedBody.Should().Contain("READY");
     }
