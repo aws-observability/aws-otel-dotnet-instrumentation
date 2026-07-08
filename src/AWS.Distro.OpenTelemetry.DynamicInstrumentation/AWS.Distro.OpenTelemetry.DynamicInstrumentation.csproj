@@ -13,6 +13,10 @@
     <RootNamespace>AWS.Distro.OpenTelemetry.DynamicInstrumentation</RootNamespace>
     <!-- Held to the same StyleCop bar as the main AutoInstrumentation project. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Strong-name signed with the same key as the main project, which references this
+         assembly — a signed assembly can only reference signed assemblies (CS8002). -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>

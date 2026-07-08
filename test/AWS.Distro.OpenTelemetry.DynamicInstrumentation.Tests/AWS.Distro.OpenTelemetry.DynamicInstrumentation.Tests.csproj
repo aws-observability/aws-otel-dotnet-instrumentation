@@ -7,6 +7,10 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);CS8002;SA0001;SA1204;SA1300;SA1402</NoWarn>
+    <!-- Signed with the same key as the DI project so InternalsVisibleTo works across the
+         strong-name boundary (same key as the main project's test assembly). -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
