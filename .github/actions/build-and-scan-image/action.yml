@@ -50,11 +50,15 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
-        unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution
-        mkdir -p ./arm64
-        unzip ./artifacts/linux/arm64/*.zip -d ./arm64/OpenTelemetryDistribution
-        unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./arm64/OpenTelemetryDistribution
+        # Stage each architecture's payload under OpenTelemetryDistribution/<arch>.
+        # Dockerfile.linux copies OpenTelemetryDistribution/${TARGETARCH}, so a single
+        # build context can produce correct amd64 and arm64 images.
+        # unzip does not create nested parent directories, so create them first.
+        mkdir -p ./OpenTelemetryDistribution/amd64 ./OpenTelemetryDistribution/arm64
+        unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
+        unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution/amd64
+        unzip ./artifacts/linux/arm64/*.zip -d ./OpenTelemetryDistribution/arm64
+        unzip ./artifacts/linux/arm64-musl/*.zip "linux-musl-arm64/*" -d ./OpenTelemetryDistribution/arm64
 
     - name: Unzip Windows Artifact
       if: runner.os == 'Windows'
