@@ -22,7 +22,8 @@ public sealed class InstrumentationConfiguration
     public bool IsMethodLevel => LineNumber == 0;
     public bool IsLineLevel => LineNumber > 0;
 
-    public string MethodKey => $"{CodeUnit}.{ClassName}.{MethodName}";
+    public string TypeName => $"{CodeUnit}.{ClassName}";
+    public string MethodKey => $"{TypeName}.{MethodName}";
     public string InstrumentationKey => IsLineLevel ? $"{MethodKey}:{LineNumber}" : MethodKey;
 
     public static InstrumentationConfiguration? Parse(JsonElement element)
@@ -45,7 +46,7 @@ public sealed class InstrumentationConfiguration
             var className = location.TryGetProperty("ClassName", out var cnEl) ? cnEl.GetString() ?? "" : "";
             var methodName = location.TryGetProperty("MethodName", out var mnEl) ? mnEl.GetString() ?? "" : "";
             var filePath = location.TryGetProperty("FilePath", out var fpEl) ? fpEl.GetString() ?? "" : "";
-            var lineNumber = location.TryGetProperty("LineNumber", out var lnEl) ? lnEl.GetInt32() : 0;
+            var lineNumber = GetIntOrDefault(location, "LineNumber", 0);
 
             var locationHash = element.TryGetProperty("LocationHash", out var lhEl)
                 ? lhEl.GetString() ?? "" : "";
@@ -101,8 +102,8 @@ public sealed class InstrumentationConfiguration
                 ? localsEl.EnumerateArray().Select(e => e.GetString() ?? "").ToArray()
                 : null;
 
-        var captureReturn = codeCapture.TryGetProperty("CaptureReturn", out var crEl2) && crEl2.GetBoolean();
-        var captureStack = codeCapture.TryGetProperty("CaptureStackTrace", out var csEl) && csEl.GetBoolean();
+        var captureReturn = GetBoolOrDefault(codeCapture, "CaptureReturn", false);
+        var captureStack = GetBoolOrDefault(codeCapture, "CaptureStackTrace", false);
 
         int maxStringLength = CaptureConfiguration.Default.MaxStringLength;
         int maxCollectionWidth = CaptureConfiguration.Default.MaxCollectionWidth;
@@ -140,13 +141,31 @@ public sealed class InstrumentationConfiguration
             maxObjectDepth, maxFieldsPerObject, maxStackFrames, maxHits);
     }
 
-    private static int GetIntOrDefault(JsonElement obj, string property, int defaultValue) =>
-        obj.TryGetProperty(property, out var el) && el.TryGetInt32(out var val) ? val : defaultValue;
+    // Safe scalar readers: a mistyped field defaults just that field instead of throwing out
+    // of Parse and dropping the whole config. Gate on ValueKind — TryGetInt32 throws on non-numbers.
+    private static int GetIntOrDefault(JsonElement obj, string property, int defaultValue)
+    {
+        if (!obj.TryGetProperty(property, out var el) || el.ValueKind != JsonValueKind.Number)
+            return defaultValue;
+        return el.TryGetInt32(out var val) ? val : defaultValue;
+    }
+
+    private static bool GetBoolOrDefault(JsonElement obj, string property, bool defaultValue)
+    {
+        if (!obj.TryGetProperty(property, out var el))
+            return defaultValue;
+        return el.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => defaultValue,
+        };
+    }
 
     private static DateTimeOffset? ParseTimestamp(JsonElement el)
     {
-        if (el.ValueKind == JsonValueKind.Number)
-            return DateTimeOffset.FromUnixTimeSeconds(el.GetInt64());
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var unixSeconds))
+            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
         if (el.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(el.GetString(), out var dt))
             return dt;
         return null;

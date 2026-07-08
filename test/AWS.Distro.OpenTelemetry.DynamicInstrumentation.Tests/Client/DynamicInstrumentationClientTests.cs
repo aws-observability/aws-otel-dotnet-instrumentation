@@ -20,7 +20,7 @@ public class DynamicInstrumentationClientTests
         var responseJson = """
         {
             "Changed": true,
-            "SyncedAt": 1000,
+            "SyncedAt": "2024-09-17T22:03:24Z",
             "SyncInterval": 60,
             "LatestConfigurations": [
                 {
@@ -39,20 +39,40 @@ public class DynamicInstrumentationClientTests
 
         result.Success.Should().BeTrue();
         result.Changed.Should().BeTrue();
-        result.SyncedAt.Should().Be(1000);
+        result.SyncedAt.Should().Be("2024-09-17T22:03:24Z");
         result.SyncInterval.Should().Be(60);
         result.Configurations.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task FetchConfigurations_ReturnsUnchanged_WhenChangedIsFalse()
+    public async Task FetchConfigurations_ParsesIso8601SyncedAt_WithoutFailing()
     {
-        var responseJson = """{ "Changed": false, "SyncedAt": 500 }""";
+        // Regression: the spec types SyncedAt as an ISO-8601 string. Modeling it as long?
+        // made System.Text.Json throw on every real response, so every poll returned
+        // Failed and the client never synced. This proves the string wire value parses.
+        var responseJson = """{ "Changed": false, "SyncedAt": "2024-09-17T22:08:24Z" }""";
 
         var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
         var client = CreateClient(handler);
 
-        var result = await client.FetchConfigurationsAsync(InstrumentationType.BREAKPOINT, syncedAt: 400);
+        var result = await client.FetchConfigurationsAsync(
+            InstrumentationType.PROBE, syncedAt: "2024-09-17T22:03:24Z");
+
+        result.Success.Should().BeTrue();
+        result.Changed.Should().BeFalse();
+        result.SyncedAt.Should().Be("2024-09-17T22:08:24Z");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_ReturnsUnchanged_WhenChangedIsFalse()
+    {
+        var responseJson = """{ "Changed": false, "SyncedAt": "2024-09-17T22:08:24Z" }""";
+
+        var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
+        var client = CreateClient(handler);
+
+        var result = await client.FetchConfigurationsAsync(
+            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
 
         result.Changed.Should().BeFalse();
         result.Configurations.Should().BeEmpty();
@@ -72,7 +92,7 @@ public class DynamicInstrumentationClientTests
                     Content = new StringContent("""
                     {
                         "Changed": true,
-                        "SyncedAt": 1000,
+                        "SyncedAt": "2024-09-17T22:03:24Z",
                         "NextToken": "page2",
                         "LatestConfigurations": [{ "LocationHash": "config1" }]
                     }
@@ -84,7 +104,7 @@ public class DynamicInstrumentationClientTests
                 Content = new StringContent("""
                 {
                     "Changed": true,
-                    "SyncedAt": 1000,
+                    "SyncedAt": "2024-09-17T22:03:24Z",
                     "LatestConfigurations": [{ "LocationHash": "config2" }]
                 }
                 """, Encoding.UTF8, "application/json")
@@ -99,13 +119,40 @@ public class DynamicInstrumentationClientTests
     }
 
     [Fact]
+    public async Task FetchConfigurations_LatchesChangedFromFirstPage_NoDataLoss()
+    {
+        // Regression: `changed` was reassigned every page. A continuation page with
+        // Changed=false used to overwrite the latched true, break the loop, and return
+        // changed=false — the poller then dropped the page-1 configs (data loss). `changed`
+        // must latch from page 0 and the accumulated configs must survive.
+        int callCount = 0;
+        var handler = new MockHttpHandler(_ =>
+        {
+            callCount++;
+            var json = callCount == 1
+                ? """{ "Changed": true, "SyncedAt": "2024-09-17T22:03:24Z", "NextToken": "page2", "LatestConfigurations": [{ "LocationHash": "config1" }] }"""
+                : """{ "Changed": false, "SyncedAt": "2024-09-17T22:03:24Z", "LatestConfigurations": [{ "LocationHash": "config2" }] }""";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler);
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Changed.Should().BeTrue("changed latches from the first page");
+        result.Configurations.Should().HaveCount(2, "page-1 configs must not be lost when page 2 says Changed=false");
+    }
+
+    [Fact]
     public async Task FetchConfigurations_StopsAtMaxPages()
     {
         int callCount = 0;
         var handler = new MockHttpHandler(_ =>
         {
             callCount++;
-            var json = "{\"Changed\":true,\"SyncedAt\":1000,\"NextToken\":\"page" + (callCount + 1) + "\",\"LatestConfigurations\":[{\"LocationHash\":\"config" + callCount + "\"}]}";
+            var json = "{\"Changed\":true,\"SyncedAt\":\"2024-09-17T22:03:24Z\",\"NextToken\":\"page" + (callCount + 1) + "\",\"LatestConfigurations\":[{\"LocationHash\":\"config" + callCount + "\"}]}";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -183,19 +230,23 @@ public class DynamicInstrumentationClientTests
             capturedBody = req.Content!.ReadAsStringAsync().Result;
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("""{ "Changed": false, "SyncedAt": 0 }""", Encoding.UTF8, "application/json")
+                Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json")
             };
         });
 
         var client = CreateClient(handler);
-        await client.FetchConfigurationsAsync(InstrumentationType.BREAKPOINT, syncedAt: 12345);
+        await client.FetchConfigurationsAsync(
+            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
 
         capturedBody.Should().NotBeNull();
         var doc = JsonDocument.Parse(capturedBody!);
-        doc.RootElement.GetProperty("service").GetString().Should().Be("test-service");
-        doc.RootElement.GetProperty("environment").GetString().Should().Be("test-env");
-        doc.RootElement.GetProperty("instrumentationType").GetString().Should().Be("BREAKPOINT");
-        doc.RootElement.GetProperty("syncedAt").GetInt64().Should().Be(12345);
+        // Request fields must be PascalCase to match the API (and the Java/Python/Node SDKs).
+        // A case-sensitive backend treats camelCase as missing → empty/unfiltered configs.
+        doc.RootElement.GetProperty("Service").GetString().Should().Be("test-service");
+        doc.RootElement.GetProperty("Environment").GetString().Should().Be("test-env");
+        doc.RootElement.GetProperty("InstrumentationType").GetString().Should().Be("BREAKPOINT");
+        // SyncedAt must serialize as an ISO-8601 string on the wire (spec contract).
+        doc.RootElement.GetProperty("SyncedAt").GetString().Should().Be("2024-09-17T22:03:24Z");
     }
 
     [Fact]

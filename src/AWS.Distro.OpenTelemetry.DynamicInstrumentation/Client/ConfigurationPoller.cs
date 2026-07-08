@@ -1,7 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
@@ -11,6 +10,7 @@ public sealed class ConfigurationPoller : IDisposable
     private static readonly int[] BackoffDelaysMs = { 10_000, 30_000, 120_000 };
     private const int DegradedIntervalMs = 300_000;
     private const double JitterFactor = 0.25;
+    private const int MaxIntervalSeconds = 86_400; // 1 day; guards against *1000 int overflow
 
     private readonly DynamicInstrumentationClient _client;
     private readonly int _probeIntervalMs;
@@ -21,8 +21,8 @@ public sealed class ConfigurationPoller : IDisposable
     private Thread? _probeThread;
     private Thread? _breakpointThread;
 
-    private long _probeSyncedAt;
-    private long _breakpointSyncedAt;
+    private string? _probeSyncedAt;
+    private string? _breakpointSyncedAt;
     // TODO: staleness tracking — force full resync when no success for 30m (probes) / 5m (breakpoints)
     private HashSet<string> _lastFingerprint = new();
 
@@ -38,8 +38,8 @@ public sealed class ConfigurationPoller : IDisposable
         CancellationToken ct)
     {
         _client = client;
-        _probeIntervalMs = probeIntervalSeconds * 1000;
-        _breakpointIntervalMs = breakpointIntervalSeconds * 1000;
+        _probeIntervalMs = ToIntervalMs(probeIntervalSeconds);
+        _breakpointIntervalMs = ToIntervalMs(breakpointIntervalSeconds);
         _onConfigurationsChanged = onConfigurationsChanged;
         _ct = ct;
     }
@@ -76,8 +76,7 @@ public sealed class ConfigurationPoller : IDisposable
                 else
                 {
                     failedAttempts++;
-                    if (failedAttempts >= BackoffDelaysMs.Length)
-                        degraded = true;
+                    degraded = ShouldDegrade(failedAttempts);
                 }
 
                 var sleepMs = ComputeSleepMs(intervalMs, failedAttempts, degraded);
@@ -90,8 +89,7 @@ public sealed class ConfigurationPoller : IDisposable
             catch
             {
                 failedAttempts++;
-                if (failedAttempts >= BackoffDelaysMs.Length)
-                    degraded = true;
+                degraded = ShouldDegrade(failedAttempts);
                 var sleepMs = ComputeSleepMs(intervalMs, failedAttempts, degraded);
                 WaitWithCancellation(sleepMs);
             }
@@ -101,7 +99,8 @@ public sealed class ConfigurationPoller : IDisposable
     private async Task<bool> FetchAndApply(InstrumentationType type)
     {
         var syncedAt = type == InstrumentationType.PROBE ? _probeSyncedAt : _breakpointSyncedAt;
-        var response = await _client.FetchConfigurationsAsync(type, syncedAt > 0 ? syncedAt : null, _ct);
+        var response = await _client.FetchConfigurationsAsync(
+            type, string.IsNullOrEmpty(syncedAt) ? null : syncedAt, _ct);
 
         if (!response.Success)
             return false;
@@ -147,6 +146,12 @@ public sealed class ConfigurationPoller : IDisposable
         _onConfigurationsChanged(snapshot);
         return true;
     }
+
+    private static int ToIntervalMs(int seconds) =>
+        Math.Min(Math.Max(seconds, 0), MaxIntervalSeconds) * 1000;
+
+    // Degrade only after all backoff tiers are used (> not >=, else the last tier is skipped).
+    internal static bool ShouldDegrade(int failedAttempts) => failedAttempts > BackoffDelaysMs.Length;
 
     internal static int ComputeSleepMs(int normalIntervalMs, int failedAttempts, bool degraded)
     {

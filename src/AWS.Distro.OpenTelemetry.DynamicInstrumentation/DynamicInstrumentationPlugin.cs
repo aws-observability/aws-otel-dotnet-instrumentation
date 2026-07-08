@@ -21,11 +21,19 @@ public class DynamicInstrumentationPlugin
         if (IsLambda())
             return;
 
-        var config = DynamicInstrumentationConfig.FromEnvironment();
-        if (!config.Enabled)
-            return;
+        // An opt-in diagnostic feature must never abort app startup, so failures are logged, not thrown.
+        try
+        {
+            var config = DynamicInstrumentationConfig.FromEnvironment();
+            if (!config.Enabled)
+                return;
 
-        DynamicInstrumentationManager.Instance.Initialize(config);
+            DynamicInstrumentationManager.Instance.Initialize(config);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DynamicInstrumentation] Initialization failed; feature disabled. {ex}");
+        }
     }
 
     public void ConfigureResource(ResourceBuilder builder)
@@ -42,6 +50,8 @@ public class DynamicInstrumentationPlugin
 
     public void TracerProviderInitialized(TracerProvider provider)
     {
+        // TODO (PR 3): gate this behind config.Enabled once OnTracerProviderInitialized
+        // does real work — currently a no-op, so the ungated call is harmless.
         DynamicInstrumentationManager.Instance.OnTracerProviderInitialized(provider);
     }
 

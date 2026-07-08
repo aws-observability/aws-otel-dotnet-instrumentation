@@ -65,4 +65,36 @@ public class ConfigurationPollerTests
         var result = ConfigurationPoller.AddJitter(0);
         result.Should().Be(0);
     }
+
+    // Regression: the old code degraded at `failedAttempts >= BackoffDelaysMs.Length` (== 3),
+    // which flipped degraded ON the 3rd attempt and skipped the 120s tier entirely
+    // (10s→30s→300s). Degrade must only happen AFTER all 3 tiers are used.
+    [Theory]
+    [InlineData(1, false)] // 10s tier
+    [InlineData(2, false)] // 30s tier
+    [InlineData(3, false)] // 120s tier — must NOT be degraded yet
+    [InlineData(4, true)]  // all tiers exhausted → degraded
+    [InlineData(5, true)]
+    public void ShouldDegrade_OnlyAfterAllBackoffTiers(int failedAttempts, bool expected)
+    {
+        ConfigurationPoller.ShouldDegrade(failedAttempts).Should().Be(expected);
+    }
+
+    [Fact]
+    public void BackoffSequence_ReachesAllThreeTiersBeforeDegrading()
+    {
+        // Walk the exact sequence PollLoop produces: each failure increments failedAttempts,
+        // degraded is derived from ShouldDegrade, then ComputeSleepMs picks the delay.
+        int[] observed = new int[4];
+        for (int attempt = 1; attempt <= 4; attempt++)
+        {
+            var degraded = ConfigurationPoller.ShouldDegrade(attempt);
+            observed[attempt - 1] = ConfigurationPoller.ComputeSleepMs(60_000, attempt, degraded);
+        }
+
+        observed[0].Should().Be(10_000);
+        observed[1].Should().Be(30_000);
+        observed[2].Should().Be(120_000); // the tier the off-by-one used to skip
+        observed[3].Should().BeInRange(300_000, 375_000); // degraded
+    }
 }

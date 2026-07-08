@@ -43,7 +43,10 @@ public sealed record DynamicInstrumentationConfig(
     private static string ResolveEnvironment()
     {
         var attrs = System.Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES") ?? "";
-        return ExtractResourceAttribute(attrs, "deployment.environment.name") ?? "";
+        // Newer stable key, falling back to the legacy key.
+        return ExtractResourceAttribute(attrs, "deployment.environment.name")
+            ?? ExtractResourceAttribute(attrs, "deployment.environment")
+            ?? "";
     }
 
     private static string? ExtractResourceAttribute(string attrs, string key)

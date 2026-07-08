@@ -324,4 +324,44 @@ public class InstrumentationConfigurationTests
 
         config.Should().BeNull();
     }
+
+    // Regression: GetBoolean()/GetInt32()/GetInt64() throw if the field is the wrong JSON kind,
+    // and the outer catch returned null — so ONE mistyped field silently dropped the WHOLE
+    // config. The safe Try* readers must default just the bad field and keep the config.
+    [Fact]
+    public void Parse_MistypedCaptureReturn_DefaultsFieldKeepsConfig()
+    {
+        // CaptureReturn sent as a string instead of a bool — must not drop the config.
+        var json = """
+        {
+            "InstrumentationType": "PROBE",
+            "LocationHash": "h1",
+            "Location": { "CodeLocation": { "Language": "Dotnet", "CodeUnit": "A", "ClassName": "B", "MethodName": "C" } },
+            "CaptureConfiguration": { "CodeCapture": { "CaptureReturn": "yes-please" } }
+        }
+        """;
+
+        var config = InstrumentationConfiguration.Parse(Parse(json));
+
+        config.Should().NotBeNull("a single mistyped scalar must not drop the whole config");
+        config!.Capture.CaptureReturn.Should().BeFalse("mistyped bool defaults, not throws");
+        config.MethodKey.Should().Be("A.B.C");
+    }
+
+    [Fact]
+    public void Parse_MistypedLineNumber_DefaultsToZeroKeepsConfig()
+    {
+        var json = """
+        {
+            "InstrumentationType": "BREAKPOINT",
+            "LocationHash": "h2",
+            "Location": { "CodeLocation": { "Language": "Dotnet", "CodeUnit": "A", "ClassName": "B", "MethodName": "C", "LineNumber": "not-a-number" } }
+        }
+        """;
+
+        var config = InstrumentationConfiguration.Parse(Parse(json));
+
+        config.Should().NotBeNull();
+        config!.LineNumber.Should().Be(0, "mistyped int defaults rather than throwing out of Parse");
+    }
 }

@@ -21,9 +21,9 @@ public class DynamicInstrumentationClient
     private readonly string _serviceName;
     private readonly string _environment;
 
+    // PascalCase on the wire (no camelCase policy) to match the API and the other SDKs.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
@@ -38,11 +38,11 @@ public class DynamicInstrumentationClient
     }
 
     public async Task<FetchConfigurationsResponse> FetchConfigurationsAsync(
-        InstrumentationType type, long? syncedAt = null, CancellationToken ct = default)
+        InstrumentationType type, string? syncedAt = null, CancellationToken ct = default)
     {
         var allConfigs = new List<JsonElement>();
         string? nextToken = null;
-        long? responseSyncedAt = null;
+        string? responseSyncedAt = null;
         bool changed = false;
         int? syncInterval = null;
 
@@ -63,7 +63,10 @@ public class DynamicInstrumentationClient
             if (response == null)
                 return FetchConfigurationsResponse.Failed;
 
-            changed = response.Changed;
+            // Latch `changed` from page 0 only — a later page's Changed=false must not
+            // drop configs already accumulated (data loss).
+            if (page == 0)
+                changed = response.Changed;
             responseSyncedAt = response.SyncedAt;
             syncInterval = response.SyncInterval;
 
@@ -78,7 +81,7 @@ public class DynamicInstrumentationClient
                 break;
         }
 
-        return new FetchConfigurationsResponse(true, changed, responseSyncedAt ?? 0, syncInterval, allConfigs.ToArray());
+        return new FetchConfigurationsResponse(true, changed, responseSyncedAt, syncInterval, allConfigs.ToArray());
     }
 
     public async Task ReportStatusAsync(List<StatusEntry> statuses, CancellationToken ct = default)
@@ -133,7 +136,7 @@ public record FetchConfigurationsRequest
     public string Service { get; init; } = "";
     public string Environment { get; init; } = "";
     public string InstrumentationType { get; init; } = "";
-    public long? SyncedAt { get; init; }
+    public string? SyncedAt { get; init; }
     public string? NextToken { get; init; }
 }
 
@@ -142,8 +145,9 @@ internal record FetchConfigurationsRawResponse
     [JsonPropertyName("Changed")]
     public bool Changed { get; init; }
 
+    // Opaque cursor token (ISO-8601 string per spec) — echoed back, never parsed.
     [JsonPropertyName("SyncedAt")]
-    public long? SyncedAt { get; init; }
+    public string? SyncedAt { get; init; }
 
     [JsonPropertyName("SyncInterval")]
     public int? SyncInterval { get; init; }
@@ -158,12 +162,12 @@ internal record FetchConfigurationsRawResponse
 public record FetchConfigurationsResponse(
     bool Success,
     bool Changed,
-    long SyncedAt,
+    string? SyncedAt,
     // TODO: wire SyncInterval into ConfigurationPoller for dynamic backpressure
     int? SyncInterval,
     JsonElement[] Configurations)
 {
-    public static readonly FetchConfigurationsResponse Failed = new(false, false, 0, null, Array.Empty<JsonElement>());
+    public static readonly FetchConfigurationsResponse Failed = new(false, false, null, null, Array.Empty<JsonElement>());
 }
 
 public record StatusEntry
