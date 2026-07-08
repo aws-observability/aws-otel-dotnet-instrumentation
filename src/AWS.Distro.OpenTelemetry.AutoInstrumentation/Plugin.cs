@@ -21,6 +21,8 @@ using OpenTelemetry.Instrumentation.AspNet;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
@@ -94,6 +96,34 @@ public class Plugin
     /// </summary>public void Initializing()
     public void Initializing()
     {
+        this.InitializeDynamicInstrumentation();
+    }
+
+    // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
+    // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
+    // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
+    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent).
+    private void InitializeDynamicInstrumentation()
+    {
+        try
+        {
+            if (AwsSpanProcessingUtil.IsLambdaEnvironment())
+            {
+                return;
+            }
+
+            var config = DynamicInstrumentationConfig.FromEnvironment();
+            if (!config.Enabled)
+            {
+                return;
+            }
+
+            DynamicInstrumentationManager.Instance.Initialize(config);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
+        }
     }
 
     /// <summary>
@@ -186,6 +216,9 @@ public class Plugin
 
             tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
         }
+
+        // No-op unless Dynamic Instrumentation was initialized in Initializing().
+        DynamicInstrumentationManager.Instance.OnTracerProviderInitialized(tracerProvider);
     }
 
     /// <summary>
