@@ -93,8 +93,10 @@ jobs:
           # with "no command specified". Inspect the image layers directly instead.
           docker save proof-fixed -o /tmp/proof-fixed.tar
           mkdir -p /tmp/img && tar -xf /tmp/proof-fixed.tar -C /tmp/img
+          # buildx save uses OCI format: layers are blobs under blobs/sha256/ with NO
+          # .tar extension. Treat every regular file as a possible layer tarball.
           found=0
-          for layer in $(find /tmp/img -name '*.tar'); do
+          for layer in $(find /tmp/img -type f); do
             if tar -tf "$layer" 2>/dev/null | grep -qE "autoinstrumentation/(store|net)"; then
               echo "payload entries in $layer:"
               tar -tf "$layer" | grep -E "autoinstrumentation/(store|net)" | head
