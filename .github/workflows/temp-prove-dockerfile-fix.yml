@@ -1,0 +1,95 @@
+## TEMPORARY — proof workflow for the application-signals-e2e-test.yml Dockerfile.linux
+## regression introduced by #424 (arch-specific COPY). DELETE after confirming results.
+##
+## It mirrors the failing `upload-main-build-image` job (build x64 zip -> download-style
+## stage -> unzip -> `docker buildx build -f Dockerfile.linux`) but:
+##   * builds the artifact in-workflow (no dependency on main-build's build job),
+##   * drops the ECR login/push (no secrets needed) — the bug is the COPY layout, which
+##     `--load` fully exercises,
+##   * runs BOTH the broken staging (expected to fail) and the fixed staging (must pass)
+##     side-by-side on native amd64 CI hardware.
+name: TEMP Prove Dockerfile Fix
+on:
+  push:
+    branches:
+      - temp/prove-dockerfile-fix
+
+permissions:
+  contents: read
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - name: Build (produces the linux-glibc-x64 zip)
+        run: bash build.sh
+      - name: Upload x64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+
+  prove:
+    needs: [build-artifact]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+      - name: Download Linux x64 Artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: ./artifacts/linux/x64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 #3.11.1
+
+      # ---- CASE A: current (broken) staging from application-signals-e2e-test.yml:106 ----
+      # Extracts into ./OpenTelemetryDistribution with NO arch subdir. Dockerfile.linux
+      # now COPYs OpenTelemetryDistribution/${TARGETARCH} (=amd64), so this must FAIL.
+      - name: 'CASE A (broken) — stage without arch subdir'
+        run: |
+          rm -rf ./OpenTelemetryDistribution
+          unzip -q ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+          echo "staged layout:"; ls -la ./OpenTelemetryDistribution | head
+      - name: 'CASE A (broken) — build (expected to FAIL)'
+        id: broken
+        continue-on-error: true
+        run: |
+          set -e
+          docker buildx build --platform linux/amd64 -t proof-broken -f ./Dockerfile.linux --load .
+      - name: 'CASE A result assertion'
+        run: |
+          if [ "${{ steps.broken.outcome }}" = "failure" ]; then
+            echo "✅ CASE A failed as expected — reproduces the CI regression."
+          else
+            echo "❌ CASE A unexpectedly PASSED — diagnosis is wrong, stop and investigate."
+            exit 1
+          fi
+
+      # ---- CASE B: the proposed fix ----
+      # mkdir the amd64 subdir and extract into it, matching Dockerfile.linux's
+      # COPY OpenTelemetryDistribution/${TARGETARCH}. This must SUCCEED.
+      - name: 'CASE B (fixed) — stage into amd64 subdir'
+        run: |
+          rm -rf ./OpenTelemetryDistribution
+          mkdir -p ./OpenTelemetryDistribution/amd64
+          unzip -q ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
+          echo "staged layout:"; ls -la ./OpenTelemetryDistribution/amd64 | head
+      - name: 'CASE B (fixed) — build (must PASS)'
+        run: |
+          set -e
+          docker buildx build --platform linux/amd64 -t proof-fixed -f ./Dockerfile.linux --load .
+      - name: 'CASE B — verify payload landed at /autoinstrumentation'
+        run: |
+          set -e
+          docker create --name v proof-fixed
+          docker export v | tar -tf - | grep -E "autoinstrumentation/(store|net)" | head
+          docker rm v
+          echo "✅ CASE B passed — the fix resolves the COPY and ships the payload."
