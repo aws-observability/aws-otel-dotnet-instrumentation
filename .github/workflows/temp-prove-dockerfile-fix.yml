@@ -89,7 +89,21 @@ jobs:
       - name: 'CASE B — verify payload landed at /autoinstrumentation'
         run: |
           set -e
-          docker create --name v proof-fixed
-          docker export v | tar -tf - | grep -E "autoinstrumentation/(store|net)" | head
-          docker rm v
-          echo "✅ CASE B passed — the fix resolves the COPY and ships the payload."
+          # Dockerfile.linux is FROM scratch (no CMD), so `docker create/export` fails
+          # with "no command specified". Inspect the image layers directly instead.
+          docker save proof-fixed -o /tmp/proof-fixed.tar
+          mkdir -p /tmp/img && tar -xf /tmp/proof-fixed.tar -C /tmp/img
+          found=0
+          for layer in $(find /tmp/img -name '*.tar'); do
+            if tar -tf "$layer" 2>/dev/null | grep -qE "autoinstrumentation/(store|net)"; then
+              echo "payload entries in $layer:"
+              tar -tf "$layer" | grep -E "autoinstrumentation/(store|net)" | head
+              found=1
+            fi
+          done
+          if [ "$found" = "1" ]; then
+            echo "✅ CASE B passed — the fix resolves the COPY and ships the payload."
+          else
+            echo "❌ CASE B: build succeeded but payload not found in image layers."
+            exit 1
+          fi
