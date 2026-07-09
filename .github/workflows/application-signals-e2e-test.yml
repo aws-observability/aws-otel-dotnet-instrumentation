@@ -103,7 +103,10 @@ jobs:
       - name: Unzip Linux Artifact
         if: runner.os == 'Linux'
         run: |
-          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+          # Stage under OpenTelemetryDistribution/amd64 to match Dockerfile.linux's
+          # `COPY OpenTelemetryDistribution/${TARGETARCH}` (introduced in #424).
+          mkdir -p ./OpenTelemetryDistribution/amd64
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
 
       - name: Set up Docker Buildx
         if: runner.os == 'Linux'
