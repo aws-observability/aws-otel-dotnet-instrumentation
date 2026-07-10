@@ -52,6 +52,10 @@
   <ItemGroup>
     <ProjectReference Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" PrivateAssets="All" />
   </ItemGroup>
+  <!-- DI targets net8.0+ only (modern profiler feature); exclude it from the net462 build. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net462'">
+    <ProjectReference Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" PrivateAssets="All" />
+  </ItemGroup>
 
   <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
     <!-- NuGet packages -->
