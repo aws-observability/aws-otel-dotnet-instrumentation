@@ -15,7 +15,7 @@ bash ./build.sh
 check_if_step_failed_and_exit "There was an error building AWS Otel DotNet, exiting"
 
 cd ./sample-applications/lambda-test-apps/SimpleLambdaFunction
-dotnet lambda package -pl ./src/SimpleLambdaFunction --framework net10.0
+dotnet lambda package -pl ./src/SimpleLambdaFunction --framework net8.0
 check_if_step_failed_and_exit "There was an error building the SimpleLambdaFunction, exiting"
 
 cd ./terraform/lambda
