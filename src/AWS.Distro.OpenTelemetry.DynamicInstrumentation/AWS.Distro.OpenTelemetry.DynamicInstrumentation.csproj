@@ -33,4 +33,15 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 
+  <!-- PR2: the native profiler resolves CallTargetState by type identity, so our integration
+       classes must return its REAL type, not a look-alike. Reference (not copy) the
+       distribution's assembly. TODO(ship): decide how this is sourced for GA (built
+       distribution path vs package) — see DI-LINE-LEVEL-ARCHITECTURE DECISION on dll sourcing. -->
+  <ItemGroup>
+    <Reference Include="OpenTelemetry.AutoInstrumentation">
+      <HintPath>..\..\OpenTelemetryDistribution\net\OpenTelemetry.AutoInstrumentation.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
 </Project>

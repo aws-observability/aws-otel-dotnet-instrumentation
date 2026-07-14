@@ -3,6 +3,8 @@
 
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 using OpenTelemetry.Trace;
 
@@ -17,6 +19,13 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private static readonly Lazy<DynamicInstrumentationManager> LazyInstance = new(() => new DynamicInstrumentationManager());
 
     private readonly object initLock = new();
+
+    // Serializes OnConfigurationsChanged: the poller calls it from both poll threads. Lock order is always initLock -> configChangeLock.
+    private readonly object configChangeLock = new();
+
+    // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
+    private readonly HashSet<string> appliedInstrumentations = new();
+
     private volatile bool initialized;
     private DynamicInstrumentationConfig? config;
     private CancellationTokenSource? cts;
@@ -25,8 +34,11 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private DynamicInstrumentationClient? client;
     private ConfigurationPoller? poller;
 
-    // TODO (PR 2): InstrumentationRegistry, ProfilerTranslator fields
-    // TODO (PR 3): DISnapshotCollector, DISnapshotOtlpEmitter, StatusReporter fields
+    // Capture engine: registry of active instrumentations + profiler translator.
+    private InstrumentationRegistry? registry;
+    private ProfilerTranslator? profilerTranslator;
+
+    // Output subsystems (snapshot drain + status reporting) land in PR3.
     private DynamicInstrumentationManager()
     {
     }
@@ -40,11 +52,13 @@ public sealed class DynamicInstrumentationManager : IDisposable
     /// <summary>Gets the active configuration, if initialized.</summary>
     public DynamicInstrumentationConfig? Config => this.config;
 
+    /// <summary>Gets the registry of active instrumentations, or null before initialization.</summary>
+    internal InstrumentationRegistry? Registry => this.registry;
+
     /// <summary>Hook invoked once the TracerProvider is built. Currently a no-op.</summary>
     /// <param name="provider">The initialized tracer provider.</param>
     public static void OnTracerProviderInitialized(TracerProvider provider)
     {
-        // TracerProvider available — could extract Resource attributes if needed.
     }
 
     /// <summary>Initializes the manager and starts configuration polling. Idempotent.</summary>
@@ -70,12 +84,18 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
             try
             {
-                // 1. HTTP Client
                 this.httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
                 this.client = new DynamicInstrumentationClient(
                     this.httpClient, config.ApiUrl, config.ServiceName, config.Environment);
 
-                // 2. Configuration Poller (starts 2 background threads)
+                // Capture engine must exist before the poller starts, or the first poll hits a null registry.
+                this.registry = new InstrumentationRegistry();
+                this.profilerTranslator = new ProfilerTranslator();
+                DiIntegrationHelper.Configure(this.registry);
+
+                // Output subsystems (drain + status reporting) land in PR3.
+
+                // Poller started last so its OnConfigurationsChanged dependencies are all live.
                 this.poller = new ConfigurationPoller(
                     this.client,
                     config.ProbePollIntervalSeconds,
@@ -84,11 +104,6 @@ public sealed class DynamicInstrumentationManager : IDisposable
                     this.cts.Token);
                 this.poller.Start();
 
-                // TODO: InstrumentationRegistry (PR 2)
-                // TODO: ProfilerTranslator + DiIntegrationHelper (PR 2)
-                // TODO: DISnapshotCollector (PR 3)
-                // TODO: DISnapshotOtlpEmitter (PR 3)
-                // TODO: StatusReporter (PR 3)
                 this.initialized = true;
             }
             catch (Exception)
@@ -127,13 +142,92 @@ public sealed class DynamicInstrumentationManager : IDisposable
     }
 
     /// <summary>
-    /// Called by <see cref="ConfigurationPoller"/> when the active configuration set changes.
-    /// PR 2 will wire the registry and profiler translator here.
+    /// Called by <see cref="ConfigurationPoller"/> on config change: registers supported targets, removes stale ones, and applies each new config to the profiler once.
     /// </summary>
     /// <param name="configs">The merged active configuration set.</param>
     internal void OnConfigurationsChanged(List<InstrumentationConfiguration> configs)
     {
-        // TODO (PR 2): Register configs, apply via ProfilerTranslator, remove stale
+        // Serialize the callback: the poller drives it from both poll threads.
+        lock (this.configChangeLock)
+        {
+            this.OnConfigurationsChangedLocked(configs);
+        }
+    }
+
+    /// <summary>
+    /// A config is supported when it is method-level and not an unsupported target
+    /// (constructors/static constructors, which the profiler cannot weave here).
+    /// </summary>
+    private static bool IsSupported(InstrumentationConfiguration config) =>
+        config.IsMethodLevel && !ProfilerTranslator.IsUnsupportedTarget(config);
+
+    private void OnConfigurationsChangedLocked(List<InstrumentationConfiguration> configs)
+    {
+        var reg = this.registry;
+        if (reg == null)
+        {
+            return;
+        }
+
+        // Register only supported targets; unsupported ones never enter the registry.
+        var activeKeys = new HashSet<string>();
+        foreach (var config in configs)
+        {
+            if (!IsSupported(config))
+            {
+                // Report refused method-level targets (ctor/static-init); skip line-level silently to avoid status spam.
+                if (config.IsMethodLevel)
+                {
+                    // TODO(PR3): this.statusReporter.ReportError(config, "UNSUPPORTED_TARGET");
+                }
+
+                continue;
+            }
+
+            activeKeys.Add(config.InstrumentationKey);
+            reg.Register(config);
+        }
+
+        // Drop stale configs and forget their applied-state so a re-add re-applies them.
+        foreach (var removedKey in reg.RemoveStale(activeKeys))
+        {
+            this.appliedInstrumentations.Remove(removedKey);
+        }
+
+        // Apply each newly-registered config to the profiler exactly once.
+        foreach (var registered in reg.GetAll())
+        {
+            var config = registered.Config;
+            var key = config.InstrumentationKey;
+            if (!this.appliedInstrumentations.Add(key))
+            {
+                continue; // Already applied on a previous poll.
+            }
+
+            var result = this.profilerTranslator?.ApplyInstrumentation(config)
+                ?? InstrumentationApplyResult.TypeNotLoaded;
+            switch (result)
+            {
+                case InstrumentationApplyResult.Applied:
+                    // TODO(PR3): this.statusReporter.ReportReadyForNew();
+                    break;
+
+                case InstrumentationApplyResult.TypeNotLoaded:
+                    // Target assembly likely not loaded yet; forget applied-state so a later poll retries. No ERROR (would spam every poll).
+                    this.appliedInstrumentations.Remove(key);
+                    break;
+
+                case InstrumentationApplyResult.Skipped:
+                    // Unsupported slipped past IsSupported (shouldn't happen); drop applied-state without reporting.
+                    this.appliedInstrumentations.Remove(key);
+                    break;
+
+                default:
+                    // Permanent failure: keep the key so we report it exactly once, not every poll.
+                    // TODO(PR3): this.statusReporter.ReportError(config, MapErrorCause(result));
+                    break;
+            }
+        }
     }
 
     private void Cleanup()
@@ -141,11 +235,20 @@ public sealed class DynamicInstrumentationManager : IDisposable
         this.poller?.Dispose();
         this.httpClient?.Dispose();
         this.cts?.Dispose();
+
         this.poller = null;
         this.client = null;
         this.httpClient = null;
 
-        // TODO (PR 2): nullify registry, profilerTranslator
-        // TODO (PR 3): dispose/nullify snapshotCollector, otlpEmitter, statusReporter
+        // Reset the capture engine; clear appliedInstrumentations with the registry so they don't diverge on restart (C3).
+        // configChangeLock guards against interleaving with an in-flight callback (order: initLock -> configChangeLock).
+        this.registry = null;
+        this.profilerTranslator = null;
+        lock (this.configChangeLock)
+        {
+            this.appliedInstrumentations.Clear();
+        }
+
+        DiIntegrationHelper.Configure(null);
     }
 }

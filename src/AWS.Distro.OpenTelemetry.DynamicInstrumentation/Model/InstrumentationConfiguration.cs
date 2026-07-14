@@ -75,15 +75,24 @@ public sealed class InstrumentationConfiguration
                 return null;
             }
 
+            // Only explicit "PROBE" selects PROBE; missing/unknown defaults to BREAKPOINT (safer, matches Java/Python/JS).
             var typeStr = element.TryGetProperty("InstrumentationType", out var typeEl)
-                ? typeEl.GetString() : "PROBE";
-            var type = typeStr == "BREAKPOINT" ? InstrumentationType.BREAKPOINT : InstrumentationType.PROBE;
+                ? typeEl.GetString() : null;
+            var type = string.Equals(typeStr, "PROBE", StringComparison.OrdinalIgnoreCase)
+                ? InstrumentationType.PROBE
+                : InstrumentationType.BREAKPOINT;
 
             var codeUnit = location.TryGetProperty(nameof(CodeUnit), out var cuEl) ? cuEl.GetString() ?? string.Empty : string.Empty;
             var className = location.TryGetProperty(nameof(ClassName), out var cnEl) ? cnEl.GetString() ?? string.Empty : string.Empty;
             var methodName = location.TryGetProperty(nameof(MethodName), out var mnEl) ? mnEl.GetString() ?? string.Empty : string.Empty;
             var filePath = location.TryGetProperty(nameof(FilePath), out var fpEl) ? fpEl.GetString() ?? string.Empty : string.Empty;
             var lineNumber = GetIntOrDefault(location, "LineNumber", 0);
+
+            // Required fields: need class+method to bind and a non-negative line; drop malformed configs (CodeUnit may be empty for top-level types).
+            if (string.IsNullOrEmpty(className) || string.IsNullOrEmpty(methodName) || lineNumber < 0)
+            {
+                return null;
+            }
 
             var locationHash = element.TryGetProperty(nameof(LocationHash), out var lhEl)
                 ? lhEl.GetString() ?? string.Empty : string.Empty;
@@ -131,10 +140,8 @@ public sealed class InstrumentationConfiguration
             return CaptureConfiguration.Default;
         }
 
-        if (!ccEl.TryGetProperty("CodeCapture", out var codeCapture))
-        {
-            return CaptureConfiguration.Default;
-        }
+        // Preferred shape wraps fields under "CodeCapture"; legacy backends send them flat, so fall back to the outer element (matches Java/Python/JS).
+        var codeCapture = ccEl.TryGetProperty("CodeCapture", out var wrapped) ? wrapped : ccEl;
 
         string[]? captureArgs = null;
         if (codeCapture.TryGetProperty("CaptureArguments", out var argsEl))
@@ -188,8 +195,7 @@ public sealed class InstrumentationConfiguration
         return new CaptureConfiguration(captureArgs, captureLocals, captureReturn, captureStack, maxStringLength, maxCollectionWidth, maxCollectionDepth, maxObjectDepth, maxFieldsPerObject, maxStackFrames, maxHits);
     }
 
-    // Safe scalar readers: a mistyped field defaults just that field instead of throwing out
-    // of Parse and dropping the whole config. Gate on ValueKind — TryGetInt32 throws on non-numbers.
+    // Safe scalar readers: a mistyped field defaults instead of dropping the whole config. Gate on ValueKind — TryGetInt32 throws on non-numbers.
     private static int GetIntOrDefault(JsonElement obj, string property, int defaultValue)
     {
         if (!obj.TryGetProperty(property, out var el) || el.ValueKind != JsonValueKind.Number)
@@ -217,9 +223,10 @@ public sealed class InstrumentationConfiguration
 
     private static DateTimeOffset? ParseTimestamp(JsonElement el)
     {
-        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var unixSeconds))
+        // Backend emits epoch seconds as a JSON number, often exponent form (e.g. 1.783975073E9) which TryGetInt64 rejects — read as double; also tolerate the spec's ISO-8601 strings.
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var unixSeconds))
         {
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            return DateTimeOffset.FromUnixTimeSeconds((long)unixSeconds);
         }
 
         if (el.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(el.GetString(), out var dt))

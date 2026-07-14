@@ -1,14 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 
-/// <summary>
-/// Polls the configuration API on background threads (one for probes, one for breakpoints),
-/// applying backoff and change detection, and invoking a callback when the active set changes.
-/// </summary>
+/// <summary>Polls the configuration API on background threads, applying backoff and change detection, and invoking a callback when the active set changes.</summary>
 /// <param name="client">The API client used to fetch configurations.</param>
 /// <param name="probeIntervalSeconds">Base interval between probe polls.</param>
 /// <param name="breakpointIntervalSeconds">Base interval between breakpoint polls.</param>
@@ -37,8 +35,9 @@ public sealed class ConfigurationPoller(
     private Thread? probeThread;
     private Thread? breakpointThread;
 
-    private string? probeSyncedAt;
-    private string? breakpointSyncedAt;
+    // Opaque sync cursors echoed back to the backend; JsonElement because the live backend sends SyncedAt as an epoch-seconds number, not the spec's ISO string.
+    private JsonElement? probeSyncedAt;
+    private JsonElement? breakpointSyncedAt;
 
     // TODO: staleness tracking — force full resync when no success for 30m (probes) / 5m (breakpoints)
     private HashSet<string> lastFingerprint = [];
@@ -62,7 +61,7 @@ public sealed class ConfigurationPoller(
     /// <summary>Disposes the poller. Threads exit when the cancellation token is cancelled.</summary>
     public void Dispose()
     {
-        // Threads exit when CancellationToken is cancelled (managed externally)
+        // Threads exit when the (externally managed) CancellationToken is cancelled.
     }
 
     // Degrade only after all backoff tiers are used (> not >=, else the last tier is skipped).
@@ -135,8 +134,7 @@ public sealed class ConfigurationPoller(
     private async Task<bool> FetchAndApply(InstrumentationType type)
     {
         var syncedAt = type == InstrumentationType.PROBE ? this.probeSyncedAt : this.breakpointSyncedAt;
-        var response = await this.client.FetchConfigurationsAsync(
-            type, string.IsNullOrEmpty(syncedAt) ? null : syncedAt, this.ct);
+        var response = await this.client.FetchConfigurationsAsync(type, syncedAt, this.ct);
 
         if (!response.Success)
         {
@@ -148,7 +146,6 @@ public sealed class ConfigurationPoller(
             return true;
         }
 
-        // Update SyncedAt
         if (type == InstrumentationType.PROBE)
         {
             this.probeSyncedAt = response.SyncedAt;
@@ -158,7 +155,6 @@ public sealed class ConfigurationPoller(
             this.breakpointSyncedAt = response.SyncedAt;
         }
 
-        // Parse configurations
         var configs = response.Configurations
             .Select(InstrumentationConfiguration.Parse)
             .Where(c => c != null)
@@ -167,6 +163,7 @@ public sealed class ConfigurationPoller(
 
         // Update cache and merge — snapshot under lock, invoke callback outside
         List<InstrumentationConfiguration> snapshot;
+        HashSet<string> fingerprint;
         lock (this.configLock)
         {
             if (type == InstrumentationType.PROBE)
@@ -180,8 +177,8 @@ public sealed class ConfigurationPoller(
 
             var allConfigs = this.cachedProbeConfigs.Concat(this.cachedBreakpointConfigs).ToList();
 
-            // Fingerprint check — skip if unchanged
-            var fingerprint = new HashSet<string>(
+            // Fingerprint check — skip if unchanged.
+            fingerprint = new HashSet<string>(
                 allConfigs.Select(c => $"{c.LocationHash}:{c.CreatedAt?.ToUnixTimeMilliseconds()}"));
 
             if (fingerprint.SetEquals(this.lastFingerprint))
@@ -189,11 +186,12 @@ public sealed class ConfigurationPoller(
                 return true;
             }
 
-            this.lastFingerprint = fingerprint;
             snapshot = allConfigs;
         }
 
+        // Persist the fingerprint only after the callback succeeds; if it throws, the stale fingerprint forces the next poll to re-apply instead of silently dropping the change.
         this.onConfigurationsChanged(snapshot);
+        this.lastFingerprint = fingerprint;
         return true;
     }
 

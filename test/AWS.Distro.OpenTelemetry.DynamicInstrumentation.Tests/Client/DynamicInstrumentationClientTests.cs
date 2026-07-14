@@ -14,6 +14,10 @@ public class DynamicInstrumentationClientTests
     private static DynamicInstrumentationClient CreateClient(MockHttpHandler handler) =>
         new(new HttpClient(handler), "http://localhost:2000", "test-service", "test-env");
 
+    // Parses a JSON literal (e.g. "\"abc\"" or "123") into a standalone JsonElement, mirroring how
+    // the client captures the opaque SyncedAt cursor from a response for echo-back.
+    private static JsonElement Json(string literal) => JsonDocument.Parse(literal).RootElement.Clone();
+
     [Fact]
     public async Task FetchConfigurations_ReturnsConfigs_OnSuccess()
     {
@@ -39,7 +43,7 @@ public class DynamicInstrumentationClientTests
 
         result.Success.Should().BeTrue();
         result.Changed.Should().BeTrue();
-        result.SyncedAt.Should().Be("2024-09-17T22:03:24Z");
+        result.SyncedAt!.Value.GetString().Should().Be("2024-09-17T22:03:24Z");
         result.SyncInterval.Should().Be(60);
         result.Configurations.Should().HaveCount(1);
     }
@@ -47,20 +51,39 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_ParsesIso8601SyncedAt_WithoutFailing()
     {
-        // Regression: the spec types SyncedAt as an ISO-8601 string. Modeling it as long?
-        // made System.Text.Json throw on every real response, so every poll returned
-        // Failed and the client never synced. This proves the string wire value parses.
+        // The API spec types SyncedAt as an ISO-8601 string. SyncedAt is a JsonElement so it
+        // round-trips either wire shape; here the string form must parse without failing.
         var responseJson = """{ "Changed": false, "SyncedAt": "2024-09-17T22:08:24Z" }""";
 
         var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(
-            InstrumentationType.PROBE, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.PROBE, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
         result.Success.Should().BeTrue();
         result.Changed.Should().BeFalse();
-        result.SyncedAt.Should().Be("2024-09-17T22:08:24Z");
+        result.SyncedAt!.Value.GetString().Should().Be("2024-09-17T22:08:24Z");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_ParsesNumericSyncedAt_FromLiveBackend()
+    {
+        // Verified against the live backend (application-signals.us-east-1.api.aws): it emits
+        // SyncedAt as a JSON NUMBER in exponent form, NOT the ISO string the spec documents.
+        // Modeling SyncedAt as string? made System.Text.Json throw here, so every poll returned
+        // Failed and the client silently never synced. This pins the real wire shape.
+        var responseJson = """{ "Changed": true, "SyncInterval": 300, "SyncedAt": 1.7839751E9, "LatestConfigurations": [] }""";
+
+        var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
+        var client = CreateClient(handler);
+
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Success.Should().BeTrue("the live backend returns a numeric SyncedAt and the client must parse it");
+        result.Changed.Should().BeTrue();
+        result.SyncedAt!.Value.ValueKind.Should().Be(JsonValueKind.Number);
+        result.SyncedAt!.Value.GetRawText().Should().Be("1.7839751E9");
     }
 
     [Fact]
@@ -72,7 +95,7 @@ public class DynamicInstrumentationClientTests
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(
-            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.BREAKPOINT, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
         result.Changed.Should().BeFalse();
         result.Configurations.Should().BeEmpty();
@@ -236,7 +259,7 @@ public class DynamicInstrumentationClientTests
 
         var client = CreateClient(handler);
         await client.FetchConfigurationsAsync(
-            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.BREAKPOINT, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
         capturedContent.Should().NotBeNull();
         var capturedBody = await capturedContent!.ReadAsStringAsync();
@@ -246,8 +269,34 @@ public class DynamicInstrumentationClientTests
         doc.RootElement.GetProperty("Service").GetString().Should().Be("test-service");
         doc.RootElement.GetProperty("Environment").GetString().Should().Be("test-env");
         doc.RootElement.GetProperty("InstrumentationType").GetString().Should().Be("BREAKPOINT");
-        // SyncedAt must serialize as an ISO-8601 string on the wire (spec contract).
+        // SyncedAt echoes back verbatim in the shape it was received (here a string).
         doc.RootElement.GetProperty("SyncedAt").GetString().Should().Be("2024-09-17T22:03:24Z");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_EchoesNumericSyncedAt_BackAsNumber()
+    {
+        // The round-trip that broke against the live backend: a numeric SyncedAt received from
+        // the server must be echoed back on the next request AS A NUMBER, not a quoted string,
+        // or the backend rejects the cursor. Guards the JsonElement round-trip end to end.
+        HttpContent? capturedContent = null;
+        var handler = new MockHttpHandler(req =>
+        {
+            capturedContent = req.Content;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        await client.FetchConfigurationsAsync(
+            InstrumentationType.PROBE, syncedAt: Json("1.7839751E9"));
+
+        var capturedBody = await capturedContent!.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(capturedBody);
+        doc.RootElement.GetProperty("SyncedAt").ValueKind.Should().Be(JsonValueKind.Number);
+        doc.RootElement.GetProperty("SyncedAt").GetRawText().Should().Be("1.7839751E9");
     }
 
     [Fact]

@@ -23,7 +23,12 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
 {
     private const int MaxPages = 3;
 
-    // PascalCase on the wire (no camelCase policy) to match the API and the other SDKs.
+    // Prefix on DI log lines so operators can grep the agent's output apart from the host app's.
+    private const string LogPrefix = "AWS DI: ";
+
+    private const string UserAgent = "DynamicInstrumentationClient/1.0";
+
+    // PascalCase on the wire (no camelCase policy) to match the API.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         Converters = { new JsonStringEnumConverter() },
@@ -42,11 +47,11 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The fetch result, including whether anything changed.</returns>
     public async Task<FetchConfigurationsResponse> FetchConfigurationsAsync(
-        InstrumentationType type, string? syncedAt = null, CancellationToken ct = default)
+        InstrumentationType type, JsonElement? syncedAt = null, CancellationToken ct = default)
     {
         var allConfigs = new List<JsonElement>();
         string? nextToken = null;
-        string? responseSyncedAt = null;
+        JsonElement? responseSyncedAt = null;
         var changed = false;
         int? syncInterval = null;
 
@@ -61,22 +66,32 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
                 NextToken = nextToken,
             };
 
-            var response = await this.PostAsync<FetchConfigurationsRequest, FetchConfigurationsRawResponse>(
-                $"{this.apiUrl}/list-instrumentation-configurations", request, ct);
+            var (response, notFound) = await this.PostAsync<FetchConfigurationsRequest, FetchConfigurationsRawResponse>(
+                $"{this.apiUrl.TrimEnd('/')}/list-instrumentation-configurations", request, ct);
+
+            // 404 means "no configs for this service/env" — a normal empty result, not a failure.
+            if (notFound)
+            {
+                return new FetchConfigurationsResponse(true, page == 0 ? false : changed, responseSyncedAt, syncInterval, [.. allConfigs]);
+            }
 
             if (response == null)
             {
                 return FetchConfigurationsResponse.Failed;
             }
 
-            // Latch `changed` from page 0 only — a later page's Changed=false must not
-            // drop configs already accumulated (data loss).
+            // Latch `changed` from page 0 only — a later page's Changed=false must not drop accumulated configs.
             if (page == 0)
             {
                 changed = response.Changed;
             }
 
-            responseSyncedAt = response.SyncedAt;
+            // Only carry a real cursor forward; an absent SyncedAt (Undefined) must not be echoed back.
+            if (response.SyncedAt.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null)
+            {
+                responseSyncedAt = response.SyncedAt.Clone();
+            }
+
             syncInterval = response.SyncInterval;
 
             if (!changed)
@@ -118,29 +133,42 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
         };
 
         await this.PostAsync<ReportStatusRequest, object>(
-            $"{this.apiUrl}/report-instrumentation-configuration-status", request, ct);
+            $"{this.apiUrl.TrimEnd('/')}/report-instrumentation-configuration-status", request, ct);
     }
 
-    private async Task<TResponse?> PostAsync<TRequest, TResponse>(string url, TRequest body, CancellationToken ct)
+    // Returns (deserialized response, notFound). notFound=true distinguishes a 404 (normal empty result) from other failures.
+    private async Task<(TResponse? Response, bool NotFound)> PostAsync<TRequest, TResponse>(string url, TRequest body, CancellationToken ct)
     {
         try
         {
             using var suppressScope = SuppressInstrumentationScope.Begin();
 
-            var response = await this.httpClient.PostAsJsonAsync(url, body, JsonOptions, ct);
+            // Not disposed: content must stay readable after SendAsync returns; disposal is non-critical here.
+            var message = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body, options: JsonOptions),
+            };
+            message.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+
+            var response = await this.httpClient.SendAsync(message, ct);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return (default, true);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                return default;
+                return (default, false);
             }
 
             var content = await response.Content.ReadAsStringAsync(ct);
             if (string.IsNullOrEmpty(content))
             {
-                return default;
+                return (default, false);
             }
 
-            return JsonSerializer.Deserialize<TResponse>(content, JsonOptions);
+            return (JsonSerializer.Deserialize<TResponse>(content, JsonOptions), false);
         }
         catch (OperationCanceledException)
         {
@@ -148,7 +176,7 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
         }
         catch (Exception ex)
         {
-            this.log.LogDebug(ex, "DI client request to {Url} failed", url);
+            this.log.LogDebug(ex, LogPrefix + "client request to {Url} failed", url);
             return default;
         }
     }
@@ -168,8 +196,8 @@ public record FetchConfigurationsRequest
     /// <summary>Gets the instrumentation type being requested.</summary>
     public string InstrumentationType { get; init; } = string.Empty;
 
-    /// <summary>Gets the opaque sync cursor from the previous response, if any.</summary>
-    public string? SyncedAt { get; init; }
+    /// <summary>Gets the sync cursor echoed back verbatim (a JSON number on the live backend); omitted on a full sync.</summary>
+    public JsonElement? SyncedAt { get; init; }
 
     /// <summary>Gets the pagination token, if continuing a prior page.</summary>
     public string? NextToken { get; init; }
@@ -184,7 +212,7 @@ public record FetchConfigurationsRequest
 public record FetchConfigurationsResponse(
     bool Success,
     bool Changed,
-    string? SyncedAt,
+    JsonElement? SyncedAt,
     int? SyncInterval,
     JsonElement[] Configurations)
 {
@@ -200,20 +228,20 @@ public record StatusEntry
     /// <summary>Gets the instrumentation type.</summary>
     public string InstrumentationType { get; init; } = string.Empty;
 
+    /// <summary>Gets the signal type. Only "SNAPSHOT" is emitted, matching the other SDKs.</summary>
+    public string SignalType { get; init; } = "SNAPSHOT";
+
     /// <summary>Gets the location hash identifying the configuration.</summary>
     public string LocationHash { get; init; } = string.Empty;
 
     /// <summary>Gets the status value (e.g. READY, ACTIVE, ERROR, DISABLED).</summary>
     public string Status { get; init; } = string.Empty;
 
-    /// <summary>Gets the disable reason, if the status is DISABLED.</summary>
-    public string? DisableReason { get; init; }
-
     /// <summary>Gets the error cause, if the status is ERROR.</summary>
     public string? ErrorCause { get; init; }
 
-    /// <summary>Gets the timestamp of the status event.</summary>
-    public string? Timestamp { get; init; }
+    /// <summary>Gets the status event time as Unix epoch seconds (wire contract, matches other SDKs).</summary>
+    public long Time { get; init; }
 }
 
 /// <summary>Raw deserialized response for a single page of the list API.</summary>
@@ -223,9 +251,9 @@ internal record FetchConfigurationsRawResponse
     [JsonPropertyName("Changed")]
     public bool Changed { get; init; }
 
-    /// <summary>Gets the opaque cursor token (ISO-8601 string per spec) — echoed back, never parsed.</summary>
+    /// <summary>Gets the raw sync cursor; the live backend emits a JSON number (epoch seconds), captured as <see cref="JsonElement"/> and only echoed back.</summary>
     [JsonPropertyName("SyncedAt")]
-    public string? SyncedAt { get; init; }
+    public JsonElement SyncedAt { get; init; }
 
     /// <summary>Gets the server-suggested seconds to wait before the next sync.</summary>
     [JsonPropertyName("SyncInterval")]
