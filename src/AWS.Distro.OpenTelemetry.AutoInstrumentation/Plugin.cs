@@ -667,11 +667,11 @@ public class Plugin
         // We need to work with upstream to support these detectors for windows.
         // TODO: Remove explicit SemanticConventionVersion once upstream is fixed:
         // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/4768
-        builder.AddAWSEC2Detector(opts => opts.SemanticConventionVersion = SemanticConventionVersion.V1_40_0);
+        builder.AddAWSEC2Detector(opts => opts.SemanticConventionVersion = global::OpenTelemetry.Resources.AWS.SemanticConventionVersion.V1_40_0);
 #if !NETFRAMEWORK
         builder
             .AddAWSEKSDetector()
-            .AddAWSECSDetector(opts => opts.SemanticConventionVersion = SemanticConventionVersion.V1_40_0);
+            .AddAWSECSDetector(opts => opts.SemanticConventionVersion = global::OpenTelemetry.Resources.AWS.SemanticConventionVersion.V1_40_0);
 #endif
 
         return builder;
