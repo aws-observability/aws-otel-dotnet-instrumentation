@@ -665,11 +665,13 @@ public class Plugin
         // The current version of the AWS Resource Detectors doesn't build the EKS and ECS resource detectors
         // for NETFRAMEWORK. More details are found here: https://github.com/open-telemetry/opentelemetry-dotnet-contrib/pull/1177#discussion_r1193329666
         // We need to work with upstream to support these detectors for windows.
-        builder.AddAWSEC2Detector();
+        // TODO: Remove explicit SemanticConventionVersion once upstream is fixed:
+        // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/4768
+        builder.AddAWSEC2Detector(opts => opts.SemanticConventionVersion = global::OpenTelemetry.Resources.AWS.SemanticConventionVersion.V1_40_0);
 #if !NETFRAMEWORK
         builder
             .AddAWSEKSDetector()
-            .AddAWSECSDetector();
+            .AddAWSECSDetector(opts => opts.SemanticConventionVersion = global::OpenTelemetry.Resources.AWS.SemanticConventionVersion.V1_40_0);
 #endif
 
         return builder;
