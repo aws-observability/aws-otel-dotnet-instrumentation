@@ -120,27 +120,36 @@ internal static class ValueSerializer
 
     private static CapturedValue SerializeCollection(IEnumerable enumerable, string typeName, CaptureConfiguration limits, int objectDepth, int collectionDepth, HashSet<object> visited)
     {
-        var elements = new List<CapturedValue>();
-        int count = 0;
-        int totalCount = 0;
+        // Use ICollection.Count when available to avoid enumerating just to learn the size.
+        var knownCount = enumerable switch
+        {
+            ICollection c => c.Count,
+            _ => (int?)null,
+        };
 
+        var elements = new List<CapturedValue>();
+        int width = limits.MaxCollectionWidth;
+
+        // Pull at most width+1 (width to capture, +1 to detect truncation) — never walk the whole
+        // sequence, which may be huge/lazy/infinite and runs on the user's thread.
         foreach (var item in enumerable)
         {
-            totalCount++;
-            if (count < limits.MaxCollectionWidth)
+            if (elements.Count >= width)
             {
-                elements.Add(Serialize(item, limits, objectDepth, collectionDepth + 1, visited));
-                count++;
+                knownCount ??= width + 1; // Unknown size: one extra item proves there's more.
+                break;
             }
+
+            elements.Add(Serialize(item, limits, objectDepth, collectionDepth + 1, visited));
         }
 
-        var collectionTruncated = totalCount > limits.MaxCollectionWidth;
+        var truncated = knownCount is int n && n > width;
         return new CapturedValue
         {
             Type = typeName,
             Elements = elements.ToArray(),
-            OriginalSize = collectionTruncated ? totalCount : null,
-            NotCapturedReason = collectionTruncated ? NotCapturedReason.CollectionSize : NotCapturedReason.None,
+            OriginalSize = truncated ? knownCount : null,
+            NotCapturedReason = truncated ? NotCapturedReason.CollectionSize : NotCapturedReason.None,
         };
     }
 

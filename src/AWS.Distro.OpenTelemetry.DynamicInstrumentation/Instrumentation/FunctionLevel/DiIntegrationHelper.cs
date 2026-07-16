@@ -76,7 +76,9 @@ internal static class DiIntegrationHelper
 
     internal static StackFrameInfo[] CaptureStackTrace(int maxFrames)
     {
-        var trace = new StackTrace(skipFrames: 3, fNeedFileInfo: true);
+        // No skipFrames count: the agent's own frames are dropped by BuildFrames' IsInternalFrame filter,
+        // which is robust where a fixed count would break if the call depth changed.
+        var trace = new StackTrace(fNeedFileInfo: true);
         return BuildFrames(trace, maxFrames);
     }
 

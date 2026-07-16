@@ -145,12 +145,13 @@ public sealed class DynamicInstrumentationManager : IDisposable
     /// Called by <see cref="ConfigurationPoller"/> on config change: registers supported targets, removes stale ones, and applies each new config to the profiler once.
     /// </summary>
     /// <param name="configs">The merged active configuration set.</param>
-    internal void OnConfigurationsChanged(List<InstrumentationConfiguration> configs)
+    /// <returns>True when every supported config was applied (safe for the poller to latch this set); false when at least one target could not be applied yet and the next poll should retry.</returns>
+    internal bool OnConfigurationsChanged(List<InstrumentationConfiguration> configs)
     {
         // Serialize the callback: the poller drives it from both poll threads.
         lock (this.configChangeLock)
         {
-            this.OnConfigurationsChangedLocked(configs);
+            return this.OnConfigurationsChangedLocked(configs);
         }
     }
 
@@ -161,12 +162,12 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private static bool IsSupported(InstrumentationConfiguration config) =>
         config.IsMethodLevel && !ProfilerTranslator.IsUnsupportedTarget(config);
 
-    private void OnConfigurationsChangedLocked(List<InstrumentationConfiguration> configs)
+    private bool OnConfigurationsChangedLocked(List<InstrumentationConfiguration> configs)
     {
         var reg = this.registry;
         if (reg == null)
         {
-            return;
+            return true;
         }
 
         // Register only supported targets; unsupported ones never enter the registry.
@@ -193,6 +194,9 @@ public sealed class DynamicInstrumentationManager : IDisposable
         {
             this.appliedInstrumentations.Remove(removedKey);
         }
+
+        // If any target can't be applied yet, signal the poller not to latch so the next poll retries.
+        var retryNeeded = false;
 
         // Apply each newly-registered config to the profiler exactly once.
         foreach (var registered in reg.GetAll())
@@ -230,6 +234,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 case InstrumentationApplyResult.TypeNotLoaded:
                     // Target assembly likely not loaded yet; forget applied-state so a later poll retries. No ERROR (would spam every poll).
                     this.appliedInstrumentations.Remove(key);
+
+                    retryNeeded = true; // Don't latch, or the fingerprint gate never revisits this config.
                     break;
 
                 case InstrumentationApplyResult.Skipped:
@@ -243,6 +249,9 @@ public sealed class DynamicInstrumentationManager : IDisposable
                     break;
             }
         }
+
+        // Latch only when nothing is pending a retry.
+        return !retryNeeded;
     }
 
     private void Cleanup()

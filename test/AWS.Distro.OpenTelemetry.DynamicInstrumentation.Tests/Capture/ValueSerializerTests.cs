@@ -101,6 +101,30 @@ public class ValueSerializerTests
     }
 
     [Fact]
+    public void Serialize_LazyEnumerable_StopsAtMaxWidth()
+    {
+        // A non-ICollection lazy sequence must NOT be walked in full (it may be infinite and this
+        // runs on the user's thread). We enumerate at most MaxCollectionWidth+1: width captured, +1 to
+        // detect truncation.
+        int pulled = 0;
+        IEnumerable<int> Lazy()
+        {
+            while (true)
+            {
+                pulled++;
+                yield return pulled;
+            }
+        }
+
+        var result = ValueSerializer.Serialize(Lazy(), DefaultLimits);
+
+        result.Elements.Should().HaveCount(20); // MaxCollectionWidth = 20
+        result.NotCapturedReason.Should().Be(NotCapturedReason.CollectionSize);
+        result.OriginalSize.Should().Be(21, "unknown-size sequences report at-least width+1, not an exact walked count");
+        pulled.Should().Be(21, "the infinite sequence must be pulled only width+1 times, never fully enumerated");
+    }
+
+    [Fact]
     public void Serialize_Dictionary_ReturnsFields()
     {
         var dict = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 };
