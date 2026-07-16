@@ -34,8 +34,22 @@ internal sealed class ProfilerTranslator
     /// </summary>
     /// <param name="config">The configuration to apply.</param>
     /// <returns>The typed apply outcome.</returns>
-    public InstrumentationApplyResult ApplyInstrumentation(InstrumentationConfiguration config)
+    public InstrumentationApplyResult ApplyInstrumentation(InstrumentationConfiguration config) =>
+        this.ApplyInstrumentation(config, out _);
+
+    /// <summary>
+    /// Applies instrumentation and reports the profiler-supported arities that were woven, so the caller
+    /// can index them for arity-aware capture resolution (#3). <paramref name="appliedArities"/> is
+    /// non-empty only when the result is <see cref="InstrumentationApplyResult.Applied"/>.
+    /// </summary>
+    /// <param name="config">The configuration to apply.</param>
+    /// <param name="appliedArities">The parameter counts actually registered with the profiler.</param>
+    /// <returns>The typed apply outcome.</returns>
+    public InstrumentationApplyResult ApplyInstrumentation(
+        InstrumentationConfiguration config, out IReadOnlyCollection<int> appliedArities)
     {
+        appliedArities = Array.Empty<int>();
+
         if (!config.IsMethodLevel)
         {
             return InstrumentationApplyResult.Skipped; // Line-level requires C++ extension (Phase 2)
@@ -59,6 +73,7 @@ internal sealed class ProfilerTranslator
             return InstrumentationApplyResult.MethodNotFound;
         }
 
+        var supportedArities = new List<int>();
         var definitions = new List<NativeCallTargetDefinition>();
         foreach (var arity in resolution.Arities)
         {
@@ -66,6 +81,8 @@ internal sealed class ProfilerTranslator
             {
                 continue;
             }
+
+            supportedArities.Add(arity);
 
             definitions.Add(new NativeCallTargetDefinition(
                 targetAssembly: resolution.AssemblyName,
@@ -93,6 +110,8 @@ internal sealed class ProfilerTranslator
                 NativeMethods.AddInstrumentations(config.LocationHash, array, array.Length);
             }
 
+            // Surface only on success: on a native throw nothing was woven, so nothing should be indexed.
+            appliedArities = supportedArities;
             return InstrumentationApplyResult.Applied;
         }
         catch

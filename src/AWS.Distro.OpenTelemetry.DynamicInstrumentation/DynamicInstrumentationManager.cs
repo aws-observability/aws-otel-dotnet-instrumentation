@@ -204,11 +204,26 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 continue; // Already applied on a previous poll.
             }
 
-            var result = this.profilerTranslator?.ApplyInstrumentation(config)
+            IReadOnlyCollection<int> appliedArities = Array.Empty<int>();
+            var result = this.profilerTranslator?.ApplyInstrumentation(config, out appliedArities)
                 ?? InstrumentationApplyResult.TypeNotLoaded;
             switch (result)
             {
                 case InstrumentationApplyResult.Applied:
+                    // Index the woven arities so the capture hot path resolves this call by (type, arity),
+                    // disambiguating co-located methods that differ in parameter count (#3).
+                    if (reg.IndexArities(config.TypeName, key, appliedArities))
+                    {
+                        // Same-arity collision: another configured method on this type has the same
+                        // parameter count, so args.Length can't tell them apart — captures may be
+                        // attributed to the wrong probe. Documented #3 residual.
+                        // Note: this only fires for the SECOND (colliding) config to apply — the first
+                        // applied cleanly before its peer existed, so it's never flagged even though it's
+                        // equally ambiguous. TODO(PR3): report ERROR for BOTH keys sharing the bucket
+                        // (this.statusReporter.ReportError on each), not just this incoming one, or the
+                        // operator sees only half the ambiguous pair.
+                    }
+
                     // TODO(PR3): this.statusReporter.ReportReadyForNew();
                     break;
 

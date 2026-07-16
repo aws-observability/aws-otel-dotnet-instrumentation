@@ -104,6 +104,32 @@ public class ProfilerTranslatorTests
     }
 
     [Fact]
+    public void ApplyInstrumentation_Applied_SurfacesSupportedArities()
+    {
+        // The out overload reports the woven arities so the Manager can index them for arity-aware
+        // capture resolution (#3). Only profiler-supported arities appear (15 dropped, 2 kept).
+        var translator = new ProfilerTranslator((_, _, _) => { }, Resolver("MyApp", 2, 15));
+
+        var result = translator.ApplyInstrumentation(CreateConfig(), out var arities);
+
+        result.Should().Be(InstrumentationApplyResult.Applied);
+        arities.Should().BeEquivalentTo(new[] { 2 });
+    }
+
+    [Fact]
+    public void ApplyInstrumentation_NativeThrows_SurfacesNoArities()
+    {
+        // On a native throw nothing was woven, so nothing must be indexed.
+        var translator = new ProfilerTranslator(
+            (_, _, _) => throw new DllNotFoundException("boom"), Resolver("MyApp", 2));
+
+        var result = translator.ApplyInstrumentation(CreateConfig(), out var arities);
+
+        result.Should().Be(InstrumentationApplyResult.RuntimeError);
+        arities.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ApplyInstrumentation_UnresolvableTarget_ReportsTypeNotLoaded()
     {
         bool registered = false;

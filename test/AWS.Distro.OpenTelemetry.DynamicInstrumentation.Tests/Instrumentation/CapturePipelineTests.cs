@@ -141,6 +141,27 @@ public class CapturePipelineTests : IDisposable
     }
 
     [Fact]
+    public void NamedArguments_MoreNamesThanArgs_CapturesOnlyPresentArgs()
+    {
+        // Filter names three args but only two are passed — capture the two that exist, no crash and no
+        // phantom third entry. (Pins the #4 rewrite: count is min(args.Length, filter.Length).)
+        var capture = CaptureConfiguration.Default with
+        {
+            CaptureArguments = new[] { "orderId", "quantity", "missing" },
+        };
+        RegistryWith(capture);
+        var target = new CaptureTarget();
+
+        var state = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "ORD", 5 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "r", null, in state);
+
+        var cap = DIDataStore.Drain().Single();
+        cap.Arguments!.Keys.Should().BeEquivalentTo(new[] { "orderId", "quantity" });
+        cap.Arguments["orderId"].Value.Should().Be("ORD");
+        cap.Arguments["quantity"].Value.Should().Be("5");
+    }
+
+    [Fact]
     public void CaptureReturnFalse_OmitsReturnValue()
     {
         var capture = CaptureConfiguration.Default with { CaptureReturn = false };
@@ -211,6 +232,82 @@ public class CapturePipelineTests : IDisposable
     }
 
     [Fact]
+    public void CoLocatedMethods_ResolveByArity_AttributeToCorrectProbe()
+    {
+        // #3 fix, end-to-end through the capture hot path: two instrumented methods on ONE type,
+        // differing in parameter count. Each woven call must attribute to its own config (LocationHash),
+        // not "first key wins". Arity comes from args.Length, indexed via IndexArities (Apply-time).
+        var registry = new InstrumentationRegistry();
+        var oneArg = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = CodeUnit,
+            ClassName = "MultiMethodTarget",
+            MethodName = "Process",
+            LocationHash = "loc-one-arg",
+            Capture = CaptureConfiguration.Default,
+        };
+        var twoArg = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = CodeUnit,
+            ClassName = "MultiMethodTarget",
+            MethodName = "Validate",
+            LocationHash = "loc-two-arg",
+            Capture = CaptureConfiguration.Default,
+        };
+        registry.Register(oneArg);
+        registry.Register(twoArg);
+        registry.IndexArities($"{CodeUnit}.MultiMethodTarget", oneArg.InstrumentationKey, new[] { 1 });
+        registry.IndexArities($"{CodeUnit}.MultiMethodTarget", twoArg.InstrumentationKey, new[] { 2 });
+        DiIntegrationHelper.Configure(registry);
+
+        var target = new MultiMethodTarget();
+
+        // Arity-1 call → must resolve to the one-arg config.
+        var s1 = DiIntegrationHelper.OnMethodBegin<MultiMethodTarget>(target, new object?[] { "x" });
+        DiIntegrationHelper.OnMethodEnd<MultiMethodTarget, string>(target, "r", null, in s1);
+
+        // Arity-2 call → must resolve to the two-arg config.
+        var s2 = DiIntegrationHelper.OnMethodBegin<MultiMethodTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<MultiMethodTarget, string>(target, "r", null, in s2);
+
+        var caps = DIDataStore.Drain();
+        caps.Should().HaveCount(2);
+        caps.Should().ContainSingle(c => c.LocationHash == "loc-one-arg"
+                                      && c.InstrumentationKey == oneArg.InstrumentationKey);
+        caps.Should().ContainSingle(c => c.LocationHash == "loc-two-arg"
+                                      && c.InstrumentationKey == twoArg.InstrumentationKey);
+    }
+
+    [Fact]
+    public void RecursiveCalls_NestedBeginEnd_BothCapturesSurviveWithOwnEntryData()
+    {
+        // #1 fix, end-to-end through the helper (not just DIDataStore): a recursive call nests
+        // Begin(outer) → Begin(inner) → End(inner) → End(outer) on the SAME method. The per-call id in
+        // CaptureState must pair each End with ITS OWN entry — the inner End must not consume the outer's
+        // pending entry. Before the fix the store keyed by instrumentation key, so the inner frame
+        // overwrote the outer's entry and the outer capture was silently dropped.
+        RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+
+        var outer = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "OUTER", 1 });
+        var inner = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "INNER", 2 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "inner-ret", null, in inner);
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "outer-ret", null, in outer);
+
+        var caps = DIDataStore.Drain();
+        caps.Should().HaveCount(2, "both the outer and inner invocations must emit a capture");
+
+        // Each capture kept its OWN entry data (args captured at its Begin, return at its End) — proving
+        // the frames were paired independently rather than one clobbering the other.
+        caps.Should().ContainSingle(c => c.Arguments!["arg0"].Value == "INNER"
+                                      && c.ReturnValue!.Value == "inner-ret");
+        caps.Should().ContainSingle(c => c.Arguments!["arg0"].Value == "OUTER"
+                                      && c.ReturnValue!.Value == "outer-ret");
+    }
+
+    [Fact]
     public void OnMethodEnd_WithoutMatchingBegin_DoesNotThrowOrEnqueue()
     {
         RegistryWith(CaptureConfiguration.Default);
@@ -234,6 +331,15 @@ public class CaptureTarget
 public class UnrelatedTarget
 {
     public int Compute(int x) => x;
+}
+
+// Two instrumented methods on one type, differing in parameter count — the #3 arity-disambiguation
+// case. FullName must equal CodeUnit + ".MultiMethodTarget".
+public class MultiMethodTarget
+{
+    public string Process(string orderId) => orderId;
+
+    public string Validate(string orderId, int quantity) => $"{orderId}:{quantity}";
 }
 
 // Helper to obtain a default CallTargetState for the "no matching begin" test.

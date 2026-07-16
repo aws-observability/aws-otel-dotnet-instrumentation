@@ -143,14 +143,16 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
         {
             using var suppressScope = SuppressInstrumentationScope.Begin();
 
-            // Not disposed: content must stay readable after SendAsync returns; disposal is non-critical here.
-            var message = new HttpRequestMessage(HttpMethod.Post, url)
+            // Disposed once the exchange completes: the request content is consumed by SendAsync and the
+            // response body is fully buffered by ReadAsStringAsync below before we return, so nothing here
+            // is read afterwards. `using` also disposes the request Content (the JsonContent stream).
+            using var message = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = JsonContent.Create(body, options: JsonOptions),
             };
             message.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
 
-            var response = await this.httpClient.SendAsync(message, ct);
+            using var response = await this.httpClient.SendAsync(message, ct);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

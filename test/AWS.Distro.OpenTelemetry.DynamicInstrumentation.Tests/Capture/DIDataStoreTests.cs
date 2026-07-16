@@ -50,9 +50,9 @@ public class DIDataStoreTests : IDisposable
     public void RecordThenRetrieveEntry_ReturnsIt()
     {
         var entry = new PendingEntryData { InstrumentationKey = "k", LocationHash = "h" };
-        DIDataStore.RecordEntry("k", entry);
+        var callId = DIDataStore.RecordEntry(entry);
 
-        var retrieved = DIDataStore.RetrieveEntry("k");
+        var retrieved = DIDataStore.RetrieveEntry(callId);
 
         retrieved.Should().BeSameAs(entry);
     }
@@ -60,41 +60,45 @@ public class DIDataStoreTests : IDisposable
     [Fact]
     public void RetrieveEntry_RemovesIt_SecondRetrieveReturnsNull()
     {
-        DIDataStore.RecordEntry("k", new PendingEntryData { InstrumentationKey = "k" });
+        var callId = DIDataStore.RecordEntry(new PendingEntryData { InstrumentationKey = "k" });
 
-        DIDataStore.RetrieveEntry("k").Should().NotBeNull();
-        DIDataStore.RetrieveEntry("k").Should().BeNull(); // consumed
+        DIDataStore.RetrieveEntry(callId).Should().NotBeNull();
+        DIDataStore.RetrieveEntry(callId).Should().BeNull(); // consumed
     }
 
     [Fact]
-    public void RetrieveEntry_UnknownKey_ReturnsNull()
+    public void RetrieveEntry_UnknownCallId_ReturnsNull()
     {
-        DIDataStore.RetrieveEntry("never-recorded").Should().BeNull();
+        DIDataStore.RetrieveEntry(999999).Should().BeNull();
     }
 
     [Fact]
-    public void RecordEntry_SameKeyTwice_LastWins()
+    public void RecordEntry_RecursiveCallsOnSameKey_EachEntrySurvivesIndependently()
     {
-        // Models a recursive/re-entrant call on the same instrumentation key: the second
-        // entry overwrites the first (documented behavior of the dictionary-per-context).
-        var first = new PendingEntryData { InstrumentationKey = "k", LocationHash = "first" };
-        var second = new PendingEntryData { InstrumentationKey = "k", LocationHash = "second" };
-        DIDataStore.RecordEntry("k", first);
-        DIDataStore.RecordEntry("k", second);
+        // Regression: a recursive/re-entrant call on the same instrumentation key used to overwrite
+        // the outer entry (keyed by instrumentation key), so the outer capture was silently dropped.
+        // Per-call ids keep each invocation's entry distinct — inner and outer both pair correctly.
+        var outer = new PendingEntryData { InstrumentationKey = "k", LocationHash = "outer" };
+        var inner = new PendingEntryData { InstrumentationKey = "k", LocationHash = "inner" };
+        var outerId = DIDataStore.RecordEntry(outer);   // outer Begin
+        var innerId = DIDataStore.RecordEntry(inner);   // inner Begin (recursion)
 
-        DIDataStore.RetrieveEntry("k")!.LocationHash.Should().Be("second");
+        // Ends unwind inner-first, then outer — each retrieves its OWN entry, neither is lost.
+        DIDataStore.RetrieveEntry(innerId)!.LocationHash.Should().Be("inner");
+        DIDataStore.RetrieveEntry(outerId)!.LocationHash.Should().Be("outer");
+        outerId.Should().NotBe(innerId);
     }
 
     [Fact]
     public void Clear_EmptiesQueueAndEntries()
     {
         DIDataStore.Enqueue(Capture("a"));
-        DIDataStore.RecordEntry("k", new PendingEntryData { InstrumentationKey = "k" });
+        var callId = DIDataStore.RecordEntry(new PendingEntryData { InstrumentationKey = "k" });
 
         DIDataStore.Clear();
 
         DIDataStore.Count.Should().Be(0);
-        DIDataStore.RetrieveEntry("k").Should().BeNull();
+        DIDataStore.RetrieveEntry(callId).Should().BeNull();
     }
 
     [Fact]
@@ -102,10 +106,10 @@ public class DIDataStoreTests : IDisposable
     {
         // AsyncLocal: an entry recorded before an await is visible after it, within the
         // same logical async flow.
-        DIDataStore.RecordEntry("k", new PendingEntryData { InstrumentationKey = "k", LocationHash = "h" });
+        var callId = DIDataStore.RecordEntry(new PendingEntryData { InstrumentationKey = "k", LocationHash = "h" });
 
         await Task.Yield();
 
-        DIDataStore.RetrieveEntry("k").Should().NotBeNull();
+        DIDataStore.RetrieveEntry(callId).Should().NotBeNull();
     }
 }
