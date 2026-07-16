@@ -11,6 +11,10 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Fix Linux arm64 image being built with the x64 payload, which caused the shared
+  store and native profiler to not match the image architecture and made .NET
+  applications fail to start on arm64. Images are now built per architecture.
+  ([#424](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/424))
 
 ## v1.13.0 - 2026-06-06
 - Update OpenTelemetry dependencies - Core: 1.15.3, Instrumentation: 1.15.0
