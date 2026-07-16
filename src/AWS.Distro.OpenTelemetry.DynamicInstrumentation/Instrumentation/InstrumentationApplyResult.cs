@@ -3,7 +3,7 @@
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 
-/// <summary>Typed outcome of <see cref="ProfilerTranslator.ApplyInstrumentation"/> that distinguishes a retryable transient failure from a permanent one mapping to a backend InstrumentationErrorCause.</summary>
+/// <summary>Typed outcome of <see cref="ProfilerTranslator.ApplyInstrumentation(Model.InstrumentationConfiguration)"/> that distinguishes a retryable transient failure from a permanent one mapping to a backend InstrumentationErrorCause.</summary>
 internal enum InstrumentationApplyResult
 {
     /// <summary>At least one definition was registered with the profiler.</summary>

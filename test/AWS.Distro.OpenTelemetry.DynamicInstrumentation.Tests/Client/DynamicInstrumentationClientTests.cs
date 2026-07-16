@@ -247,10 +247,13 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_SendsCorrectRequestBody()
     {
-        HttpContent? capturedContent = null;
+        // Read the request body inside the handler, while the content is live — the client disposes the
+        // HttpRequestMessage (and its Content) once the exchange completes, so reading req.Content after
+        // the call returns would hit a disposed object.
+        string? capturedBody = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedContent = req.Content;
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json")
@@ -261,9 +264,8 @@ public class DynamicInstrumentationClientTests
         await client.FetchConfigurationsAsync(
             InstrumentationType.BREAKPOINT, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
-        capturedContent.Should().NotBeNull();
-        var capturedBody = await capturedContent!.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(capturedBody);
+        capturedBody.Should().NotBeNull();
+        var doc = JsonDocument.Parse(capturedBody!);
         // Request fields must be PascalCase to match the API (and the Java/Python/Node SDKs).
         // A case-sensitive backend treats camelCase as missing → empty/unfiltered configs.
         doc.RootElement.GetProperty("Service").GetString().Should().Be("test-service");
@@ -279,10 +281,11 @@ public class DynamicInstrumentationClientTests
         // The round-trip that broke against the live backend: a numeric SyncedAt received from
         // the server must be echoed back on the next request AS A NUMBER, not a quoted string,
         // or the backend rejects the cursor. Guards the JsonElement round-trip end to end.
-        HttpContent? capturedContent = null;
+        // Capture the body during the request; the client disposes the request message on return.
+        string? capturedBody = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedContent = req.Content;
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json"),
@@ -293,8 +296,8 @@ public class DynamicInstrumentationClientTests
         await client.FetchConfigurationsAsync(
             InstrumentationType.PROBE, syncedAt: Json("1.7839751E9"));
 
-        var capturedBody = await capturedContent!.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(capturedBody);
+        capturedBody.Should().NotBeNull();
+        var doc = JsonDocument.Parse(capturedBody!);
         doc.RootElement.GetProperty("SyncedAt").ValueKind.Should().Be(JsonValueKind.Number);
         doc.RootElement.GetProperty("SyncedAt").GetRawText().Should().Be("1.7839751E9");
     }
@@ -302,10 +305,11 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task ReportStatus_SendsRequest()
     {
-        HttpContent? capturedContent = null;
+        // Capture the body during the request; the client disposes the request message on return.
+        string? capturedBody = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedContent = req.Content;
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
@@ -315,8 +319,7 @@ public class DynamicInstrumentationClientTests
             new() { LocationHash = "hash1", Status = "READY", InstrumentationType = "PROBE" }
         });
 
-        capturedContent.Should().NotBeNull();
-        var capturedBody = await capturedContent!.ReadAsStringAsync();
+        capturedBody.Should().NotBeNull();
         capturedBody.Should().Contain("hash1");
         capturedBody.Should().Contain("READY");
     }

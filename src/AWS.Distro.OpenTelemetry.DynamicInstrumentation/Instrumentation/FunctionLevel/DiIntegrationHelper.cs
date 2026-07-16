@@ -67,22 +67,12 @@ internal static class DiIntegrationHelper
     }
 
     /// <summary>
-    /// Finds the instrumentation key for a registered config whose type name exactly equals <paramref name="targetTypeFullName"/>.
+    /// Finds the instrumentation key for a registered config whose type name exactly equals
+    /// <paramref name="targetTypeFullName"/>, via the registry's indexed lookup (O(1), not a scan).
     /// </summary>
-    // Exact match only: a suffix match would collide across namespaces (e.g. A.Svc vs B.Svc) and pick a nondeterministic winner.
-    internal static string? MatchKeyByType(string targetTypeFullName, InstrumentationRegistry registry)
-    {
-        foreach (var reg in registry.GetAll())
-        {
-            var config = reg.Config;
-            if (targetTypeFullName == config.TypeName)
-            {
-                return config.InstrumentationKey;
-            }
-        }
-
-        return null;
-    }
+    // Exact match only: a suffix match would collide across namespaces (e.g. A.Svc vs B.Svc).
+    internal static string? MatchKeyByType(string targetTypeFullName, InstrumentationRegistry registry) =>
+        registry.TryResolveKeyByType(targetTypeFullName);
 
     internal static StackFrameInfo[] CaptureStackTrace(int maxFrames)
     {
@@ -142,7 +132,7 @@ internal static class DiIntegrationHelper
             return CallTargetState.GetDefault();
         }
 
-        var instrumentationKey = ResolveInstrumentationKey(instance);
+        var instrumentationKey = ResolveInstrumentationKey(instance, args.Length);
         if (instrumentationKey == null)
         {
             return CallTargetState.GetDefault();
@@ -166,18 +156,19 @@ internal static class DiIntegrationHelper
         if (limits.CaptureArguments != null)
         {
             capturedArgs = new Dictionary<string, CapturedValue>();
-            for (int i = 0; i < args.Length; i++)
+
+            // A non-empty CaptureArguments is a positional name filter: capture only the first N args
+            // (N = filter length), naming each from the filter. An empty filter captures every arg,
+            // naming them arg0, arg1, ... . Bounded by args.Length so a filter longer than the
+            // argument list simply captures what exists.
+            var hasNameFilter = limits.CaptureArguments.Length > 0;
+            var count = hasNameFilter
+                ? Math.Min(args.Length, limits.CaptureArguments.Length)
+                : args.Length;
+
+            for (int i = 0; i < count; i++)
             {
-                var name = (limits.CaptureArguments.Length > 0 && i < limits.CaptureArguments.Length)
-                    ? limits.CaptureArguments[i]
-                    : $"arg{i}";
-
-                // Skip args outside a configured named filter.
-                if (limits.CaptureArguments.Length > 0 && i >= limits.CaptureArguments.Length)
-                {
-                    break;
-                }
-
+                var name = hasNameFilter ? limits.CaptureArguments[i] : $"arg{i}";
                 capturedArgs[name] = ValueSerializer.Serialize(args[i], limits);
             }
         }
@@ -210,22 +201,23 @@ internal static class DiIntegrationHelper
             StackTrace = stackTrace,
         };
 
-        DIDataStore.RecordEntry(instrumentationKey, entryData);
+        var callId = DIDataStore.RecordEntry(entryData);
 
-        // Profiler CallTargetState is (Activity, object state); stash the key for OnMethodEnd.
-        return new CallTargetState(activity, instrumentationKey);
+        // Profiler CallTargetState is (Activity, object state); stash the key + per-call id so
+        // OnMethodEnd pairs with THIS invocation's entry (recursion-safe).
+        return new CallTargetState(activity, new CaptureState(instrumentationKey, callId));
     }
 
     // Shared end-of-method capture; hasReturn distinguishes a real (possibly null) return from a void method.
     private static void EndCore<TReturn>(TReturn returnValue, bool hasReturn, Exception? exception, in CallTargetState state)
     {
-        var instrumentationKey = state.State as string;
-        if (instrumentationKey == null)
+        if (state.State is not CaptureState captureState)
         {
             return;
         }
 
-        var entryData = DIDataStore.RetrieveEntry(instrumentationKey);
+        var instrumentationKey = captureState.InstrumentationKey;
+        var entryData = DIDataStore.RetrieveEntry(captureState.CallId);
         if (entryData == null)
         {
             return;
@@ -282,7 +274,11 @@ internal static class DiIntegrationHelper
         DIDataStore.Enqueue(capture);
     }
 
-    private static string? ResolveInstrumentationKey<TTarget>(TTarget instance)
+    // Resolves the config for a woven call. The callback carries no method identity (#3), so we
+    // disambiguate co-located methods by arity (the parameter count, = args.Length). Falls back to a
+    // type-only match when the arity index has no entry yet — e.g. a capture that fires before the
+    // Apply-time IndexArities call, or a registry populated without applying (unit tests).
+    private static string? ResolveInstrumentationKey<TTarget>(TTarget instance, int arity)
     {
         if (registry == null)
         {
@@ -295,7 +291,8 @@ internal static class DiIntegrationHelper
             return null;
         }
 
-        return MatchKeyByType(targetType, registry);
+        return registry.TryResolveKeyByTypeAndArity(targetType, arity)
+            ?? MatchKeyByType(targetType, registry);
     }
 
     private static bool IsInternalFrame(string typeName) =>
