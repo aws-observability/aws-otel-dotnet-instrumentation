@@ -10,13 +10,13 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 /// <param name="client">The API client used to fetch configurations.</param>
 /// <param name="probeIntervalSeconds">Base interval between probe polls.</param>
 /// <param name="breakpointIntervalSeconds">Base interval between breakpoint polls.</param>
-/// <param name="onConfigurationsChanged">Callback invoked with the merged active configuration set.</param>
+/// <param name="onConfigurationsChanged">Callback invoked with the merged active configuration set. Returns true when the set was fully applied and the change may be latched; false when some target could not be applied yet (e.g. its assembly is not loaded) and the next poll should re-invoke to retry.</param>
 /// <param name="ct">Cancellation token that stops the poll loops.</param>
 public sealed class ConfigurationPoller(
     DynamicInstrumentationClient client,
     int probeIntervalSeconds,
     int breakpointIntervalSeconds,
-    Action<List<InstrumentationConfiguration>> onConfigurationsChanged,
+    Func<List<InstrumentationConfiguration>, bool> onConfigurationsChanged,
     CancellationToken ct) : IDisposable
 {
     private const int DegradedIntervalMs = 300_000;
@@ -28,7 +28,7 @@ public sealed class ConfigurationPoller(
     private readonly DynamicInstrumentationClient client = client;
     private readonly int probeIntervalMs = ToIntervalMs(probeIntervalSeconds);
     private readonly int breakpointIntervalMs = ToIntervalMs(breakpointIntervalSeconds);
-    private readonly Action<List<InstrumentationConfiguration>> onConfigurationsChanged = onConfigurationsChanged;
+    private readonly Func<List<InstrumentationConfiguration>, bool> onConfigurationsChanged = onConfigurationsChanged;
     private readonly CancellationToken ct = ct;
     private readonly object configLock = new();
 
@@ -189,9 +189,13 @@ public sealed class ConfigurationPoller(
             snapshot = allConfigs;
         }
 
-        // Persist the fingerprint only after the callback succeeds; if it throws, the stale fingerprint forces the next poll to re-apply instead of silently dropping the change.
-        this.onConfigurationsChanged(snapshot);
-        this.lastFingerprint = fingerprint;
+        // Latch the fingerprint only when the callback fully applied the set. A throw or a false result
+        // (some target not applyable yet) leaves it stale so the next poll re-invokes and retries.
+        if (this.onConfigurationsChanged(snapshot))
+        {
+            this.lastFingerprint = fingerprint;
+        }
+
         return true;
     }
 

@@ -115,7 +115,7 @@ public class ConfigurationPollerTests
         var client = ClientReturning(
             ChangedResponse(ProbeConfig("aabb000000000001")),
             ChangedResponse(ProbeConfig("aabb000000000001")));
-        var poller = CreatePoller(client, invocations.Add);
+        var poller = CreatePoller(client, c => { invocations.Add(c); return true; });
 
         (await InvokeFetchAndApply(poller, InstrumentationType.PROBE)).Should().BeTrue();
         (await InvokeFetchAndApply(poller, InstrumentationType.PROBE)).Should().BeTrue();
@@ -133,7 +133,7 @@ public class ConfigurationPollerTests
         var client = ClientReturning(
             ChangedResponse(ProbeConfig("hashKeep"), ProbeConfig("hashRemove")),
             ChangedResponse(ProbeConfig("hashKeep")));
-        var poller = CreatePoller(client, invocations.Add);
+        var poller = CreatePoller(client, c => { invocations.Add(c); return true; });
 
         await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
         await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
@@ -157,6 +157,9 @@ public class ConfigurationPollerTests
         {
             invocationCount++;
             throw new InvalidOperationException("apply failed");
+#pragma warning disable CS0162 // Unreachable — satisfies the Func<..., bool> signature; the throw exits first.
+            return true;
+#pragma warning restore CS0162
         });
 
         // First poll: the callback runs and throws — the exception propagates out of FetchAndApply.
@@ -173,6 +176,41 @@ public class ConfigurationPollerTests
         invocationCount.Should().Be(2, "a thrown apply leaves the fingerprint stale, so the next poll retries");
     }
 
+    [Fact]
+    public async Task FetchAndApply_CallbackReturnsFalse_DoesNotPersistFingerprint_SoNextPollRetries()
+    {
+        // A false result means "not fully applied" (e.g. a target's assembly isn't loaded yet). The
+        // fingerprint must stay stale so an identical next poll re-invokes and retries.
+        var invocationCount = 0;
+        var client = ClientReturning(
+            ChangedResponse(ProbeConfig("aabb0000000000aa")),
+            ChangedResponse(ProbeConfig("aabb0000000000aa")));
+        var poller = CreatePoller(client, _ => { invocationCount++; return false; });
+
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+        GetLastFingerprint(poller).Should().BeEmpty("a false (not-fully-applied) result must not latch the fingerprint");
+
+        // Second identical poll: fingerprint still stale → the callback fires again (retry).
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+        invocationCount.Should().Be(2, "an unapplied target must be retried on the next poll despite an unchanged config");
+    }
+
+    [Fact]
+    public async Task FetchAndApply_CallbackReturnsTrue_PersistsFingerprint_SoIdenticalPollSkips()
+    {
+        // A true (fully-applied) result latches the fingerprint, so an identical next poll is skipped.
+        var invocationCount = 0;
+        var client = ClientReturning(
+            ChangedResponse(ProbeConfig("aabb0000000000bb")),
+            ChangedResponse(ProbeConfig("aabb0000000000bb")));
+        var poller = CreatePoller(client, _ => { invocationCount++; return true; });
+
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+
+        invocationCount.Should().Be(1, "a fully-applied set latches the fingerprint, so an identical poll skips");
+    }
+
     [Fact(Skip = "parity: needs staleness-warning / forced-resync — not yet implemented (source has only a TODO at ConfigurationPoller.cs:43)")]
     public void StalenessWarning_ForcesFullResync_WhenNoSuccessWithinWindow()
     {
@@ -184,7 +222,7 @@ public class ConfigurationPollerTests
     // --- Fingerprint-path helpers ---
 
     private static ConfigurationPoller CreatePoller(
-        DynamicInstrumentationClient client, Action<List<InstrumentationConfiguration>> onChanged) =>
+        DynamicInstrumentationClient client, Func<List<InstrumentationConfiguration>, bool> onChanged) =>
         new(client, probeIntervalSeconds: 60, breakpointIntervalSeconds: 60, onChanged, CancellationToken.None);
 
     private static DynamicInstrumentationClient ClientReturning(params string[] responseBodies)
