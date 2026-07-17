@@ -24,21 +24,66 @@ would lose all of that. Upstream is used only as a **reference** for the mechani
 |---|---|
 | Research: PR #2720 + public v3→v4 API docs | ✅ Done (see API map below) |
 | Research: test-coverage gap analysis | ✅ Done |
-| Contract-test enhancement (pre-migration, standalone) | ✅ PR [#433](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/433) — awaiting Docker suite run on v3 |
+| Contract-test enhancement (pre-migration, standalone) | ✅ Merged — PR [#433](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/433), green on v3 |
 | Port vendored instrumentation to v4 | ⬜ Not started |
 | Port SigV4 exporters to v4 | ⬜ Not started |
 | csproj version + TFM bumps | ⬜ Not started |
 | Remove v4-detection guard | ⬜ Not started |
 | Build + tests green on v4 | ⬜ Not started |
 
-Branch for migration work: `aws-sdk-v4-migration`.
+Branch for migration work: `aws-sdk-v4-migration` (based off `main` after #433 merged).
+
+## Environment & workflow (read first if picking this up on a fresh box)
+
+Recommend a **Linux x64 (glibc) host with Docker** — this matches the CI `contract-test` job
+(`ubuntu-latest`) and lets you locally validate the architecture-specific native profiler +
+shared-store layout, which is where the top shipping risk lives (see Risks). On Apple-Silicon a
+local green can diverge from CI. A Cloud Desktop or an x86_64 EC2 instance both work.
+
+### Prerequisites
+- .NET SDKs **8.0, 9.0, and 10.0** (the projects multi-target `net8.0;net9.0;net10.0`; CI installs all three).
+- **Docker** running (contract tests use testcontainers → LocalStack + a mock-collector container).
+- **Python 3.10** + `pip3`.
+- Standard build tooling (`bash`, `git`).
+
+### Getting the code onto the box
+```
+git clone <fork-or-origin> && cd aws-otel-dotnet-instrumentation
+git checkout aws-sdk-v4-migration
+```
+
+> **Upstream reference is NOT in this branch.** The API map below was verified against a local
+> checkout of `open-telemetry/opentelemetry-dotnet-contrib` (which is already on v4 and is the
+> reference for the mechanical port). That checkout is **untracked** and will not travel with the
+> clone. Re-create it on the box:
+> ```
+> git clone https://github.com/open-telemetry/opentelemetry-dotnet-contrib.git
+> # verified against commit dcceaf62 ("Bump codecov/codecov-action action to v7 (#4484)");
+> # any recent main is fine since upstream is already v4.
+> ```
+> The relevant reference files are its
+> `src/OpenTelemetry.Instrumentation.AWS/` and `src/Shared/AWS/` directories.
+
+### Build + run the contract tests (the migration sanity check)
+The full sequence CI runs (from repo root):
+```
+bash build.sh                              # builds the distro into ./OpenTelemetryDistribution
+cd test
+bash build-and-install-distro.sh           # re-builds distro + stages it for the sample app
+bash set-up-contract-tests.sh              # builds mock-collector + sample-app Docker images, installs py deps
+pytest contract-tests/tests                # runs the suite (add -k awssdk to scope to AWS SDK tests)
+```
+Iterate quickly by re-running only the AWS SDK tests: `pytest contract-tests/tests -k awssdk`.
+A plain `dotnet build` / `dotnet test` from root is the fast inner loop for compile + unit tests
+before paying for the Docker contract-test cycle.
 
 ## Sequencing (test-first)
 
-1. **Lock in coverage on v3 first** — PR #433. A passing suite must genuinely mean "attributes
-   preserved" before we touch the SDK version. Confirm green on the Docker contract-test suite.
+1. ✅ **Lock in coverage on v3 first** — PR #433 (merged, green). A passing suite now genuinely
+   means "attributes preserved," so it can serve as the migration sanity check.
 2. **Port code to v4** — all in one atomic change (see note below).
-3. **Re-run the same suite on v4** — now a passing run is a real migration sanity check.
+3. **Re-run the contract-test suite on v4** — a passing run confirms the port preserved behavior.
+   Use `pytest contract-tests/tests -k awssdk` to focus on the AWS SDK attributes.
 
 > **Important:** the version bump and the code fixes are **one atomic change**, not a bump
 > followed by fixes. The moment `AWSSDK.Core` goes to v4 the vendored source fails to compile
@@ -47,7 +92,8 @@ Branch for migration work: `aws-sdk-v4-migration`.
 
 ## API migration map (v3 → v4)
 
-Verified against `aws/aws-sdk-net@main` source, PR #2720, and the
+Verified against `aws/aws-sdk-net@main` source, the upstream contrib checkout (commit `dcceaf62`,
+see Environment section for how to re-create it), PR #2720, and the
 [v4 migration guide](https://docs.aws.amazon.com/sdk-for-net/v4/developer-guide/net-dg-v4.html).
 Nearly everything survives; there are **two hard compile breaks**, both credential-related.
 
