@@ -12,6 +12,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+- Migrate AWS SDK dependency from v3 to v4
+  ([#436](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/436))
+
 ## v1.14.0 - 2026-07-15
 - Fix Linux arm64 image being built with the x64 payload, which caused the shared
   store and native profiler to not match the image architecture and made .NET
