@@ -22,7 +22,7 @@ public interface IAwsAuthenticator
     /// <summary>
     /// Signs an AWS request using AWS Signature Version 4.
     /// </summary>
-    void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials);
+    void Sign(IRequest request, IClientConfig config);
 }
 
 /// <summary>
@@ -31,15 +31,27 @@ public interface IAwsAuthenticator
 /// </summary>
 public class DefaultAwsAuthenticator : IAwsAuthenticator
 {
-    /// <inheritdoc/>
-    public async Task<ImmutableCredentials> GetCredentialsAsync()
+    private readonly AWSCredentials awsCredentials;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DefaultAwsAuthenticator"/> class.
+    /// </summary>
+    public DefaultAwsAuthenticator()
     {
-        return await FallbackCredentialsFactory.GetCredentials().GetCredentialsAsync();
+#pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
+        this.awsCredentials = FallbackCredentialsFactory.GetCredentials();
+#pragma warning restore CS0618
     }
 
     /// <inheritdoc/>
-    public void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
+    public async Task<ImmutableCredentials> GetCredentialsAsync()
     {
-        new AWS4Signer().Sign(request, config, null, credentials);
+        return await this.awsCredentials.GetCredentialsAsync();
+    }
+
+    /// <inheritdoc/>
+    public void Sign(IRequest request, IClientConfig config)
+    {
+        new AWS4Signer().Sign(request, config, null, this.awsCredentials);
     }
 }

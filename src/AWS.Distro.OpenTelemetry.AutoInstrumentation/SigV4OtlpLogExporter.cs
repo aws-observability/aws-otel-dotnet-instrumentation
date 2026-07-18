@@ -73,11 +73,14 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 RegionEndpoint = RegionEndpoint.GetBySystemName(this.region),
             };
 
-            var credentials = FallbackCredentialsFactory.GetCredentials().GetCredentialsAsync().GetAwaiter().GetResult();
+#pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
+            var awsCredentials = FallbackCredentialsFactory.GetCredentials();
+#pragma warning restore CS0618
+            var immutableCredentials = awsCredentials.GetCredentialsAsync().GetAwaiter().GetResult();
 
-            if (credentials.UseToken && credentials.Token != null)
+            if (immutableCredentials.UseToken && immutableCredentials.Token != null)
             {
-                sigV4Request.Headers.Add("x-amz-security-token", credentials.Token);
+                sigV4Request.Headers.Add("x-amz-security-token", immutableCredentials.Token);
             }
 
             sigV4Request.Headers.Add("Host", this.endpoint.Host);
@@ -88,7 +91,7 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 sigV4Request.Headers.Add(header.Key, header.Value);
             }
 
-            new AWS4Signer().Sign(sigV4Request, config, null, credentials);
+            new AWS4Signer().Sign(sigV4Request, config, null, awsCredentials);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, this.endpoint);
             foreach (var header in sigV4Request.Headers)

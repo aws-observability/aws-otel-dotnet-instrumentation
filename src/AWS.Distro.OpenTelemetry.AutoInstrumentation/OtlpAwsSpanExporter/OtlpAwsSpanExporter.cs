@@ -199,7 +199,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
         request.Headers.Add("Host", this.endpoint.Host);
         request.Headers.Add("content-type", ContentType);
 
-        this.authenticator.Sign(request, config, credentials);
+        this.authenticator.Sign(request, config);
 
         return request;
     }

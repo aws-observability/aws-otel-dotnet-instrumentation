@@ -3,7 +3,7 @@
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net462</TargetFrameworks>
+    <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <SignAssembly>true</SignAssembly>
@@ -11,18 +11,18 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net462'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
     <LangVersion>10.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.5" Condition="'$(TargetFramework)' != 'net462'" />
+    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.5" Condition="'$(TargetFramework)' != 'net472'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="AWSSDK.Core" Version="3.7.400" />
-    <PackageReference Include="AWSSDK.XRay" Version="3.7.300" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net472'" />
+    <PackageReference Include="AWSSDK.Core" Version="[4.0.0, 5.0.0)" />
+    <PackageReference Include="AWSSDK.XRay" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="Amazon.Lambda.Serialization.Json" Version="2.2.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OpenTelemetry" Version="1.16.0" />
@@ -33,8 +33,8 @@
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.15.1" Condition="'$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AWSLambda" Version="1.16.0" Condition="'$(TargetFramework)' != 'net462'" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.15.1" Condition="'$(TargetFramework)' == 'net472'" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AWSLambda" Version="1.16.0" Condition="'$(TargetFramework)' != 'net472'" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Sampler.AWS" Version="0.1.0-alpha.8" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
@@ -52,8 +52,8 @@
   <ItemGroup>
     <ProjectReference Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" PrivateAssets="All" />
   </ItemGroup>
-  <!-- DI targets net8.0+ only (modern profiler feature); exclude it from the net462 build. -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net462'">
+  <!-- DI targets net8.0+ only (modern profiler feature); exclude it from the net472 build. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
     <ProjectReference Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" PrivateAssets="All" />
   </ItemGroup>
 
@@ -95,9 +95,9 @@
         <Pack>true</Pack>
         <PackagePath>lib\net10.0</PackagePath>
     </Content>
-    <Content Include="./bin/Release/net462/OpenTelemetry.Instrumentation.AWS.dll">
+    <Content Include="./bin/Release/net472/OpenTelemetry.Instrumentation.AWS.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net462</PackagePath>
+        <PackagePath>lib\net472</PackagePath>
     </Content>
     <!-- Add AWS.Distro.OpenTelemetry.Exporter.Xray.Udp DLLs -->
     <!-- TODO: Remove once UDP Exporter is published to NuGet -->
@@ -113,9 +113,9 @@
         <Pack>true</Pack>
         <PackagePath>lib\net10.0</PackagePath>
     </Content>
-    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net462/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
+    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net472/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net462</PackagePath>
+        <PackagePath>lib\net472</PackagePath>
     </Content>
   </ItemGroup>
 
