@@ -12,7 +12,12 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 internal static class DIDataStore
 {
     private static readonly ConcurrentQueue<PendingCapture> Queue = new();
-    private static readonly AsyncLocal<Dictionary<long, PendingEntryData>> PendingEntries = new();
+
+    // ConcurrentDictionary, not Dictionary: AsyncLocal's copy-on-write isolates only the slot (the
+    // reference), and only when .Value is assigned. When a probed method fans out to probed children
+    // (Parallel.ForEach/Task.Run), the same dictionary flows to every child, whose RecordEntry/RetrieveEntry
+    // then mutate it concurrently. Call ids are globally unique, so a concurrent-safe map is fully correct.
+    private static readonly AsyncLocal<ConcurrentDictionary<long, PendingEntryData>> PendingEntries = new();
     private static long callIdSeed;
 
     public static int Count => Queue.Count;
@@ -47,7 +52,7 @@ internal static class DIDataStore
     public static long RecordEntry(PendingEntryData entry)
     {
         var callId = Interlocked.Increment(ref callIdSeed);
-        PendingEntries.Value ??= new Dictionary<long, PendingEntryData>();
+        PendingEntries.Value ??= new ConcurrentDictionary<long, PendingEntryData>();
         PendingEntries.Value[callId] = entry;
         return callId;
     }
@@ -60,6 +65,6 @@ internal static class DIDataStore
             return null;
         }
 
-        return PendingEntries.Value.Remove(callId, out var entry) ? entry : null;
+        return PendingEntries.Value.TryRemove(callId, out var entry) ? entry : null;
     }
 }

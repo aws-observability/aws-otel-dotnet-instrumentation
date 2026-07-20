@@ -90,6 +90,33 @@ public class DIDataStoreTests : IDisposable
     }
 
     [Fact]
+    public void RecordRetrieve_ProbedParentFansOutToParallelChildren_NoLossOrCorruption()
+    {
+        // Regression: AsyncLocal isolates the slot, not the object. A probed parent sets .Value, then its
+        // entry dictionary flows by reference to every child in a Parallel.ForEach; each child mutating a
+        // plain Dictionary concurrently would drop entries, throw, or hang. A ConcurrentDictionary is safe.
+        var parentId = DIDataStore.RecordEntry(new PendingEntryData { InstrumentationKey = "parent" }); // sets .Value, which flows to children
+
+        const int childCount = 500;
+        var retrieved = new System.Collections.Concurrent.ConcurrentBag<long>();
+
+        var act = () => Parallel.For(0, childCount, new ParallelOptions { MaxDegreeOfParallelism = 16 }, i =>
+        {
+            // Each child does a full Begin/End pair on the SHARED, parent-provided dictionary.
+            var id = DIDataStore.RecordEntry(new PendingEntryData { InstrumentationKey = $"child-{i}" });
+            var entry = DIDataStore.RetrieveEntry(id);
+            if (entry != null)
+            {
+                retrieved.Add(id);
+            }
+        });
+
+        act.Should().NotThrow("concurrent Begin/End on the shared AsyncLocal dictionary must not corrupt it");
+        retrieved.Should().HaveCount(childCount, "every child's entry must be recorded and retrieved without loss");
+        DIDataStore.RetrieveEntry(parentId).Should().NotBeNull("the parent's own entry must survive the children's concurrent mutations");
+    }
+
+    [Fact]
     public void Clear_EmptiesQueueAndEntries()
     {
         DIDataStore.Enqueue(Capture("a"));
