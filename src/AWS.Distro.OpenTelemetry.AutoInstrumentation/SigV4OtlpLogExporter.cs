@@ -91,7 +91,13 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 sigV4Request.Headers.Add(header.Key, header.Value);
             }
 
-            new AWS4Signer().Sign(sigV4Request, config, null, awsCredentials);
+            // Sign from the same immutableCredentials snapshot used for the token header above.
+            // AWS4Signer.Sign(...) would re-resolve credentials internally, which could produce a
+            // signature from a different snapshot than the x-amz-security-token header on rotation.
+            var signingResult = new AWS4Signer().SignRequest(
+                sigV4Request, config, null, immutableCredentials.AccessKey, immutableCredentials.SecretKey);
+            sigV4Request.AWS4SignerResult = signingResult;
+            sigV4Request.Headers["Authorization"] = signingResult.ForAuthorizationHeader;
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, this.endpoint);
             foreach (var header in sigV4Request.Headers)

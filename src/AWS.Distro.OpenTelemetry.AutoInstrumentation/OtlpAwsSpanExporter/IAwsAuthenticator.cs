@@ -20,9 +20,15 @@ public interface IAwsAuthenticator
     Task<ImmutableCredentials> GetCredentialsAsync();
 
     /// <summary>
-    /// Signs an AWS request using AWS Signature Version 4.
+    /// Signs an AWS request using AWS Signature Version 4 with the provided credentials snapshot.
     /// </summary>
-    void Sign(IRequest request, IClientConfig config);
+    /// <param name="request">The request to sign.</param>
+    /// <param name="config">The client config supplying the signing region/service.</param>
+    /// <param name="credentials">
+    /// The resolved credentials to sign with. The caller resolves these once and reuses the same
+    /// snapshot for the <c>x-amz-security-token</c> header so the header and signature stay consistent.
+    /// </param>
+    void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials);
 }
 
 /// <summary>
@@ -31,27 +37,36 @@ public interface IAwsAuthenticator
 /// </summary>
 public class DefaultAwsAuthenticator : IAwsAuthenticator
 {
-    private readonly AWSCredentials awsCredentials;
+    private AWSCredentials? awsCredentials;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultAwsAuthenticator"/> class.
-    /// </summary>
-    public DefaultAwsAuthenticator()
+    // Resolve the credentials provider lazily rather than in the constructor: the exporter is
+    // constructed during OTel SDK setup, which can race credential provisioning (init-container /
+    // IRSA token). Lazy resolution fails an individual export instead of blocking construction.
+    private AWSCredentials AwsCredentials
     {
+        get
+        {
 #pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
-        this.awsCredentials = FallbackCredentialsFactory.GetCredentials();
+            return this.awsCredentials ??= FallbackCredentialsFactory.GetCredentials();
 #pragma warning restore CS0618
+        }
     }
 
     /// <inheritdoc/>
     public async Task<ImmutableCredentials> GetCredentialsAsync()
     {
-        return await this.awsCredentials.GetCredentialsAsync();
+        return await this.AwsCredentials.GetCredentialsAsync();
     }
 
     /// <inheritdoc/>
-    public void Sign(IRequest request, IClientConfig config)
+    public void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
     {
-        new AWS4Signer().Sign(request, config, null, this.awsCredentials);
+        // Sign from the caller-provided ImmutableCredentials snapshot. AWS4Signer.Sign(...) would
+        // re-resolve credentials internally; signing from SignRequest with the same snapshot the
+        // caller used for the token header guarantees the signature and x-amz-security-token match
+        // even if the underlying credentials rotate between resolutions.
+        var signingResult = new AWS4Signer().SignRequest(request, config, null, credentials.AccessKey, credentials.SecretKey);
+        request.AWS4SignerResult = signingResult;
+        request.Headers["Authorization"] = signingResult.ForAuthorizationHeader;
     }
 }

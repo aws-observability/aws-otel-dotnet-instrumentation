@@ -243,7 +243,7 @@ internal abstract class MockCounterAuthenticator : IAwsAuthenticator
 
     public abstract Task<ImmutableCredentials> GetCredentialsAsync();
 
-    public abstract void Sign(IRequest request, IClientConfig config);
+    public abstract void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials);
 }
 
 // A Mock authenticator that injects different SigV4 headers using the number of times an attempt was made for SigV4 signing.
@@ -264,7 +264,7 @@ internal class MockAuthenticator : MockCounterAuthenticator
         return await Task.Run(() => this.credentials);
     }
 
-    public override void Sign(IRequest request, IClientConfig config)
+    public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
     {
         foreach (string key in this.customHeaders.Keys)
         {
@@ -282,7 +282,7 @@ internal class MockThrowableSignerAuthenticator : MockCounterAuthenticator
         return await Task.Run(() => new ImmutableCredentials("test_key", "test_key1", "test_tokens"));
     }
 
-    public override void Sign(IRequest request, IClientConfig config)
+    public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
     {
         throw new AmazonClientException(string.Empty);
     }
@@ -297,7 +297,7 @@ internal class MockThrowableCredentialsAuthenticator : MockCounterAuthenticator
         return await Task.FromException<ImmutableCredentials>(new AmazonClientException(string.Empty));
     }
 
-    public override void Sign(IRequest request, IClientConfig config)
+    public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
     {
         return;
     }

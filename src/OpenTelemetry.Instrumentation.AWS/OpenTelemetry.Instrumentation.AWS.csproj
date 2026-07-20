@@ -25,7 +25,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.Core" Version="[4.0.0, 5.0.0)" />
+    <!-- Floor pinned to 4.0.3.3 for CVE-2026-22611 (matches upstream opentelemetry-dotnet-contrib). -->
+    <PackageReference Include="AWSSDK.Core" Version="[4.0.3.3, 5.0.0)" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.SQS" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.XRay" Version="[4.0.0, 5.0.0)" />

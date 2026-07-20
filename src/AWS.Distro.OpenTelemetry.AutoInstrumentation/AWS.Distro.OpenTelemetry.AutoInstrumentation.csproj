@@ -21,7 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net472'" />
-    <PackageReference Include="AWSSDK.Core" Version="[4.0.0, 5.0.0)" />
+    <!-- Floor pinned to 4.0.3.3 for CVE-2026-22611 (matches upstream opentelemetry-dotnet-contrib). -->
+    <PackageReference Include="AWSSDK.Core" Version="[4.0.3.3, 5.0.0)" />
     <PackageReference Include="AWSSDK.XRay" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="Amazon.Lambda.Serialization.Json" Version="2.2.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

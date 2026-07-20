@@ -125,7 +125,11 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                 }
                 catch (Exception)
                 {
-                    // Credential resolution may fail; skip tag extraction and continue.
+                    // Credential resolution may fail; skip the aws.auth.account.access_key /
+                    // aws.auth.region tags and continue. These feed Application Signals
+                    // cross-account attribution, so their absence degrades that view but must not
+                    // break the span. Swallowed silently to match the rest of this handler (no
+                    // logging facility in this vendored package); the tags simply won't be emitted.
                 }
 
                 AddStatusCodeToActivity(activity, statusCode);
