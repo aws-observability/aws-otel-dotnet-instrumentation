@@ -174,6 +174,39 @@ public class OtlpAwsSpanExporterTest
         }
     }
 
+    // Regression test for the AWS SDK v4 migration: the exporter must sign with the SAME
+    // ImmutableCredentials snapshot it resolved for the x-amz-security-token header. v4's
+    // AWS4Signer.Sign(...BaseIdentity) re-resolves credentials internally, which could produce a
+    // signature from a different snapshot than the token header if credentials rotate between the
+    // two resolutions -> SignatureDoesNotMatch. The exporter resolves once (GetCredentialsAsync)
+    // and passes that snapshot to Sign; this asserts the two see the same credentials.
+    [Fact]
+    public void TestAwsSpanExporterSignsWithSameCredentialsSnapshotAsTokenHeader()
+    {
+        var credentials = new ImmutableCredentials("test_key", "test_key1", "secret_token");
+        RecordingCredentialsAuthenticator mockAuth = new RecordingCredentialsAuthenticator(credentials);
+
+        BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
+
+        HttpResponseMessage response = new HttpResponseMessage
+        {
+            StatusCode = HttpStatusCode.OK,
+            Content = new StringContent(string.Empty),
+        };
+
+        (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+
+        Assert.Equal(ExportResult.Success, execute.Result);
+        Assert.NotNull(mockAuth.ResolvedCredentials);
+        Assert.NotNull(mockAuth.SignedCredentials);
+
+        // The snapshot resolved for the token header and the snapshot handed to Sign must be identical.
+        Assert.Same(mockAuth.ResolvedCredentials, mockAuth.SignedCredentials);
+        Assert.Equal(credentials.AccessKey, mockAuth.SignedCredentials!.AccessKey);
+        Assert.Equal(credentials.SecretKey, mockAuth.SignedCredentials!.SecretKey);
+        Assert.Equal(credentials.Token, mockAuth.SignedCredentials!.Token);
+    }
+
     // Verifies that if a signing or authentication error occurs. The exporter retries the request atleast one more.
     [Fact]
     public void TestAwsSpanExporterShouldRetryIfFailureToSignSigV4()
@@ -300,5 +333,33 @@ internal class MockThrowableCredentialsAuthenticator : MockCounterAuthenticator
     public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
     {
         return;
+    }
+}
+
+// A Mock authenticator that records the credentials snapshot returned from GetCredentialsAsync and
+// the snapshot passed into Sign, so a test can assert the exporter uses the same instance for both.
+internal class RecordingCredentialsAuthenticator : MockCounterAuthenticator
+{
+    private readonly ImmutableCredentials credentials;
+
+    internal RecordingCredentialsAuthenticator(ImmutableCredentials credentials)
+    {
+        this.credentials = credentials;
+    }
+
+    public ImmutableCredentials? ResolvedCredentials { get; private set; }
+
+    public ImmutableCredentials? SignedCredentials { get; private set; }
+
+    public override async Task<ImmutableCredentials> GetCredentialsAsync()
+    {
+        this.CallCount += 1;
+        this.ResolvedCredentials = this.credentials;
+        return await Task.Run(() => this.credentials);
+    }
+
+    public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
+    {
+        this.SignedCredentials = credentials;
     }
 }
