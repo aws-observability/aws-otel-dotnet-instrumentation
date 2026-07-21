@@ -142,6 +142,58 @@ public class DynamicInstrumentationClientTests
     }
 
     [Fact]
+    public async Task FetchConfigurations_404OnLaterPage_AbandonsFetch_DoesNotReturnPartialSet()
+    {
+        // Page 0 returns configs + a NextToken; page 1 then 404s. A 404 mid-pagination is a transient
+        // paging failure, NOT a removal. Returning the partial page-0 set as a complete Changed=true result
+        // would make the caller diff it and tear down every not-yet-fetched live probe. The client must
+        // abandon the whole fetch (Success=false) so the caller keeps its current cache.
+        int callCount = 0;
+        var handler = new MockHttpHandler(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                        "Changed": true,
+                        "SyncedAt": "2024-09-17T22:03:24Z",
+                        "NextToken": "page2",
+                        "LatestConfigurations": [{ "LocationHash": "config1" }]
+                    }
+                    """, Encoding.UTF8, "application/json"),
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var client = CreateClient(handler);
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        callCount.Should().Be(2, "it should attempt page 2 and hit the 404");
+        result.Success.Should().BeFalse("a mid-pagination 404 abandons the whole fetch");
+        result.Configurations.Should().BeEmpty("the partial page-0 set must not surface as a complete result");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_404OnFirstPage_IsEmptyUnchanged_NotFailure()
+    {
+        // A 404 on page 0 is the normal "no configs for this service/env" case — an empty, unchanged
+        // (Changed=false) success, not a failure and not a removal.
+        var handler = new MockHttpHandler(HttpStatusCode.NotFound, string.Empty);
+        var client = CreateClient(handler);
+
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Success.Should().BeTrue();
+        result.Changed.Should().BeFalse();
+        result.Configurations.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FetchConfigurations_LatchesChangedFromFirstPage_NoDataLoss()
     {
         // Regression: `changed` was reassigned every page. A continuation page with

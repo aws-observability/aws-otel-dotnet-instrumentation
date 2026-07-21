@@ -65,14 +65,20 @@ internal static class ValueSerializer
                 return SerializeDictionary(dict, typeName, limits, objectDepth, collectionDepth, visited);
             }
 
-            if (value is IEnumerable enumerable && type != typeof(string))
+            // Only treat as a collection when the size is known in O(1). A countless/lazy IEnumerable is
+            // serialized as an object instead — walking it could be unbounded (or infinite) on the user's
+            // thread, and reporting a pulled-item count as the size would be a misleading lower bound, not
+            // the real length (matches Java/Python). The count comes from non-generic ICollection (arrays,
+            // List<T>) or, for sets that implement only the generic interface (HashSet<T>, SortedSet<T>),
+            // from ICollection<T>/IReadOnlyCollection<T>.
+            if (value is IEnumerable sequence && type != typeof(string) && TryGetKnownCount(value, out var knownCount))
             {
                 if (collectionDepth >= limits.MaxCollectionDepth)
                 {
                     return DepthLimited(typeName);
                 }
 
-                return SerializeCollection(enumerable, typeName, limits, objectDepth, collectionDepth, visited);
+                return SerializeCollection(sequence, knownCount, typeName, limits, objectDepth, collectionDepth, visited);
             }
 
             if (objectDepth >= limits.MaxObjectDepth)
@@ -118,37 +124,81 @@ internal static class ValueSerializer
         };
     }
 
-    private static CapturedValue SerializeCollection(IEnumerable enumerable, string typeName, CaptureConfiguration limits, int objectDepth, int collectionDepth, HashSet<object> visited)
+    // True only when the element count is available in O(1): non-generic ICollection (arrays, List<T>,
+    // Queue<T>, Stack<T>) or the generic ICollection<T>/IReadOnlyCollection<T> that sets implement without
+    // the non-generic one (HashSet<T>, SortedSet<T>). A bare IEnumerable has no size and returns false, so
+    // it is never walked as a collection. Count is read via the interface's own Count property — no enumeration.
+    private static bool TryGetKnownCount(object value, out int count)
     {
-        // Use ICollection.Count when available to avoid enumerating just to learn the size.
-        var knownCount = enumerable switch
+        // Any Count getter here belongs to a user type and runs on the user's thread. A throwing or
+        // unavailable getter (lazy/remote-backed collections, disposed views, thread-affinity violations)
+        // must NOT propagate — it would escape Serialize (which has only a finally, no catch) and abort the
+        // whole invocation's capture. On any failure we treat the value as countless and let it fall through
+        // to SerializeObject, whose per-field catches contain any further damage.
+        try
         {
-            ICollection c => c.Count,
-            _ => (int?)null,
-        };
-
-        var elements = new List<CapturedValue>();
-        int width = limits.MaxCollectionWidth;
-
-        // Pull at most width+1 (width to capture, +1 to detect truncation) — never walk the whole
-        // sequence, which may be huge/lazy/infinite and runs on the user's thread.
-        foreach (var item in enumerable)
-        {
-            if (elements.Count >= width)
+            if (value is ICollection nonGeneric)
             {
-                knownCount ??= width + 1; // Unknown size: one extra item proves there's more.
-                break;
+                count = nonGeneric.Count;
+                return true;
             }
 
-            elements.Add(Serialize(item, limits, objectDepth, collectionDepth + 1, visited));
+            foreach (var iface in value.GetType().GetInterfaces())
+            {
+                if (iface.IsGenericType)
+                {
+                    var def = iface.GetGenericTypeDefinition();
+                    if (def == typeof(ICollection<>) || def == typeof(IReadOnlyCollection<>))
+                    {
+                        count = (int)iface.GetProperty("Count")!.GetValue(value)!;
+                        return true;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Fall through to countless.
         }
 
-        var truncated = knownCount is int n && n > width;
+        count = 0;
+        return false;
+    }
+
+    private static CapturedValue SerializeCollection(IEnumerable collection, int totalCount, string typeName, CaptureConfiguration limits, int objectDepth, int collectionDepth, HashSet<object> visited)
+    {
+        // Size is known O(1) (resolved by the caller via TryGetKnownCount), so we capture only the first
+        // MaxCollectionWidth items and report the true total — never enumerate past the cap on the user's thread.
+        int width = limits.MaxCollectionWidth;
+
+        var elements = new List<CapturedValue>();
+
+        // Enumeration runs on the user's thread over a possibly-live collection. If another thread mutates
+        // it mid-walk the enumerator throws (InvalidOperationException: "collection was modified"); keep what
+        // was captured so far rather than letting it escape Serialize and abort the whole invocation.
+        try
+        {
+            foreach (var item in collection)
+            {
+                if (elements.Count >= width)
+                {
+                    break;
+                }
+
+                elements.Add(Serialize(item, limits, objectDepth, collectionDepth + 1, visited));
+            }
+        }
+        catch
+        {
+            // Partial capture stands.
+        }
+
+        var truncated = totalCount > width;
         return new CapturedValue
         {
             Type = typeName,
             Elements = elements.ToArray(),
-            OriginalSize = truncated ? knownCount : null,
+            OriginalSize = truncated ? totalCount : null,
             NotCapturedReason = truncated ? NotCapturedReason.CollectionSize : NotCapturedReason.None,
         };
     }

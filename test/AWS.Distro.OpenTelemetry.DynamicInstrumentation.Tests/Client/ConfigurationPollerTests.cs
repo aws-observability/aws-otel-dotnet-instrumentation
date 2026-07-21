@@ -211,6 +211,32 @@ public class ConfigurationPollerTests
         invocationCount.Should().Be(1, "a fully-applied set latches the fingerprint, so an identical poll skips");
     }
 
+    [Fact]
+    public async Task FetchAndApply_ApplyNeedsRetry_DoesNotAdvanceCursor_SoBackendKeepsReturningChanged()
+    {
+        // A Changed=true fetch whose apply returns false (target not loaded yet) must NOT advance the sync
+        // cursor. Advancing it would make the next poll return Changed=false and short-circuit before
+        // apply, so the retry would never run and the probe would stay dead.
+        var client = ClientReturning(ChangedResponse(ProbeConfig("aabb0000000000cc")));
+        var poller = CreatePoller(client, _ => false);
+
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+
+        ProbeCursorAdvanced(poller).Should().BeFalse("an unapplied set must leave the cursor stale so the next poll re-fetches Changed=true");
+    }
+
+    [Fact]
+    public async Task FetchAndApply_ApplySucceeds_AdvancesCursor()
+    {
+        // Complement: a fully-applied set advances the cursor (normal forward progress).
+        var client = ClientReturning(ChangedResponse(ProbeConfig("aabb0000000000dd")));
+        var poller = CreatePoller(client, _ => true);
+
+        await InvokeFetchAndApply(poller, InstrumentationType.PROBE);
+
+        ProbeCursorAdvanced(poller).Should().BeTrue("a fully-applied set advances the cursor");
+    }
+
     [Fact(Skip = "parity: needs staleness-warning / forced-resync — not yet implemented (source has only a TODO at ConfigurationPoller.cs:43)")]
     public void StalenessWarning_ForcesFullResync_WhenNoSuccessWithinWindow()
     {
@@ -251,6 +277,13 @@ public class ConfigurationPollerTests
         var field = typeof(ConfigurationPoller).GetField(
             "lastFingerprint", BindingFlags.NonPublic | BindingFlags.Instance)!;
         return (HashSet<string>)field.GetValue(poller)!;
+    }
+
+    private static bool ProbeCursorAdvanced(ConfigurationPoller poller)
+    {
+        var field = typeof(ConfigurationPoller).GetField(
+            "probeSyncedAt", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        return field.GetValue(poller) != null;
     }
 
     private static string ProbeConfig(string locationHash) =>

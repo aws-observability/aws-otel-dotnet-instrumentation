@@ -69,10 +69,18 @@ public class DynamicInstrumentationClient(HttpClient httpClient, string apiUrl, 
             var (response, notFound) = await this.PostAsync<FetchConfigurationsRequest, FetchConfigurationsRawResponse>(
                 $"{this.apiUrl.TrimEnd('/')}/list-instrumentation-configurations", request, ct);
 
-            // 404 means "no configs for this service/env" — a normal empty result, not a failure.
             if (notFound)
             {
-                return new FetchConfigurationsResponse(true, page == 0 ? false : changed, responseSyncedAt, syncInterval, [.. allConfigs]);
+                // On page 0, a 404 means "no configs for this service/env" — a normal empty, unchanged result.
+                if (page == 0)
+                {
+                    return new FetchConfigurationsResponse(true, false, responseSyncedAt, syncInterval, [.. allConfigs]);
+                }
+
+                // On a later page, a 404 is a transient paging failure, NOT a removal. Returning the
+                // partial page-0 set as a complete Changed=true result would make the caller diff it and
+                // tear down every not-yet-fetched probe. Abandon the whole fetch and keep the current cache.
+                return FetchConfigurationsResponse.Failed;
             }
 
             if (response == null)
