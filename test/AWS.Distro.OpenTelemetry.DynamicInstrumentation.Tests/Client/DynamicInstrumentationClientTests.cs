@@ -14,6 +14,10 @@ public class DynamicInstrumentationClientTests
     private static DynamicInstrumentationClient CreateClient(MockHttpHandler handler) =>
         new(new HttpClient(handler), "http://localhost:2000", "test-service", "test-env");
 
+    // Parses a JSON literal (e.g. "\"abc\"" or "123") into a standalone JsonElement, mirroring how
+    // the client captures the opaque SyncedAt cursor from a response for echo-back.
+    private static JsonElement Json(string literal) => JsonDocument.Parse(literal).RootElement.Clone();
+
     [Fact]
     public async Task FetchConfigurations_ReturnsConfigs_OnSuccess()
     {
@@ -39,7 +43,7 @@ public class DynamicInstrumentationClientTests
 
         result.Success.Should().BeTrue();
         result.Changed.Should().BeTrue();
-        result.SyncedAt.Should().Be("2024-09-17T22:03:24Z");
+        result.SyncedAt!.Value.GetString().Should().Be("2024-09-17T22:03:24Z");
         result.SyncInterval.Should().Be(60);
         result.Configurations.Should().HaveCount(1);
     }
@@ -47,20 +51,39 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_ParsesIso8601SyncedAt_WithoutFailing()
     {
-        // Regression: the spec types SyncedAt as an ISO-8601 string. Modeling it as long?
-        // made System.Text.Json throw on every real response, so every poll returned
-        // Failed and the client never synced. This proves the string wire value parses.
+        // The API spec types SyncedAt as an ISO-8601 string. SyncedAt is a JsonElement so it
+        // round-trips either wire shape; here the string form must parse without failing.
         var responseJson = """{ "Changed": false, "SyncedAt": "2024-09-17T22:08:24Z" }""";
 
         var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(
-            InstrumentationType.PROBE, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.PROBE, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
         result.Success.Should().BeTrue();
         result.Changed.Should().BeFalse();
-        result.SyncedAt.Should().Be("2024-09-17T22:08:24Z");
+        result.SyncedAt!.Value.GetString().Should().Be("2024-09-17T22:08:24Z");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_ParsesNumericSyncedAt_FromLiveBackend()
+    {
+        // Verified against the live backend (application-signals.us-east-1.api.aws): it emits
+        // SyncedAt as a JSON NUMBER in exponent form, NOT the ISO string the spec documents.
+        // Modeling SyncedAt as string? made System.Text.Json throw here, so every poll returned
+        // Failed and the client silently never synced. This pins the real wire shape.
+        var responseJson = """{ "Changed": true, "SyncInterval": 300, "SyncedAt": 1.7839751E9, "LatestConfigurations": [] }""";
+
+        var handler = new MockHttpHandler(HttpStatusCode.OK, responseJson);
+        var client = CreateClient(handler);
+
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Success.Should().BeTrue("the live backend returns a numeric SyncedAt and the client must parse it");
+        result.Changed.Should().BeTrue();
+        result.SyncedAt!.Value.ValueKind.Should().Be(JsonValueKind.Number);
+        result.SyncedAt!.Value.GetRawText().Should().Be("1.7839751E9");
     }
 
     [Fact]
@@ -72,7 +95,7 @@ public class DynamicInstrumentationClientTests
         var client = CreateClient(handler);
 
         var result = await client.FetchConfigurationsAsync(
-            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.BREAKPOINT, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
         result.Changed.Should().BeFalse();
         result.Configurations.Should().BeEmpty();
@@ -116,6 +139,58 @@ public class DynamicInstrumentationClientTests
 
         callCount.Should().Be(2);
         result.Configurations.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_404OnLaterPage_AbandonsFetch_DoesNotReturnPartialSet()
+    {
+        // Page 0 returns configs + a NextToken; page 1 then 404s. A 404 mid-pagination is a transient
+        // paging failure, NOT a removal. Returning the partial page-0 set as a complete Changed=true result
+        // would make the caller diff it and tear down every not-yet-fetched live probe. The client must
+        // abandon the whole fetch (Success=false) so the caller keeps its current cache.
+        int callCount = 0;
+        var handler = new MockHttpHandler(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                        "Changed": true,
+                        "SyncedAt": "2024-09-17T22:03:24Z",
+                        "NextToken": "page2",
+                        "LatestConfigurations": [{ "LocationHash": "config1" }]
+                    }
+                    """, Encoding.UTF8, "application/json"),
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var client = CreateClient(handler);
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        callCount.Should().Be(2, "it should attempt page 2 and hit the 404");
+        result.Success.Should().BeFalse("a mid-pagination 404 abandons the whole fetch");
+        result.Configurations.Should().BeEmpty("the partial page-0 set must not surface as a complete result");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_404OnFirstPage_IsEmptyUnchanged_NotFailure()
+    {
+        // A 404 on page 0 is the normal "no configs for this service/env" case — an empty, unchanged
+        // (Changed=false) success, not a failure and not a removal.
+        var handler = new MockHttpHandler(HttpStatusCode.NotFound, string.Empty);
+        var client = CreateClient(handler);
+
+        var result = await client.FetchConfigurationsAsync(InstrumentationType.PROBE);
+
+        result.Success.Should().BeTrue();
+        result.Changed.Should().BeFalse();
+        result.Configurations.Should().BeEmpty();
     }
 
     [Fact]
@@ -224,10 +299,13 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_SendsCorrectRequestBody()
     {
-        HttpContent? capturedContent = null;
+        // Read the request body inside the handler, while the content is live — the client disposes the
+        // HttpRequestMessage (and its Content) once the exchange completes, so reading req.Content after
+        // the call returns would hit a disposed object.
+        string? capturedBody = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedContent = req.Content;
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json")
@@ -236,27 +314,54 @@ public class DynamicInstrumentationClientTests
 
         var client = CreateClient(handler);
         await client.FetchConfigurationsAsync(
-            InstrumentationType.BREAKPOINT, syncedAt: "2024-09-17T22:03:24Z");
+            InstrumentationType.BREAKPOINT, syncedAt: Json("\"2024-09-17T22:03:24Z\""));
 
-        capturedContent.Should().NotBeNull();
-        var capturedBody = await capturedContent!.ReadAsStringAsync();
-        var doc = JsonDocument.Parse(capturedBody);
+        capturedBody.Should().NotBeNull();
+        var doc = JsonDocument.Parse(capturedBody!);
         // Request fields must be PascalCase to match the API (and the Java/Python/Node SDKs).
         // A case-sensitive backend treats camelCase as missing → empty/unfiltered configs.
         doc.RootElement.GetProperty("Service").GetString().Should().Be("test-service");
         doc.RootElement.GetProperty("Environment").GetString().Should().Be("test-env");
         doc.RootElement.GetProperty("InstrumentationType").GetString().Should().Be("BREAKPOINT");
-        // SyncedAt must serialize as an ISO-8601 string on the wire (spec contract).
+        // SyncedAt echoes back verbatim in the shape it was received (here a string).
         doc.RootElement.GetProperty("SyncedAt").GetString().Should().Be("2024-09-17T22:03:24Z");
+    }
+
+    [Fact]
+    public async Task FetchConfigurations_EchoesNumericSyncedAt_BackAsNumber()
+    {
+        // The round-trip that broke against the live backend: a numeric SyncedAt received from
+        // the server must be echoed back on the next request AS A NUMBER, not a quoted string,
+        // or the backend rejects the cursor. Guards the JsonElement round-trip end to end.
+        // Capture the body during the request; the client disposes the request message on return.
+        string? capturedBody = null;
+        var handler = new MockHttpHandler(req =>
+        {
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{ "Changed": false }""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        await client.FetchConfigurationsAsync(
+            InstrumentationType.PROBE, syncedAt: Json("1.7839751E9"));
+
+        capturedBody.Should().NotBeNull();
+        var doc = JsonDocument.Parse(capturedBody!);
+        doc.RootElement.GetProperty("SyncedAt").ValueKind.Should().Be(JsonValueKind.Number);
+        doc.RootElement.GetProperty("SyncedAt").GetRawText().Should().Be("1.7839751E9");
     }
 
     [Fact]
     public async Task ReportStatus_SendsRequest()
     {
-        HttpContent? capturedContent = null;
+        // Capture the body during the request; the client disposes the request message on return.
+        string? capturedBody = null;
         var handler = new MockHttpHandler(req =>
         {
-            capturedContent = req.Content;
+            capturedBody = new StreamReader(req.Content!.ReadAsStream()).ReadToEnd();
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
@@ -266,8 +371,7 @@ public class DynamicInstrumentationClientTests
             new() { LocationHash = "hash1", Status = "READY", InstrumentationType = "PROBE" }
         });
 
-        capturedContent.Should().NotBeNull();
-        var capturedBody = await capturedContent!.ReadAsStringAsync();
+        capturedBody.Should().NotBeNull();
         capturedBody.Should().Contain("hash1");
         capturedBody.Should().Contain("READY");
     }

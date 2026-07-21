@@ -34,7 +34,9 @@ public sealed record DynamicInstrumentationConfig(
         var apiUrl = GetString($"{Prefix}API_URL", "http://localhost:2000");
         var probePoll = Math.Max(MinPollIntervalSeconds, GetInt($"{Prefix}PROBE_POLL_INTERVAL", 600));
         var breakpointPoll = Math.Max(MinPollIntervalSeconds, GetInt($"{Prefix}BREAKPOINT_POLL_INTERVAL", 60));
-        var logsEndpoint = GetString($"{Prefix}LOGS_ENDPOINT", null);
+
+        // Cross-SDK env var (NOT under the DI prefix) — matches the Java/Python/JS agents.
+        var logsEndpoint = GetString("OTEL_AWS_OTLP_LOGS_ENDPOINT", null);
         var serviceName = ResolveServiceName();
         var environment = ResolveEnvironment();
 
@@ -81,7 +83,7 @@ public sealed record DynamicInstrumentationConfig(
     private static bool GetBool(string name, bool defaultValue)
     {
         var val = System.Environment.GetEnvironmentVariable(name);
-        return val != null ? val.Equals("true", StringComparison.OrdinalIgnoreCase) : defaultValue;
+        return val != null ? val.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) : defaultValue;
     }
 
     private static string GetString(string name, string? defaultValue) =>
