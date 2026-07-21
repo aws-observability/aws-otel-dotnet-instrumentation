@@ -101,27 +101,95 @@ public class ValueSerializerTests
     }
 
     [Fact]
-    public void Serialize_LazyEnumerable_StopsAtMaxWidth()
+    public void Serialize_HashSet_WalkedAsCollection_NotReflectedAsObject()
     {
-        // A non-ICollection lazy sequence must NOT be walked in full (it may be infinite and this
-        // runs on the user's thread). We enumerate at most MaxCollectionWidth+1: width captured, +1 to
-        // detect truncation.
-        int pulled = 0;
+        // Regression: HashSet<T> implements only the generic ICollection<T>, NOT the non-generic
+        // System.Collections.ICollection. A dispatch that checked only non-generic ICollection would
+        // fall through to the object serializer and capture Count/Comparer instead of the elements —
+        // yet the set's size IS O(1), so it must be walked. This pins that sets are captured as collections.
+        var set = new HashSet<int> { 10, 20, 30 };
+
+        var result = ValueSerializer.Serialize(set, DefaultLimits);
+
+        result.Elements.Should().NotBeNull("a HashSet has an O(1) count and must be walked as a collection");
+        result.Elements.Should().HaveCount(3);
+        result.Elements!.Select(e => e.Value).Should().BeEquivalentTo("10", "20", "30");
+        result.Fields.Should().BeNull("it must not be reflected as an object (Count/Comparer fields)");
+    }
+
+    [Fact]
+    public void Serialize_LargeHashSet_TruncatesToMaxWidth_ReportsTrueSize()
+    {
+        // A set larger than MaxCollectionWidth caps at the width and reports the real total from the
+        // O(1) generic count — never a pulled-item lower bound.
+        var set = new HashSet<int>(Enumerable.Range(1, 50));
+
+        var result = ValueSerializer.Serialize(set, DefaultLimits);
+
+        result.Elements.Should().HaveCount(20); // MaxCollectionWidth = 20
+        result.OriginalSize.Should().Be(50);
+        result.NotCapturedReason.Should().Be(NotCapturedReason.CollectionSize);
+    }
+
+    [Fact]
+    public void Serialize_Queue_WalkedAsCollection()
+    {
+        // Queue<T>/Stack<T> implement the non-generic ICollection — the other O(1)-count path.
+        var queue = new Queue<string>(new[] { "a", "b" });
+
+        var result = ValueSerializer.Serialize(queue, DefaultLimits);
+
+        result.Elements.Should().HaveCount(2);
+        result.Fields.Should().BeNull();
+    }
+
+    [Fact]
+    public void Serialize_CollectionWithThrowingCount_DoesNotAbortCapture_SerializedAsObject()
+    {
+        // A user collection whose generic Count getter throws (lazy/remote-backed, disposed view, thread
+        // affinity) must NOT propagate out of Serialize — that would escape the whole invocation's capture.
+        // It falls through to the object serializer instead.
+        var obj = new ThrowingCountCollection();
+
+        var act = () => ValueSerializer.Serialize(obj, DefaultLimits);
+
+        act.Should().NotThrow("a throwing Count getter must not abort capture");
+        var result = act();
+        result.Elements.Should().BeNull("it must not be walked as a collection when its count is unavailable");
+    }
+
+    [Fact]
+    public void Serialize_CollectionMutatedMidEnumeration_KeepsPartialCapture()
+    {
+        // Enumeration runs on the user's thread. If the collection is mutated mid-walk the enumerator throws;
+        // the partial capture must stand rather than aborting the whole invocation.
+        var mutating = new MutatingOnEnumerate();
+
+        var act = () => ValueSerializer.Serialize(mutating, DefaultLimits);
+
+        act.Should().NotThrow("a mid-enumeration mutation must not abort capture");
+        var result = act();
+        result.Elements.Should().NotBeNull("elements captured before the mutation must survive");
+    }
+
+    [Fact]
+    public void Serialize_CountlessEnumerable_NotWalked_SerializedAsObject()
+    {
+        // A countless/lazy IEnumerable (no O(1) size) must NOT be treated as a collection: walking it could
+        // be unbounded/infinite on the user's thread, and any pulled count would be a fake size. It falls
+        // through to the object serializer instead (matches Java/Python). This generator throws if pulled.
+        var pulled = false;
         IEnumerable<int> Lazy()
         {
-            while (true)
-            {
-                pulled++;
-                yield return pulled;
-            }
+            pulled = true;
+            yield return 1;
         }
 
         var result = ValueSerializer.Serialize(Lazy(), DefaultLimits);
 
-        result.Elements.Should().HaveCount(20); // MaxCollectionWidth = 20
-        result.NotCapturedReason.Should().Be(NotCapturedReason.CollectionSize);
-        result.OriginalSize.Should().Be(21, "unknown-size sequences report at-least width+1, not an exact walked count");
-        pulled.Should().Be(21, "the infinite sequence must be pulled only width+1 times, never fully enumerated");
+        pulled.Should().BeFalse("a countless IEnumerable must not be enumerated as a collection");
+        result.Elements.Should().BeNull("it is serialized as an object, not a collection");
+        result.NotCapturedReason.Should().Be(NotCapturedReason.None);
     }
 
     [Fact]
@@ -379,5 +447,63 @@ public class ValueSerializerTests
     private class ThrowingProp
     {
         public string Bad => throw new InvalidOperationException("no access");
+    }
+
+    // Implements only the generic ICollection<T> (so the non-generic ICollection fast path is skipped and
+    // the reflected generic Count getter runs) and throws from Count — simulates a lazy/remote-backed count.
+    private class ThrowingCountCollection : ICollection<int>
+    {
+        public int Count => throw new InvalidOperationException("count unavailable");
+
+        public bool IsReadOnly => true;
+
+        public IEnumerator<int> GetEnumerator()
+        {
+            yield return 1;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => this.GetEnumerator();
+
+        public void Add(int item) => throw new NotSupportedException();
+
+        public void Clear() => throw new NotSupportedException();
+
+        public bool Contains(int item) => throw new NotSupportedException();
+
+        public void CopyTo(int[] array, int arrayIndex) => throw new NotSupportedException();
+
+        public bool Remove(int item) => throw new NotSupportedException();
+    }
+
+    // A walkable collection (real O(1) Count) whose enumerator mutates its own backing store mid-iteration,
+    // forcing the "collection was modified" InvalidOperationException on the user's thread.
+    private class MutatingOnEnumerate : ICollection<int>
+    {
+        private readonly List<int> backing = new() { 1, 2, 3, 4, 5 };
+
+        public int Count => this.backing.Count;
+
+        public bool IsReadOnly => true;
+
+        public IEnumerator<int> GetEnumerator()
+        {
+            foreach (var item in this.backing)
+            {
+                yield return item;
+                this.backing.Add(item); // mutate mid-walk → List<T> enumerator throws on the next MoveNext
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => this.GetEnumerator();
+
+        public void Add(int item) => throw new NotSupportedException();
+
+        public void Clear() => throw new NotSupportedException();
+
+        public bool Contains(int item) => throw new NotSupportedException();
+
+        public void CopyTo(int[] array, int arrayIndex) => throw new NotSupportedException();
+
+        public bool Remove(int item) => throw new NotSupportedException();
     }
 }

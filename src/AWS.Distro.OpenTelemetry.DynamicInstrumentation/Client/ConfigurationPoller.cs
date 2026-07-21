@@ -146,14 +146,11 @@ public sealed class ConfigurationPoller(
             return true;
         }
 
-        if (type == InstrumentationType.PROBE)
-        {
-            this.probeSyncedAt = response.SyncedAt;
-        }
-        else
-        {
-            this.breakpointSyncedAt = response.SyncedAt;
-        }
+        // The cursor is committed only AFTER a fully-applied set (below), never here. Advancing it up front
+        // would tell the backend "consumed" for a config whose apply returned false (e.g. type not loaded
+        // yet); the next poll would then return Changed=false and short-circuit, so the retry would never
+        // run and the probe would stay dead until an unrelated change flipped Changed=true.
+        var newSyncedAt = response.SyncedAt;
 
         var configs = response.Configurations
             .Select(InstrumentationConfiguration.Parse)
@@ -183,20 +180,38 @@ public sealed class ConfigurationPoller(
 
             if (fingerprint.SetEquals(this.lastFingerprint))
             {
+                // Nothing to apply (effective set unchanged) — safe to advance the cursor.
+                this.CommitCursor(type, newSyncedAt);
                 return true;
             }
 
             snapshot = allConfigs;
         }
 
-        // Latch the fingerprint only when the callback fully applied the set. A throw or a false result
-        // (some target not applyable yet) leaves it stale so the next poll re-invokes and retries.
+        // Commit the fingerprint AND the cursor only when the callback fully applied the set. A throw or a
+        // false result (some target not applyable yet) leaves both stale, so the next poll re-fetches the
+        // same set (cursor not advanced) and re-invokes (fingerprint not latched) — retrying until it loads.
         if (this.onConfigurationsChanged(snapshot))
         {
             this.lastFingerprint = fingerprint;
+            this.CommitCursor(type, newSyncedAt);
         }
 
         return true;
+    }
+
+    // Advances the per-type sync cursor. Called only on a fully-applied (or nothing-to-apply) result, so a
+    // config that could not be applied yet is re-fetched next poll instead of being marked consumed.
+    private void CommitCursor(InstrumentationType type, System.Text.Json.JsonElement? syncedAt)
+    {
+        if (type == InstrumentationType.PROBE)
+        {
+            this.probeSyncedAt = syncedAt;
+        }
+        else
+        {
+            this.breakpointSyncedAt = syncedAt;
+        }
     }
 
     private void WaitWithCancellation(int ms)
