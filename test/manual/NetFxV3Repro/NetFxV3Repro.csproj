@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Multi-targeted so the SAME app exercises both questions:
+           net462 -> "does a 4.6.2-targeted app load/run under our net472-only v4 distro?"
+           net472 -> "does a v3-SDK app on the supported netfx floor break, or just lose telemetry?"
+         Build both:  dotnet build -c Release      (produces bin\Release\net462\ and bin\Release\net472\)
+         Then run each exe under the profiler per RUNBOOK.md. -->
+    <TargetFrameworks>net462;net472</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <AssemblyName>NetFxV3Repro</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AWS SDK for .NET v3 — matches the (pre-v4) sigv4 sample app that showed
+         aws-sdk-dotnet-core#3.7.x in CloudTrail. The whole point is a v3-SDK app. -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.310.7" />
+    <PackageReference Include="AWSSDK.Core" Version="3.7.304.31" />
+  </ItemGroup>
+
+</Project>
