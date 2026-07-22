@@ -12,7 +12,16 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Migrate AWS SDK dependency from v3 to v4
+- **BREAKING**: Migrate AWS SDK for .NET dependency from v3 to v4, matching upstream
+  `opentelemetry-dotnet-contrib`. AWS SDK v3 is no longer supported (it reached end of life on
+  2026-06-01). Applications using AWS SDK v3 will continue to run but will no longer receive AWS
+  SDK instrumentation (spans/metrics for S3, DynamoDB, SQS, SNS, Bedrock, etc.); all other
+  instrumentation is unaffected. To keep AWS SDK telemetry, upgrade your application to AWS SDK
+  for .NET v4.
+  ([#436](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/436))
+- **BREAKING**: Raise the minimum supported .NET Framework version from 4.6.2 to **4.7.2**. AWS
+  SDK for .NET v4 is compiled against .NET Framework 4.7.2 and does not support 4.6.2. Applications
+  targeting .NET Framework below 4.7.2 are no longer supported by this distribution.
   ([#436](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/436))
 
 ## v1.14.0 - 2026-07-15
