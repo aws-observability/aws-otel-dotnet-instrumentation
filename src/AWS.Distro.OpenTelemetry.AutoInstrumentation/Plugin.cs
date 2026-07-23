@@ -546,7 +546,7 @@ public class Plugin
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
     // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
-    // DI is a modern-profiler feature not shipped in the net462 build.
+    // DI is a modern-profiler feature not shipped in the .NET Framework build.
     private void InitializeDynamicInstrumentation()
     {
         try
