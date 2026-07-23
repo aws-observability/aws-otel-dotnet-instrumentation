@@ -113,7 +113,7 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
                     var awsCredentials = requestContext.Identity as AWSCredentials;
                     if (awsCredentials != null)
                     {
-                        var immutableCredentials = awsCredentials.GetCredentialsAsync().GetAwaiter().GetResult();
+                        var immutableCredentials = awsCredentials.GetCredentials();
                         accessKey = immutableCredentials?.AccessKey;
                     }
 

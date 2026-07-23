@@ -76,7 +76,7 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
 #pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
             var awsCredentials = FallbackCredentialsFactory.GetCredentials();
 #pragma warning restore CS0618
-            var immutableCredentials = awsCredentials.GetCredentialsAsync().GetAwaiter().GetResult();
+            var immutableCredentials = awsCredentials.GetCredentials();
 
             if (immutableCredentials.UseToken && immutableCredentials.Token != null)
             {
