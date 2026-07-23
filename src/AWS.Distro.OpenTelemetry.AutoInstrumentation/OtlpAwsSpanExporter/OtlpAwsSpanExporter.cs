@@ -199,6 +199,7 @@ public class OtlpAwsSpanExporter : BaseExporter<Activity>
         request.Headers.Add("Host", this.endpoint.Host);
         request.Headers.Add("content-type", ContentType);
 
+        // Sign with the same credentials snapshot used for the token header above.
         this.authenticator.Sign(request, config, credentials);
 
         return request;

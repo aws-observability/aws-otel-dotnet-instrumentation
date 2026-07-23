@@ -12,6 +12,11 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+- **(Breaking Change)** Migrate AWS SDK for .NET dependency from v3 to v4. Since AWS SDK v4 targets .NET Framework 4.7.2 and above, this change drops support for .NET Framework 4.6.2.
+  ([#436](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/436))
+
+  **Note: this release drops support for AWS SDK for .NET v3.** Users should upgrade their applications to AWS SDK v4 to continue using the latest distribution.
+
 ## v1.14.0 - 2026-07-15
 - Fix Linux arm64 image being built with the x64 payload, which caused the shared
   store and native profiler to not match the image architecture and made .NET

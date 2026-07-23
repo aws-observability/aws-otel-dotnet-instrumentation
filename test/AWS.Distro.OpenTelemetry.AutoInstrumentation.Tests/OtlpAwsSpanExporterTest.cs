@@ -5,8 +5,10 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
+using Amazon;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
+using Amazon.XRay;
 using Moq;
 using Moq.Protected;
 using OpenTelemetry;
@@ -20,6 +22,9 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 public class OtlpAwsSpanExporterTest
 {
     private const string XrayOtlpEndpoint = "https://xray.us-east-1.amazonaws.com/v1/traces";
+
+    // Matches the private ServiceName in OtlpAwsSpanExporter; the SigV4 credential scope is derived from it.
+    private const string XRayServiceName = "XRay";
     private const string AuthorizationHeader = "Authorization";
     private const string XAmzDateHeader = "X-Amz-Date";
     private const string XAmzContentSha256Header = "X-Amz-Content-Sha256";
@@ -174,6 +179,86 @@ public class OtlpAwsSpanExporterTest
         }
     }
 
+    // Regression test for the AWS SDK v4 migration: the exporter must sign with the SAME
+    // ImmutableCredentials snapshot it resolved for the x-amz-security-token header. v4's
+    // AWS4Signer.Sign(...BaseIdentity) re-resolves credentials internally, which could produce a
+    // signature from a different snapshot than the token header if credentials rotate between the
+    // two resolutions -> SignatureDoesNotMatch. The exporter resolves once (GetCredentialsAsync)
+    // and passes that snapshot to Sign; this asserts the two see the same credentials.
+    [Fact]
+    public void TestAwsSpanExporterSignsWithSameCredentialsSnapshotAsTokenHeader()
+    {
+        var credentials = new ImmutableCredentials("test_key", "test_key1", "secret_token");
+        RecordingCredentialsAuthenticator mockAuth = new RecordingCredentialsAuthenticator(credentials);
+
+        BaseExporter<Activity> exporter = new OtlpAwsSpanExporter(this.options, this.tracerProvider.GetDefaultResource(), mockAuth);
+
+        HttpResponseMessage response = new HttpResponseMessage
+        {
+            StatusCode = HttpStatusCode.OK,
+            Content = new StringContent(string.Empty),
+        };
+
+        (ExportResult Result, HttpRequestMessage? CapturedRequest) execute = SetupMockExporterAndCaptureRequest(exporter, response);
+
+        Assert.Equal(ExportResult.Success, execute.Result);
+        Assert.NotNull(mockAuth.ResolvedCredentials);
+        Assert.NotNull(mockAuth.SignedCredentials);
+
+        // The snapshot resolved for the token header and the snapshot handed to Sign must be identical.
+        Assert.Same(mockAuth.ResolvedCredentials, mockAuth.SignedCredentials);
+        Assert.Equal(credentials.AccessKey, mockAuth.SignedCredentials!.AccessKey);
+        Assert.Equal(credentials.SecretKey, mockAuth.SignedCredentials!.SecretKey);
+        Assert.Equal(credentials.Token, mockAuth.SignedCredentials!.Token);
+    }
+
+    // Exercises the REAL signing path (DefaultAwsAuthenticator.Sign -> AWS4Signer.SignRequest) rather
+    // than a mock no-op. The other tests inject fake Authorization/X-Amz-* strings via mock authenticators,
+    // so a genuine signing regression (wrong service/region, malformed header, or a throw from the v4
+    // signer -> SignatureDoesNotMatch at runtime) would ship undetected. The signature itself is not
+    // deterministic (X-Amz-Date is wall-clock), so we assert the signer produces a structurally valid
+    // SigV4 Authorization header scoped to the xray service/region and populates AWS4SignerResult.
+    [Fact]
+    public void TestDefaultAwsAuthenticatorProducesValidSigV4Signature()
+    {
+        var authenticator = new DefaultAwsAuthenticator();
+        var credentials = new ImmutableCredentials("AKIDEXAMPLE", "test_secret_key", null);
+
+        IRequest request = new DefaultRequest(new EmptySigningRequest(), XRayServiceName)
+        {
+            HttpMethod = "POST",
+            Endpoint = new Uri(XrayOtlpEndpoint),
+            SignatureVersion = SignatureVersion.SigV4,
+        };
+        request.Headers.Add("Host", request.Endpoint.Host);
+        request.Headers.Add("content-type", "application/x-protobuf");
+
+        var config = new AmazonXRayConfig
+        {
+            AuthenticationRegion = "us-east-1",
+            AuthenticationServiceName = XRayServiceName,
+            UseHttp = false,
+            ServiceURL = XrayOtlpEndpoint,
+            RegionEndpoint = RegionEndpoint.GetBySystemName("us-east-1"),
+        };
+
+        authenticator.Sign(request, config, credentials);
+
+        // The v4 signer must have run and stored its result.
+        Assert.NotNull(request.AWS4SignerResult);
+        Assert.True(request.Headers.ContainsKey(AuthorizationHeader));
+
+        var authorization = request.Headers[AuthorizationHeader];
+
+        // A well-formed SigV4 header, scoped to the xray service in us-east-1, with a 64-hex signature.
+        // Service segment is matched case-insensitively since the signer canonicalizes the scope.
+        Assert.StartsWith("AWS4-HMAC-SHA256 ", authorization);
+        Assert.Contains("Credential=AKIDEXAMPLE/", authorization);
+        Assert.Matches(@"/us-east-1/(xray|XRay)/aws4_request", authorization);
+        Assert.Contains("SignedHeaders=", authorization);
+        Assert.Matches("Signature=[0-9a-f]{64}", authorization);
+    }
+
     // Verifies that if a signing or authentication error occurs. The exporter retries the request atleast one more.
     [Fact]
     public void TestAwsSpanExporterShouldRetryIfFailureToSignSigV4()
@@ -301,4 +386,38 @@ internal class MockThrowableCredentialsAuthenticator : MockCounterAuthenticator
     {
         return;
     }
+}
+
+// A Mock authenticator that records the credentials snapshot returned from GetCredentialsAsync and
+// the snapshot passed into Sign, so a test can assert the exporter uses the same instance for both.
+internal class RecordingCredentialsAuthenticator : MockCounterAuthenticator
+{
+    private readonly ImmutableCredentials credentials;
+
+    internal RecordingCredentialsAuthenticator(ImmutableCredentials credentials)
+    {
+        this.credentials = credentials;
+    }
+
+    public ImmutableCredentials? ResolvedCredentials { get; private set; }
+
+    public ImmutableCredentials? SignedCredentials { get; private set; }
+
+    public override async Task<ImmutableCredentials> GetCredentialsAsync()
+    {
+        this.CallCount += 1;
+        this.ResolvedCredentials = this.credentials;
+        return await Task.Run(() => this.credentials);
+    }
+
+    public override void Sign(IRequest request, IClientConfig config, ImmutableCredentials credentials)
+    {
+        this.SignedCredentials = credentials;
+    }
+}
+
+// Empty request used to build a DefaultRequest for the real-signing test, mirroring the exporter's
+// private EmptyAmazonWebServiceRequest (which is not accessible from the test assembly).
+internal class EmptySigningRequest : AmazonWebServiceRequest
+{
 }

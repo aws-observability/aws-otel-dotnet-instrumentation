@@ -130,7 +130,7 @@ internal partial class Build : NukeBuild
             {
                 FileSystemTasks.CopyDirectoryRecursively(
                     RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                    "net462",
+                    "net472",
                     this.openTelemetryDistributionFolder / "netfx",
                     DirectoryExistsPolicy.Merge,
                     FileExistsPolicy.Skip);

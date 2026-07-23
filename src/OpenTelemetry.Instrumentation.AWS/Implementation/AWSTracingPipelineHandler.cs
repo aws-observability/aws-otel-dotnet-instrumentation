@@ -105,12 +105,28 @@ internal sealed class AWSTracingPipelineHandler : PipelineHandler
             {
                 int statusCode = (int)httpResponse.StatusCode;
 
-                string? accessKey = requestContext.ImmutableCredentials.AccessKey;
-                string? determinedSigningRegion = requestContext.Request.DeterminedSigningRegion;
-                if (accessKey != null && determinedSigningRegion != null)
+                try
                 {
-                    activity.SetTag(AWSSemanticConventions.AttributeAWSAuthAccessKey, accessKey);
-                    activity.SetTag(AWSSemanticConventions.AttributeAWSAuthRegion, determinedSigningRegion);
+                    string? accessKey = null;
+                    string? determinedSigningRegion = requestContext.Request.DeterminedSigningRegion;
+
+                    var awsCredentials = requestContext.Identity as AWSCredentials;
+                    if (awsCredentials != null)
+                    {
+                        var immutableCredentials = awsCredentials.GetCredentials();
+                        accessKey = immutableCredentials?.AccessKey;
+                    }
+
+                    if (accessKey != null && determinedSigningRegion != null)
+                    {
+                        activity.SetTag(AWSSemanticConventions.AttributeAWSAuthAccessKey, accessKey);
+                        activity.SetTag(AWSSemanticConventions.AttributeAWSAuthRegion, determinedSigningRegion);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Credential resolution may fail; skip the aws.auth.* tags and continue rather
+                    // than break the span. Swallowed to match the rest of this handler's AoT guards.
                 }
 
                 AddStatusCodeToActivity(activity, statusCode);
