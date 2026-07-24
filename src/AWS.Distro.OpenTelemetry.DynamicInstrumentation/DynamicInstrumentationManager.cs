@@ -190,6 +190,15 @@ public sealed class DynamicInstrumentationManager : IDisposable
         }
 
         // Drop stale configs and forget their applied-state so a re-add re-applies them.
+        //
+        // NOTE ON UNINSTRUMENTING: the profiler exposes no revert/remove export (no RequestRevert; the
+        // native ABI is AddInstrumentations only — see NativeMethods.cs), so we cannot un-weave a method
+        // whose IL was already rewritten. Removal is therefore a *logical* uninstrument: dropping the key
+        // from the registry makes the still-woven DiIntegration callback a no-op on its next invocation —
+        // registry.TryHit / registry.Get return false/null for the missing key, so OnMethodBegin returns
+        // CallTargetState.GetDefault() and OnMethodEnd finds no paired entry, enqueuing nothing. The method
+        // keeps the (cheap) woven prologue/epilogue that immediately short-circuits; no snapshot is ever
+        // produced for a removed config. Forgetting applied-state here also lets a later re-add re-apply it.
         foreach (var removedKey in reg.RemoveStale(activeKeys))
         {
             this.appliedInstrumentations.Remove(removedKey);
@@ -244,8 +253,12 @@ public sealed class DynamicInstrumentationManager : IDisposable
                     break;
 
                 default:
-                    // Permanent failure: keep the key so we report it exactly once, not every poll.
-                    // TODO(PR3): this.statusReporter.ReportError(config, MapErrorCause(result));
+                    // Permanent instrumentation failure (MethodNotFound / NoSupportedArity / RuntimeError):
+                    // keep the key in appliedInstrumentations so we report it EXACTLY ONCE, not every poll.
+                    // result.IsReportableFailure() is true here and result.MapErrorCause() gives the backend
+                    // ErrorCause. This is an instrumentation-level ERROR (the target couldn't be woven) — a
+                    // capture-level partial (NotCapturedReason) is emitted inside a snapshot instead, never here.
+                    // TODO(PR3): if (result.IsReportableFailure()) this.statusReporter.ReportError(config, result.MapErrorCause()!);
                     break;
             }
         }
