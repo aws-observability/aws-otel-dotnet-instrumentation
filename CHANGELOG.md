@@ -11,6 +11,12 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Cap `AWSSDK.Core` and `AWSSDK.XRay` dependencies below `4.0.0`. This release line targets AWS SDK
+  for .NET v3 and is binary-incompatible with v4, so a v3-ADOT + v4-AWSSDK combination now surfaces
+  an explicit NuGet resolution conflict (NU1107) at restore instead of silently co-resolving a
+  mismatched AWS SDK that can fail at runtime. Users on AWS SDK v4 should upgrade to the ADOT release
+  that adds v4 support.
+  ([#TBD](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/TBD))
 
 ## v1.14.0 - 2026-07-15
 - Fix Linux arm64 image being built with the x64 payload, which caused the shared
