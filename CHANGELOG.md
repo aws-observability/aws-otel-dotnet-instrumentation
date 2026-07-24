@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Update AWSSDK package references to indicate that this release is not compatible with AWS SDK v4.
+  ([#438](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/438))
 
 ## v1.14.0 - 2026-07-15
 - Fix Linux arm64 image being built with the x64 payload, which caused the shared
