@@ -308,6 +308,105 @@ public class CapturePipelineTests : IDisposable
     }
 
     [Fact]
+    public void AsyncMethod_SyncEndDefers_AsyncEndCapturesUnwrappedResult()
+    {
+        // For a Task<T>-returning method the profiler calls the sync OnMethodEnd with the INCOMPLETE task,
+        // then OnAsyncMethodEnd with the completed, unwrapped result. The sync end must defer (capture
+        // nothing, leave the paired entry intact) so we never serialize an incomplete Task; the async end
+        // then produces exactly one capture carrying the unwrapped value.
+        RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+
+        var state = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "ORD-9", 3 });
+
+        // Sync end fires first with the still-running task — must be a no-op.
+        var runningTask = new TaskCompletionSource<string>().Task; // never completes
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, Task<string>>(target, runningTask, null, in state);
+        DIDataStore.Drain().Should().BeEmpty("the synchronous end must defer for an awaitable return");
+
+        // Async end fires on completion with the unwrapped T ("done") and no exception.
+        DiIntegrationHelper.OnAsyncMethodEnd<CaptureTarget, string>(target, "done", null, in state);
+
+        var cap = DIDataStore.Drain().Single();
+        cap.Arguments!["arg0"].Value.Should().Be("ORD-9");
+        cap.ReturnValue!.Value.Should().Be("done", "the captured value is the awaited result, not the Task");
+        cap.Exception.Should().BeNull();
+    }
+
+    [Fact]
+    public void AsyncMethod_FaultedTask_CapturesExceptionViaAsyncEnd()
+    {
+        // A faulted async method: the profiler awaits, then calls OnAsyncMethodEnd with the fault. The
+        // capture must record the exception (the sync end having deferred).
+        RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+        var ex = new InvalidOperationException("async-boom");
+
+        var state = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, Task<string>>(target, Task.FromResult("ignored"), null, in state);
+        DiIntegrationHelper.OnAsyncMethodEnd<CaptureTarget, string>(target, null!, ex, in state);
+
+        var cap = DIDataStore.Drain().Single();
+        cap.Exception.Should().NotBeNull();
+        cap.Exception!.Type.Should().Be("System.InvalidOperationException");
+        cap.Exception.Value.Should().Be("async-boom");
+    }
+
+    [Fact]
+    public void NonGenericTask_SyncEndDefers_AsyncEndCaptures()
+    {
+        // Task (non-generic) / ValueTask returns unwrap to a null object. The sync end still defers; the
+        // async end produces the capture with a null return value.
+        RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+
+        var state = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, Task>(target, Task.CompletedTask, null, in state);
+        DIDataStore.Drain().Should().BeEmpty();
+
+        DiIntegrationHelper.OnAsyncMethodEnd<CaptureTarget, object?>(target, null, null, in state);
+        DIDataStore.Drain().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void SyncMethod_StillCapturesOnSyncEnd()
+    {
+        // Guard against over-broad deferral: a plain (non-awaitable) return must still capture on the
+        // synchronous end exactly as before.
+        RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+
+        var state = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "sync-result", null, in state);
+
+        DIDataStore.Drain().Single().ReturnValue!.Value.Should().Be("sync-result");
+    }
+
+    [Fact]
+    public void RemovedConfig_WovenCallbackNoOps_ProducesNoCapture()
+    {
+        // Uninstrument is logical, not physical: the profiler has no revert export, so a removed config's
+        // method stays woven. Proving the reviewer's concern: once the config is dropped from the registry,
+        // the still-firing callback must capture NOTHING. RemoveStale with an empty active set drops the key;
+        // a subsequent Begin/End cycle (simulating the still-woven method being called) must be a no-op.
+        var registry = RegistryWith(CaptureConfiguration.Default);
+        var target = new CaptureTarget();
+
+        // Sanity: while registered, it captures.
+        var s1 = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "r", null, in s1);
+        DIDataStore.Drain().Should().HaveCount(1);
+
+        // Backend removes the config → registry drops it (mirrors OnConfigurationsChanged's RemoveStale).
+        registry.RemoveStale(new HashSet<string>()).Should().NotBeEmpty();
+
+        // The method is still woven; the callback still fires — but now finds no config and must no-op.
+        var s2 = DiIntegrationHelper.OnMethodBegin<CaptureTarget>(target, new object?[] { "x", 2 });
+        DiIntegrationHelper.OnMethodEnd<CaptureTarget, string>(target, "r", null, in s2);
+        DIDataStore.Drain().Should().BeEmpty("a removed config must produce no captures even though the method stays woven");
+    }
+
+    [Fact]
     public void OnMethodEnd_WithoutMatchingBegin_DoesNotThrowOrEnqueue()
     {
         RegistryWith(CaptureConfiguration.Default);

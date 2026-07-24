@@ -21,6 +21,13 @@ internal static class DiIntegration4
         return DiIntegrationHelper.OnMethodEnd(instance, returnValue, exception, in state);
     }
 
+    // Async target methods: profiler awaits the Task/ValueTask and calls this with the completed result.
+    internal static TReturn OnAsyncMethodEnd<TTarget, TReturn>(
+        TTarget instance, TReturn returnValue, Exception? exception, in CallTargetState state)
+    {
+        return DiIntegrationHelper.OnAsyncMethodEnd(instance, returnValue, exception, in state);
+    }
+
     // Void-returning target methods: profiler requires the non-generic CallTargetReturn.
     internal static CallTargetReturn OnMethodEnd<TTarget>(
         TTarget instance, Exception? exception, in CallTargetState state)

@@ -33,6 +33,16 @@ internal static class DiIntegrationHelper
     public static CallTargetReturn<TReturn> OnMethodEnd<TTarget, TReturn>(
         TTarget instance, TReturn returnValue, Exception? exception, in CallTargetState state)
     {
+        // For an awaitable return (Task/Task<T>/ValueTask/ValueTask<T>) the profiler calls this synchronously
+        // with the still-incomplete task, THEN calls OnAsyncMethodEnd once it completes. Serializing the task
+        // here would capture an incomplete result and could block/deadlock the user thread (accessing .Result),
+        // so we defer: leave the paired entry in place and capture in OnAsyncMethodEnd. Mirrors the profiler's
+        // own NoCodeIntegrationHelper.OnMethodEnd, which returns early for the same set of awaitable types.
+        if (IsAwaitableReturn(typeof(TReturn)))
+        {
+            return new CallTargetReturn<TReturn>(returnValue);
+        }
+
         // Capture must never throw into user code; return value is always passed through.
         try
         {
@@ -43,6 +53,25 @@ internal static class DiIntegrationHelper
         }
 
         return new CallTargetReturn<TReturn>(returnValue);
+    }
+
+    // Async non-void methods: the profiler awaits the returned Task/ValueTask and calls this with the
+    // COMPLETED, unwrapped result (returnValue is T for Task<T>/ValueTask<T>; null object for Task/ValueTask).
+    // exception is non-null if the awaited task faulted. This is the profiler's built-in continuation
+    // mechanism (IntegrationMapper.CreateAsyncEndMethodDelegate) — no profiler fork required.
+    public static TReturn OnAsyncMethodEnd<TTarget, TReturn>(
+        TTarget instance, TReturn returnValue, Exception? exception, in CallTargetState state)
+    {
+        // Capture must never throw into user code; the awaited result is always passed through.
+        try
+        {
+            EndCore(returnValue, hasReturn: true, exception, in state);
+        }
+        catch
+        {
+        }
+
+        return returnValue;
     }
 
     // Void methods: profiler resolves the End callback by type identity and requires this non-generic
@@ -295,6 +324,25 @@ internal static class DiIntegrationHelper
 
         return registry.TryResolveKeyByTypeAndArity(targetType, arity)
             ?? MatchKeyByType(targetType, registry);
+    }
+
+    // True when the woven method's return is an awaitable the profiler will continue on (calling
+    // OnAsyncMethodEnd with the completed result), so the synchronous OnMethodEnd must defer. Matches the
+    // set the profiler's EndMethodHandler recognizes: Task, Task<T>, ValueTask, ValueTask<T>.
+    private static bool IsAwaitableReturn(Type returnType)
+    {
+        if (returnType.IsGenericType)
+        {
+            if (typeof(Task).IsAssignableFrom(returnType))
+            {
+                return true; // Task<T>
+            }
+
+            var genericDef = returnType.GetGenericTypeDefinition();
+            return genericDef == typeof(ValueTask<>);
+        }
+
+        return returnType == typeof(Task) || returnType == typeof(ValueTask);
     }
 
     private static bool IsInternalFrame(string typeName) =>
