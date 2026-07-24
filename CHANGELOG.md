@@ -14,6 +14,12 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 - Add adaptive sampling support for anomaly detection and trace capture
   ([#410](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/410))
 
+## v1.14.0 - 2026-07-15
+- Fix Linux arm64 image being built with the x64 payload, which caused the shared
+  store and native profiler to not match the image architecture and made .NET
+  applications fail to start on arm64. Images are now built per architecture.
+  ([#424](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/424))
+
 ## v1.13.0 - 2026-06-06
 - Update OpenTelemetry dependencies - Core: 1.15.3, Instrumentation: 1.15.0
   ([#414](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/414))

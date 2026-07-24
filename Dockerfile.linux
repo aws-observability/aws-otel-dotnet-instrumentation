@@ -37,8 +37,17 @@ RUN if [ $TARGETARCH = "amd64" ]; then export ARCH="x86_64" ; \
 # Stage 2: Build the distribution image by copying the THIRD-PARTY-LICENSES, the custom built cp command from stage 1, and OpenTelemetryDistribution to their respective destinations
 FROM scratch
 
+# TARGETARCH is automatically defined by Docker when using --platform flag and is
+# used to select the matching architecture-specific distribution below. It must be
+# re-declared here because ARGs do not carry across build stages.
+ARG TARGETARCH
+
 # Required to copy attribute files to distributed docker images
 ADD THIRD-PARTY-LICENSES ./THIRD-PARTY-LICENSES
 
 COPY --from=builder /usr/src/cp-utility/bin/cp-utility /bin/cp
-COPY OpenTelemetryDistribution /autoinstrumentation
+# Copy the distribution matching the target architecture. The build context stages
+# the per-architecture payloads under OpenTelemetryDistribution/<arch> so that the
+# arm64 image receives arm64 assets (store/arm64 and the aarch64 native profiler)
+# rather than the x64 payload.
+COPY OpenTelemetryDistribution/${TARGETARCH} /autoinstrumentation

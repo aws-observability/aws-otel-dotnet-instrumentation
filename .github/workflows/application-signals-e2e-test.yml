@@ -103,7 +103,8 @@ jobs:
       - name: Unzip Linux Artifact
         if: runner.os == 'Linux'
         run: |
-          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution
+          mkdir -p ./OpenTelemetryDistribution/amd64
+          unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
 
       - name: Set up Docker Buildx
         if: runner.os == 'Linux'
@@ -244,21 +245,32 @@ jobs:
 
       - name: Build Lambda Sample App
         shell: bash
-        run: dotnet lambda package -pl ./src/SimpleLambdaFunction
+        run: |
+          dotnet lambda package --framework net8.0 -pl ./src/SimpleLambdaFunction -o ./function-net8.0.zip
+          dotnet lambda package --framework net10.0 -pl ./src/SimpleLambdaFunction -o ./function-net10.0.zip
         working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
-      
+
       - name: Upload Sample App to S3
         shell: bash
         run: |
-          aws s3 cp ./src/SimpleLambdaFunction/bin/Release/net8.0/SimpleLambdaFunction.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
+          # Runtime-specific artifacts consumed by the dotnet-lambda-test matrix.
+          aws s3 cp ./function-net8.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}-dotnet8.zip
+          aws s3 cp ./function-net10.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}-dotnet10.zip
+          # Legacy artifact kept for backward compatibility with the default (dotnet8) runtime.
+          aws s3 cp ./function-net8.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
         working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
-        
+
   dotnet-lambda-test:
     needs: [ build-lambda-staging-sample-app ]
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [ dotnet8, dotnet10 ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
     secrets: inherit
     with:
       aws-region: us-east-1
+      runtime: ${{ matrix.runtime }}
       caller-workflow-name: 'main-build'
 
   # This validation is to ensure that all test workflows relevant to this repo are actually
