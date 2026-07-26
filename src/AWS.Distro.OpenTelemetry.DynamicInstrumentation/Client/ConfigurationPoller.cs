@@ -1,24 +1,22 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Client;
 
-/// <summary>
-/// Polls the configuration API on background threads (one for probes, one for breakpoints),
-/// applying backoff and change detection, and invoking a callback when the active set changes.
-/// </summary>
+/// <summary>Polls the configuration API on background threads, applying backoff and change detection, and invoking a callback when the active set changes.</summary>
 /// <param name="client">The API client used to fetch configurations.</param>
 /// <param name="probeIntervalSeconds">Base interval between probe polls.</param>
 /// <param name="breakpointIntervalSeconds">Base interval between breakpoint polls.</param>
-/// <param name="onConfigurationsChanged">Callback invoked with the merged active configuration set.</param>
+/// <param name="onConfigurationsChanged">Callback invoked with the merged active configuration set. Returns true when the set was fully applied and the change may be latched; false when some target could not be applied yet (e.g. its assembly is not loaded) and the next poll should re-invoke to retry.</param>
 /// <param name="ct">Cancellation token that stops the poll loops.</param>
 public sealed class ConfigurationPoller(
     DynamicInstrumentationClient client,
     int probeIntervalSeconds,
     int breakpointIntervalSeconds,
-    Action<List<InstrumentationConfiguration>> onConfigurationsChanged,
+    Func<List<InstrumentationConfiguration>, bool> onConfigurationsChanged,
     CancellationToken ct) : IDisposable
 {
     private const int DegradedIntervalMs = 300_000;
@@ -30,15 +28,16 @@ public sealed class ConfigurationPoller(
     private readonly DynamicInstrumentationClient client = client;
     private readonly int probeIntervalMs = ToIntervalMs(probeIntervalSeconds);
     private readonly int breakpointIntervalMs = ToIntervalMs(breakpointIntervalSeconds);
-    private readonly Action<List<InstrumentationConfiguration>> onConfigurationsChanged = onConfigurationsChanged;
+    private readonly Func<List<InstrumentationConfiguration>, bool> onConfigurationsChanged = onConfigurationsChanged;
     private readonly CancellationToken ct = ct;
     private readonly object configLock = new();
 
     private Thread? probeThread;
     private Thread? breakpointThread;
 
-    private string? probeSyncedAt;
-    private string? breakpointSyncedAt;
+    // Opaque sync cursors echoed back to the backend; JsonElement because the live backend sends SyncedAt as an epoch-seconds number, not the spec's ISO string.
+    private JsonElement? probeSyncedAt;
+    private JsonElement? breakpointSyncedAt;
 
     // TODO: staleness tracking — force full resync when no success for 30m (probes) / 5m (breakpoints)
     private HashSet<string> lastFingerprint = [];
@@ -62,7 +61,7 @@ public sealed class ConfigurationPoller(
     /// <summary>Disposes the poller. Threads exit when the cancellation token is cancelled.</summary>
     public void Dispose()
     {
-        // Threads exit when CancellationToken is cancelled (managed externally)
+        // Threads exit when the (externally managed) CancellationToken is cancelled.
     }
 
     // Degrade only after all backoff tiers are used (> not >=, else the last tier is skipped).
@@ -135,8 +134,7 @@ public sealed class ConfigurationPoller(
     private async Task<bool> FetchAndApply(InstrumentationType type)
     {
         var syncedAt = type == InstrumentationType.PROBE ? this.probeSyncedAt : this.breakpointSyncedAt;
-        var response = await this.client.FetchConfigurationsAsync(
-            type, string.IsNullOrEmpty(syncedAt) ? null : syncedAt, this.ct);
+        var response = await this.client.FetchConfigurationsAsync(type, syncedAt, this.ct);
 
         if (!response.Success)
         {
@@ -148,17 +146,12 @@ public sealed class ConfigurationPoller(
             return true;
         }
 
-        // Update SyncedAt
-        if (type == InstrumentationType.PROBE)
-        {
-            this.probeSyncedAt = response.SyncedAt;
-        }
-        else
-        {
-            this.breakpointSyncedAt = response.SyncedAt;
-        }
+        // The cursor is committed only AFTER a fully-applied set (below), never here. Advancing it up front
+        // would tell the backend "consumed" for a config whose apply returned false (e.g. type not loaded
+        // yet); the next poll would then return Changed=false and short-circuit, so the retry would never
+        // run and the probe would stay dead until an unrelated change flipped Changed=true.
+        var newSyncedAt = response.SyncedAt;
 
-        // Parse configurations
         var configs = response.Configurations
             .Select(InstrumentationConfiguration.Parse)
             .Where(c => c != null)
@@ -167,6 +160,7 @@ public sealed class ConfigurationPoller(
 
         // Update cache and merge — snapshot under lock, invoke callback outside
         List<InstrumentationConfiguration> snapshot;
+        HashSet<string> fingerprint;
         lock (this.configLock)
         {
             if (type == InstrumentationType.PROBE)
@@ -180,21 +174,44 @@ public sealed class ConfigurationPoller(
 
             var allConfigs = this.cachedProbeConfigs.Concat(this.cachedBreakpointConfigs).ToList();
 
-            // Fingerprint check — skip if unchanged
-            var fingerprint = new HashSet<string>(
+            // Fingerprint check — skip if unchanged.
+            fingerprint = new HashSet<string>(
                 allConfigs.Select(c => $"{c.LocationHash}:{c.CreatedAt?.ToUnixTimeMilliseconds()}"));
 
             if (fingerprint.SetEquals(this.lastFingerprint))
             {
+                // Nothing to apply (effective set unchanged) — safe to advance the cursor.
+                this.CommitCursor(type, newSyncedAt);
                 return true;
             }
 
-            this.lastFingerprint = fingerprint;
             snapshot = allConfigs;
         }
 
-        this.onConfigurationsChanged(snapshot);
+        // Commit the fingerprint AND the cursor only when the callback fully applied the set. A throw or a
+        // false result (some target not applyable yet) leaves both stale, so the next poll re-fetches the
+        // same set (cursor not advanced) and re-invokes (fingerprint not latched) — retrying until it loads.
+        if (this.onConfigurationsChanged(snapshot))
+        {
+            this.lastFingerprint = fingerprint;
+            this.CommitCursor(type, newSyncedAt);
+        }
+
         return true;
+    }
+
+    // Advances the per-type sync cursor. Called only on a fully-applied (or nothing-to-apply) result, so a
+    // config that could not be applied yet is re-fetched next poll instead of being marked consumed.
+    private void CommitCursor(InstrumentationType type, System.Text.Json.JsonElement? syncedAt)
+    {
+        if (type == InstrumentationType.PROBE)
+        {
+            this.probeSyncedAt = syncedAt;
+        }
+        else
+        {
+            this.breakpointSyncedAt = syncedAt;
+        }
     }
 
     private void WaitWithCancellation(int ms)

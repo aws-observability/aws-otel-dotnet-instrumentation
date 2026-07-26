@@ -34,4 +34,13 @@
     <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.DynamicInstrumentation\AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" />
   </ItemGroup>
 
+  <!-- CapturePipelineTests exercises the real profiler CallTargetState type. The DI project
+       references it with Private=false (not copied), so the test project references it here
+       to compile + copy for the test host. -->
+  <ItemGroup>
+    <Reference Include="OpenTelemetry.AutoInstrumentation">
+      <HintPath>..\..\OpenTelemetryDistribution\net\OpenTelemetry.AutoInstrumentation.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>

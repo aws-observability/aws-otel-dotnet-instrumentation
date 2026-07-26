@@ -43,7 +43,7 @@ public class DynamicInstrumentationConfigTests : IDisposable
         SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL", "http://myagent:3000");
         SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL", "300");
         SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL", "30");
-        SetEnv("OTEL_AWS_DYNAMIC_INSTRUMENTATION_LOGS_ENDPOINT", "http://collector:4317/v1/logs");
+        SetEnv("OTEL_AWS_OTLP_LOGS_ENDPOINT", "http://collector:4317/v1/logs");
 
         var config = DynamicInstrumentationConfig.FromEnvironment();
 
