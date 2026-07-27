@@ -157,6 +157,30 @@ public class Plugin
             }
         }
 
+        // Adaptive sampling: parse config, create processor, wire AwsBatchUnsampledSpanProcessor for capture
+        var xraySampler = SamplerUtil.LastCreatedXRaySampler;
+        if (this.IsApplicationSignalsEnabled() && xraySampler != null)
+        {
+            var adaptiveConfig = AdaptiveSamplingConfigParser.Parse(
+                System.Environment.GetEnvironmentVariable(AdaptiveSamplingConfigParser.EnvVar));
+            if (adaptiveConfig != null)
+            {
+                var adaptiveSampler = new AdaptiveSampler(adaptiveConfig, xraySampler);
+
+                // Anomaly-captured spans are unsampled (traceFlags=0) so they need
+                // AwsBatchUnsampledSpanProcessor which exports regardless of sampling flag.
+                // Not registered on TracerProvider to avoid exporting ALL unsampled spans globally.
+                Resource captureResource = tracerProvider.GetResource();
+                var captureExporter = new XrayUdpExporter(captureResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                var captureProcessor = new AwsBatchUnsampledSpanExportProcessor(exporter: captureExporter);
+
+                adaptiveSampler.SetSpanBatcher(span => captureProcessor.OnEnd(span));
+                tracerProvider.AddProcessor(new AdaptiveSamplingSpanProcessor(adaptiveSampler));
+
+                Logger.Log(LogLevel.Information, "Adaptive sampling enabled with anomaly capture via AwsBatchUnsampledSpanExportProcessor");
+            }
+        }
+
         // We want to be adding the exporter as the last processor in the traceProvider since processors
         // are executed in the order they were added to the provider.
         if (AwsSpanProcessingUtil.IsLambdaEnvironment())
@@ -546,7 +570,7 @@ public class Plugin
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
     // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
-    // DI is a modern-profiler feature not shipped in the net462 build.
+    // DI is a modern-profiler feature not shipped in the .NET Framework build.
     private void InitializeDynamicInstrumentation()
     {
         try
