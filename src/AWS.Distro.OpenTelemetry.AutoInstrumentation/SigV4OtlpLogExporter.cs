@@ -73,11 +73,14 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 RegionEndpoint = RegionEndpoint.GetBySystemName(this.region),
             };
 
-            var credentials = FallbackCredentialsFactory.GetCredentials().GetCredentialsAsync().GetAwaiter().GetResult();
+#pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
+            var awsCredentials = FallbackCredentialsFactory.GetCredentials();
+#pragma warning restore CS0618
+            var immutableCredentials = awsCredentials.GetCredentials();
 
-            if (credentials.UseToken && credentials.Token != null)
+            if (immutableCredentials.UseToken && immutableCredentials.Token != null)
             {
-                sigV4Request.Headers.Add("x-amz-security-token", credentials.Token);
+                sigV4Request.Headers.Add("x-amz-security-token", immutableCredentials.Token);
             }
 
             sigV4Request.Headers.Add("Host", this.endpoint.Host);
@@ -88,7 +91,13 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 sigV4Request.Headers.Add(header.Key, header.Value);
             }
 
-            new AWS4Signer().Sign(sigV4Request, config, null, credentials);
+            // Sign from the same immutableCredentials snapshot used for the token header above.
+            // AWS4Signer.Sign(...) would re-resolve credentials internally, which could produce a
+            // signature from a different snapshot than the x-amz-security-token header on rotation.
+            var signingResult = new AWS4Signer().SignRequest(
+                sigV4Request, config, null, immutableCredentials.AccessKey, immutableCredentials.SecretKey);
+            sigV4Request.AWS4SignerResult = signingResult;
+            sigV4Request.Headers["Authorization"] = signingResult.ForAuthorizationHeader;
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, this.endpoint);
             foreach (var header in sigV4Request.Headers)
