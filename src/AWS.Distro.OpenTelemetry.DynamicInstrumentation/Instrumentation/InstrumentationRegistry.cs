@@ -52,18 +52,19 @@ internal sealed class InstrumentationRegistry
 
     /// <summary>
     /// Remove configurations that are no longer in the active set.
-    /// Returns the keys that were removed.
+    /// Returns the removed configurations (carrying both InstrumentationKey and LocationHash so callers can
+    /// forget applied-state by key and clear status-dedup by location hash).
     /// </summary>
-    public List<string> RemoveStale(HashSet<string> activeKeys)
+    public List<InstrumentationConfiguration> RemoveStale(HashSet<string> activeKeys)
     {
-        var removed = new List<string>();
+        var removed = new List<InstrumentationConfiguration>();
         foreach (var key in this.configs.Keys)
         {
             if (!activeKeys.Contains(key))
             {
                 if (this.configs.TryRemove(key, out var reg))
                 {
-                    removed.Add(key);
+                    removed.Add(reg.Config);
                     this.RemoveFromTypeIndex(reg.Config.TypeName, key);
                     this.RemoveFromArityIndex(reg.Config.TypeName, key);
                 }
@@ -77,27 +78,31 @@ internal sealed class InstrumentationRegistry
     /// Records, at Apply time, that <paramref name="key"/>'s target method exists at the given parameter
     /// counts on <paramref name="typeName"/>. One config maps to several arities when the method is
     /// overloaded. Lets the capture hot path disambiguate co-located methods by arity (see #3).
-    /// Returns true if any arity bucket already held a different key — a same-arity collision that arity
-    /// resolution cannot disambiguate (the documented #3 residual), so the caller can report it.
+    /// Returns the FULL set of instrumentation keys in any bucket that now holds more than one key — a
+    /// same-arity collision that arity resolution cannot disambiguate (the documented #3 residual). The set
+    /// includes both the incoming key and its pre-existing peer(s), so the caller can report ERROR on every
+    /// ambiguous config, not just the one that happened to apply second. Empty when there is no collision.
     /// </summary>
-    public bool IndexArities(string typeName, string key, IReadOnlyCollection<int> arities)
+    public IReadOnlyCollection<string> IndexArities(string typeName, string key, IReadOnlyCollection<int> arities)
     {
-        var collided = false;
+        var collidingKeys = new HashSet<string>();
         foreach (var arity in arities)
         {
             var bucket = this.keysByTypeAndArity.GetOrAdd((typeName, arity), _ => new ConcurrentDictionary<string, byte>());
-
-            // A pre-existing key (other than this one) at the same (type, arity) means two configured
-            // methods are indistinguishable at capture time — args.Length can't separate them.
-            if (bucket.Keys.Any(existing => existing != key))
-            {
-                collided = true;
-            }
-
             bucket[key] = 0;
+
+            // More than one key in the bucket → every key in it is indistinguishable at capture time
+            // (args.Length can't separate them). Surface all of them so both/all sides get an ERROR.
+            if (bucket.Count > 1)
+            {
+                foreach (var member in bucket.Keys)
+                {
+                    collidingKeys.Add(member);
+                }
+            }
         }
 
-        return collided;
+        return collidingKeys;
     }
 
     /// <summary>

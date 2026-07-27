@@ -133,8 +133,10 @@ methods are disambiguated by **parameter count** (`args.Length`), indexed at app
 
 **Limitation:** two instrumented methods on the **same type with the same parameter count** cannot be
 told apart at capture time. This is a documented residual — a capture may be attributed to either
-config sharing that `(type, arity)` bucket. (A future enhancement is an optional `Signature` field so
-the profiler binds by exact parameter types.)
+config sharing that `(type, arity)` bucket. When this is detected at apply time, **every** config in the
+ambiguous bucket is reported with `ErrorCause = OVERLOADED_METHODS` (not just the one applied last), so
+the operator sees the full ambiguous set. (A future enhancement is an optional `Signature` field so the
+profiler binds by exact parameter types.)
 
 ---
 
@@ -170,6 +172,20 @@ weave failure (see below) is an instrumentation `ERROR`.
   `IReadOnlyCollection<T>`, etc.); a countless `IEnumerable` is serialized as an object, not walked,
   so a lazy/infinite sequence is never enumerated on the user thread (`ValueSerializer`).
 
+## Snapshot output shape (OTLP LogRecord)
+
+Snapshots are emitted as OTLP LogRecords whose shape matches the Java/Python ADOT SDKs (verified against
+their emitters). Event name `aws.dynamic_instrumentation.snapshot`, scope `aws.dynamic_instrumentation`.
+
+- **Body** is JSON: `{ "captures": { "entry": { "arguments": {...} }, "return": { "return_value": {...} },
+  "lines": { "<n>": { "locals": {...} } } }, "stack": [ { "file_path", "function", "line_number" } ] }`.
+- **Each captured value** is `{ "type": ... }` plus **exactly one of** `is_null` / `not_captured_reason`
+  (`DEPTH`/`FIELD_COUNT`/`COLLECTION_SIZE`/`TIMEOUT`/`ALREADY_CAPTURED`) / `value` (+`truncated`) /
+  `fields` (objects) / `elements` (+`size`, collections). A truncated collection/object emits its partial
+  data + `size`, not a `not_captured_reason`.
+- **Note:** .NET additionally sets `aws.di.thread_id` / `aws.di.thread_name` log attributes, which Java and
+  Python do not — an intentional superset, not a divergence in the shared keys.
+
 ---
 
 ## Error-status taxonomy (instrumentation-failed vs capture-failed)
@@ -193,14 +209,70 @@ Instrumentation-failed causes and their backend `ErrorCause` mapping
 | `NoSupportedArity` | yes | `RUNTIME_ERROR` | Every overload exceeds the 9-parameter cap. |
 | `RuntimeError` | yes | `RUNTIME_ERROR` | The native `AddInstrumentations` call threw. |
 
-> **Status emission** (`StatusReporter.ReportError`) is wired in a later PR (PR3). The taxonomy and
-> mapping above are in place now; the manager calls the hook at the point of failure
-> (see the `TODO(PR3)` markers in `DynamicInstrumentationManager.OnConfigurationsChanged`).
+Every row above is an `InstrumentationApplyResult` enum value. One error cause is **not** an apply result and is therefore reported separately:
+
+> **Note — `OVERLOADED_METHODS`:** Same-arity collisions (two configs on one type with identical
+> parameter counts) are detected at *index* time, not apply time, and reported with
+> `ErrorCause = OVERLOADED_METHODS` on **every** config in the ambiguous bucket — not just the one that
+> applied last. See *Overload disambiguation* above for the two-pass reporting model.
+
+> **Status emission** is live: `DynamicInstrumentationManager.OnConfigurationsChanged` calls
+> `StatusReporter.ReportError(config, cause)` at each permanent-failure point and `ReportReadyForNew()`
+> after applying, and the `StatusReporter` timer reports `ACTIVE`/`DISABLED` on its 60s cycle.
+> READY and DISABLED are de-duplicated **by `LocationHash`** (config identity) and cleared on removal
+> (`StatusReporter.Forget`), so an in-place config change or a remove-then-re-add reports READY again —
+> matching the Java/JS SDKs.
 
 ---
+
+## Configuration (environment variables)
+
+DI is configured entirely through environment variables (`DynamicInstrumentationConfig.FromEnvironment`).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED` | `false` | Master on/off switch. DI does nothing unless this is `true`. |
+| `OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL` | `http://localhost:2000` | Base URL of the configuration API (the local CloudWatch Agent) that serves probe/breakpoint configs and receives status reports. |
+| `OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL` | `600` | Seconds between probe-config polls (floored at 10). |
+| `OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL` | `60` | Seconds between breakpoint-config polls (floored at 10). |
+| `OTEL_AWS_OTLP_LOGS_ENDPOINT` | *(unset)* | **OTLP logs endpoint that captured snapshots are exported to.** Cross-SDK variable (no DI prefix — matches the Java/Python/JS agents). See the caveat below. |
+
+Service name and environment are resolved from the standard OTel variables (`OTEL_SERVICE_NAME`,
+`OTEL_RESOURCE_ATTRIBUTES` for `deployment.environment[.name]`), falling back to
+`unknown_service:<process>` per the OTel spec.
+
+> **⚠️ Snapshots require `OTEL_AWS_OTLP_LOGS_ENDPOINT`.** When unset, no OTLP exporter is attached and
+> captured snapshots are **silently dropped**. Symptom: probes fire and status shows `ACTIVE`, but no
+> snapshot data appears downstream. Fix: set it to the local collector/agent's OTLP logs receiver —
+> `http://localhost:4318/v1/logs` (HTTP) or `http://localhost:4317` (gRPC).
 
 ## Runtime / platform scope
 
 - **.NET 8, 9, 10** (`net8.0;net9.0;net10.0`). .NET Framework (net462) is not supported.
 - Requires the AWS-distributed OpenTelemetry .NET AutoInstrumentation native profiler; DI is loaded
   as a plugin (`OTEL_DOTNET_AUTO_PLUGINS`).
+
+### Log directory must be writable (⚠️ crash if not)
+
+The native profiler writes its own diagnostic logs to a directory that **defaults to
+`/var/log/opentelemetry`** on Linux/macOS. This path is created at process startup during profiler
+init — *before* managed code runs. If the process user cannot create/write it (the default on macOS,
+and any non-root Linux container), the native profiler throws an uncaught
+`filesystem error: ... Permission denied ["/var/log/opentelemetry"]` and **aborts the whole process
+(SIGABRT) before `Main`** — the app appears to start and immediately die with no managed output.
+
+This is not DI-specific — it affects the **base agent**, and DI cannot fix it from managed code: the
+directory is created during **native profiler init, before any managed code (including this plugin)
+runs**, so there is no in-process hook that could set a default in time. The env var is read by the
+native profiler, and the launcher that would set it (`instrument.sh`) is part of the upstream base
+distribution, not this plugin. Handling it here is therefore out of scope for DI; the fix belongs in the
+base-agent launcher (tracked separately).
+
+**Mitigation (operator-side): set `OTEL_DOTNET_AUTO_LOG_DIRECTORY` to a writable path**, e.g.:
+
+```bash
+export OTEL_DOTNET_AUTO_LOG_DIRECTORY="$HOME/.otel-dotnet-auto/logs"   # any writable dir
+```
+
+Or pre-create the default with the right ownership (`sudo mkdir -p /var/log/opentelemetry &&
+sudo chown "$(whoami)" /var/log/opentelemetry`).

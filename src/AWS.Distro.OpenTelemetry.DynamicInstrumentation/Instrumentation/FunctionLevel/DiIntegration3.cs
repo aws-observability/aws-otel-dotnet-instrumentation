@@ -8,7 +8,14 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.Functi
 /// <summary>
 /// CallTarget integration for methods with 3 parameter(s).
 /// </summary>
-internal static class DiIntegration3
+/// <remarks>
+/// MUST be public: the native profiler bakes this type as a generic type argument into the
+/// TARGET (customer) assembly's rewritten IL (e.g. CallTargetInvoker.LogException&lt;DiIntegrationN, TTarget&gt;).
+/// An internal type is inaccessible from the customer assembly and throws MethodAccessException at
+/// the first woven call. Verified via the real-profiler E2E (poc/DeployedAppDemo/run-e2e-linux.sh).
+/// The callback methods stay internal — the profiler binds them reflectively (NonPublic).
+/// </remarks>
+public static class DiIntegration3
 {
     internal static CallTargetState OnMethodBegin<TTarget, TArg1, TArg2, TArg3>(TTarget instance, TArg1 arg1, TArg2 arg2, TArg3 arg3)
     {

@@ -84,7 +84,7 @@ public class InstrumentationRegistryTests
         var activeKeys = new HashSet<string> { config1.InstrumentationKey };
         var removed = registry.RemoveStale(activeKeys);
 
-        removed.Should().Contain(config2.InstrumentationKey);
+        removed.Select(c => c.InstrumentationKey).Should().Contain(config2.InstrumentationKey);
         registry.Count.Should().Be(1);
         registry.Get(config2.InstrumentationKey).Should().BeNull();
     }
@@ -250,10 +250,11 @@ public class InstrumentationRegistryTests
     }
 
     [Fact]
-    public void IndexArities_SameArityTwoMethods_ReportsCollision()
+    public void IndexArities_SameArityTwoMethods_ReturnsBothCollidingKeys()
     {
         // The documented #3 residual: two methods on one type sharing a parameter count are
-        // indistinguishable at capture time (args.Length can't separate them). IndexArities flags it.
+        // indistinguishable at capture time (args.Length can't separate them). IndexArities returns the
+        // FULL colliding set so the caller can report ERROR on every ambiguous config, not just the last.
         var registry = new InstrumentationRegistry();
         var a = CreateConfig(locationHash: "ha", method: "Process");
         var b = CreateConfig(locationHash: "hb", method: "Validate");
@@ -261,10 +262,11 @@ public class InstrumentationRegistryTests
         registry.Register(b);
 
         // First method at arity 1: no prior key → no collision.
-        registry.IndexArities("MyApp.Svc", a.InstrumentationKey, new[] { 1 }).Should().BeFalse();
+        registry.IndexArities("MyApp.Svc", a.InstrumentationKey, new[] { 1 }).Should().BeEmpty();
 
-        // Second method also at arity 1: collides with the first.
-        registry.IndexArities("MyApp.Svc", b.InstrumentationKey, new[] { 1 }).Should().BeTrue();
+        // Second method also at arity 1: collides — the returned set names BOTH keys.
+        registry.IndexArities("MyApp.Svc", b.InstrumentationKey, new[] { 1 })
+            .Should().BeEquivalentTo(new[] { a.InstrumentationKey, b.InstrumentationKey });
     }
 
     [Fact]
@@ -275,8 +277,8 @@ public class InstrumentationRegistryTests
         var config = CreateConfig();
         registry.Register(config);
 
-        registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 }).Should().BeFalse();
-        registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 }).Should().BeFalse();
+        registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 }).Should().BeEmpty();
+        registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 }).Should().BeEmpty();
     }
 
     [Fact]
