@@ -44,7 +44,7 @@ public class InstrumentationApplyResultExtensionsTests
     [Fact]
     public void MapErrorCause_AndIsReportable_AgreeOnEveryResult()
     {
-        // Invariant the PR3 emission relies on: a result has a non-null cause exactly when it is reportable.
+        // Invariant the status emission relies on: a result has a non-null cause exactly when it is reportable.
         foreach (InstrumentationApplyResult result in Enum.GetValues<InstrumentationApplyResult>())
         {
             (result.MapErrorCause() != null).Should().Be(

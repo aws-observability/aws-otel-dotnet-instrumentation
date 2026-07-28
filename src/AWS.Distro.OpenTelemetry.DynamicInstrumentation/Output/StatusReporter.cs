@@ -41,11 +41,8 @@ internal sealed class StatusReporter : IDisposable
     }
 
     /// <summary>
-    /// Report READY for newly-applied configs (hitCount == 0, not yet reported).
-    /// Called immediately after applying configs (from the poller thread, under the manager's
-    /// configChangeLock), concurrently with the 60s timer's ReportStatuses. The gate serializes all
-    /// three status methods so the reportedReady/reportedDisabled sets and the GetAll enumeration are
-    /// never mutated by the timer thread mid-iteration.
+    /// Report READY for newly-applied configs. Called from the poller thread concurrently with the timer's
+    /// ReportStatuses; the gate serializes both so the dedup sets aren't mutated mid-enumeration.
     /// </summary>
     public void ReportReadyForNew()
     {
@@ -86,9 +83,8 @@ internal sealed class StatusReporter : IDisposable
     /// <param name="errorCause">The backend error cause code.</param>
     public void ReportError(InstrumentationConfiguration config, string errorCause)
     {
-        // No lock needed: ERROR touches none of the shared state the gate protects — it neither reads/writes
-        // the reportedReady/reportedDisabled dedup sets nor enumerates the registry; it just emits one entry
-        // built from the passed config. (ReportReadyForNew and ReportStatuses do touch that state and are gated.)
+        // No lock needed: ERROR touches none of the gated shared state (dedup sets, registry enumeration) —
+        // it just emits one entry from the passed config.
         var statuses = new List<StatusEntry>
         {
             new()
@@ -105,10 +101,8 @@ internal sealed class StatusReporter : IDisposable
     }
 
     /// <summary>
-    /// Forget the status-dedup state for a removed configuration (keyed by LocationHash), so if the same
-    /// location is re-added later it reports READY/DISABLED again rather than being suppressed for the
-    /// process lifetime. Called from the manager when a config goes stale. Mirrors Java's
-    /// <c>StatusReporter.forget(locationHash)</c>.
+    /// Forget the status-dedup state for a removed configuration, so re-adding the same location later
+    /// reports READY/DISABLED again instead of being suppressed for the process lifetime.
     /// </summary>
     /// <param name="locationHash">The removed configuration's location hash.</param>
     public void Forget(string locationHash)
@@ -122,26 +116,28 @@ internal sealed class StatusReporter : IDisposable
 
     public void Dispose()
     {
-        // Timer.Dispose(WaitHandle) blocks until any in-flight callback completes and signals the handle,
-        // so no ReportStatuses can still be running (and touch the about-to-be-disposed HttpClient) after
-        // this returns. The parameterless Dispose does NOT wait, which is the race vastin flagged.
-        //
-        // On the 2s bound: Dispose is always called AFTER the shared CancellationToken is cancelled
-        // (DynamicInstrumentationManager.Cleanup cancels, then disposes this reporter). ReportStatuses
-        // checks ct at entry and returns before any HTTP send once cancelled, so at Dispose time a callback
-        // is either (a) not started — nothing to wait for, or (b) already inside a send that predates the
-        // cancel. The 2s wait covers (b)'s tail; it is a fail-safe backstop, not a correctness guarantee —
-        // if a truly wedged backend outruns it, we stop waiting rather than hang shutdown, accepting that the
-        // callback may finish against a disposing HttpClient (whose own request then faults harmlessly). A
-        // longer, backend-coupled bound is deliberately avoided so shutdown can't be held hostage by the network.
+        // Timer.Dispose(WaitHandle) waits for any in-flight callback to finish, so it can't touch the
+        // disposed HttpClient afterward. The 2s bound is a backstop: the token is already cancelled before
+        // Dispose, so a callback either hasn't started or is finishing a pre-cancel send — we don't hang
+        // shutdown on a wedged backend.
         var timerToDispose = this.timer;
         this.timer = null;
         if (timerToDispose != null)
         {
-            using var disposed = new ManualResetEvent(false);
+            var disposed = new ManualResetEvent(false);
             if (timerToDispose.Dispose(disposed))
             {
-                disposed.WaitOne(TimeSpan.FromSeconds(2));
+                // On timeout the CLR still signals this handle when the wedged callback finishes, so
+                // disposing it now would throw ObjectDisposedException on the timer thread. Leak it instead
+                // (process is shutting down); only dispose once we've observed the signal.
+                if (disposed.WaitOne(TimeSpan.FromSeconds(2)))
+                {
+                    disposed.Dispose();
+                }
+            }
+            else
+            {
+                disposed.Dispose();
             }
         }
     }

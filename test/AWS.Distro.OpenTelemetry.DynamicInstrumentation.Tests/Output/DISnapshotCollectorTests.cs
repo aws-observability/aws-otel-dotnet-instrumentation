@@ -6,6 +6,10 @@ using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Output;
 
+// Mutates the static DIDataStore queue, which is shared process-wide. Join the SerialProcessState
+// collection so these never run in parallel with other tests that enqueue/drain it (e.g. the capture
+// pipeline and concurrency-stress suites), preventing cross-test queue pollution.
+[Collection("SerialProcessState")]
 public class DISnapshotCollectorTests
 {
     [Fact]

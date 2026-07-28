@@ -70,13 +70,9 @@ internal sealed class DISnapshotCollector : IDisposable
 
     private void DrainOnce()
     {
-        // The queue has no explicit depth cap, but enqueue is bounded upstream: each instrumentation's
-        // HitState rate-limits captures to 5/sec (see HitState), so production rate is capped by the number
-        // of active probes, not by call volume. On the drain side, the OTLP snapshot exporter has an explicit
-        // 10s export timeout (DISnapshotOtlpEmitter.Create), so a wedged endpoint makes Emit fail fast rather
-        // than block the drain thread forever. Together these keep queue growth bounded in practice. (Note:
-        // this is the SNAPSHOT exporter's own timeout, distinct from the 30s timeout on the config/status
-        // HttpClient in the manager.) An explicit bounded-queue/backpressure policy is deferred to PR4.
+        // Queue growth is bounded in practice: HitState rate-limits captures to 5/sec per instrumentation
+        // (enqueue side), and the snapshot exporter's 10s timeout (DISnapshotOtlpEmitter.Create) makes Emit
+        // fail fast on a wedged endpoint rather than block the drain thread (drain side).
         foreach (var capture in DIDataStore.Drain())
         {
             try

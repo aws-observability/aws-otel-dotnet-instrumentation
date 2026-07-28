@@ -84,6 +84,13 @@ public class DISnapshotOtlpEmitterTests
         var act = () => emitter.Emit(capture);
         act.Should().NotThrow();
         logs.Should().HaveCount(1);
+
+        // Assert on the body SHAPE, not just that something was logged: with no args/return/exception the
+        // body must be well-formed JSON with an empty captures object and no phantom entry/return blocks.
+        using var doc = System.Text.Json.JsonDocument.Parse(logs[0]);
+        var captures = doc.RootElement.GetProperty("captures");
+        captures.TryGetProperty("entry", out _).Should().BeFalse("no arguments => no entry block");
+        captures.TryGetProperty("return", out _).Should().BeFalse("no return/exception => no return block");
     }
 
     [Fact]
@@ -247,6 +254,131 @@ public class DISnapshotOtlpEmitterExportTests
         body.Should().Contain("not_captured_reason");
         // A collection with partial elements must NOT also emit not_captured_reason (exactly-one-of).
         body.Should().NotContain("COLLECTION_SIZE");
+    }
+
+    [Fact]
+    public void Export_FaultedMethod_EmitsThrowableInBody()
+    {
+        // A probe on a method that threw must carry the exception in the snapshot body (type + message +
+        // its own stack frames), not just a missing return. Regression guard: the emitter previously
+        // populated PendingCapture.Exception at capture time but never read it, so faulted-method snapshots
+        // silently dropped the failure — a parity break vs Java/Python.
+        var (emitter, exported, factory) = CreateRealPipeline();
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "h",
+                Exception = new CapturedValue
+                {
+                    Type = "System.InvalidOperationException",
+                    Value = "order already shipped",
+                    StackFrames = new[] { new StackFrameInfo("OrderService.cs", "MyApp.OrderService.Ship", 88) },
+                },
+            });
+        }
+
+        var body = exported.Single().Body ?? string.Empty;
+        body.Should().Contain("throwable");
+        body.Should().Contain("System.InvalidOperationException");
+        body.Should().Contain("order already shipped");
+        // Exception frames use the same sibling body keys as the entry stack.
+        body.Should().Contain("MyApp.OrderService.Ship").And.Contain("file_path");
+    }
+
+    [Fact]
+    public void Export_TraceContext_EmittedAsAttributes_FromCapturedIds()
+    {
+        // Trace/span IDs are captured on the user's thread and must be emitted explicitly — the LogRecord is
+        // built on the drain thread, whose ambient Activity is unrelated. Regression guard: these were
+        // captured but never emitted, breaking snapshot-to-trace correlation.
+        var (emitter, exported, factory) = CreateRealPipeline();
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "h",
+                TraceId = "0af7651916cd43dd8448eb211c80319c",
+                SpanId = "b7ad6b7169203331",
+            });
+        }
+
+        var record = exported.Single();
+        AttrString(record, "aws.di.trace_id").Should().Be("0af7651916cd43dd8448eb211c80319c");
+        AttrString(record, "aws.di.span_id").Should().Be("b7ad6b7169203331");
+    }
+
+    [Fact]
+    public void Export_NoTraceContext_OmitsTraceAttributes()
+    {
+        // When the probed call ran outside a trace, no empty trace/span attributes are emitted.
+        var (emitter, exported, factory) = CreateRealPipeline();
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "h",
+                TraceId = null,
+                SpanId = null,
+            });
+        }
+
+        var record = exported.Single();
+        record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.trace_id");
+        record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.span_id");
+    }
+
+    [Fact]
+    public void Export_CaptureTimestamp_EmittedAsAttribute_NotEmitTime()
+    {
+        // The true capture instant (recorded on the user's thread) must be emitted explicitly, since the
+        // LogRecord's own Timestamp is set later on the drain thread.
+        var (emitter, exported, factory) = CreateRealPipeline();
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "h",
+                TimestampMs = 1_785_000_000_000,
+            });
+        }
+
+        var record = exported.Single();
+        AttrString(record, "aws.di.timestamp_ms").Should().Be("1785000000000");
+    }
+
+    [Fact]
+    public void Export_ReturnAndException_BothPresent_CoexistWithoutClobber()
+    {
+        // Defensive: if a capture ever carries BOTH a return value and an exception, the exit block must
+        // contain both keys — neither overwrites the other. (In practice a faulted method has a null return,
+        // but the emitter must not silently drop one if both are set.)
+        var (emitter, exported, factory) = CreateRealPipeline();
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "h",
+                ReturnValue = new CapturedValue { Type = "System.Int32", Value = "7" },
+                Exception = new CapturedValue { Type = "System.Exception", Value = "boom" },
+            });
+        }
+
+        var body = exported.Single().Body ?? string.Empty;
+        using var doc = System.Text.Json.JsonDocument.Parse(body);
+        var ret = doc.RootElement.GetProperty("captures").GetProperty("return");
+        ret.TryGetProperty("return_value", out _).Should().BeTrue("return value must survive alongside throwable");
+        ret.TryGetProperty("throwable", out _).Should().BeTrue("throwable must survive alongside return_value");
     }
 }
 

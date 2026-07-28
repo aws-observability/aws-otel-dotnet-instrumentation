@@ -95,9 +95,9 @@ public class StatusReporterTests
     [Fact]
     public void ReportReadyForNew_ConcurrentWithRegistration_DoesNotThrowOrDuplicate()
     {
-        // vastin's #1: the dedup sets + GetAll enumeration are shared between the poller-thread
-        // ReportReadyForNew and the timer-thread status pass. Before the gate fix, concurrent registration
-        // + repeated ReportReadyForNew could throw "Collection was modified" or double-report a key.
+        // The dedup sets + GetAll enumeration are shared between the poller-thread ReportReadyForNew and the
+        // timer-thread status pass. Without the gate, concurrent registration + repeated ReportReadyForNew
+        // could throw "Collection was modified" or double-report a key.
         // Hammer it: many threads register configs while others report, and assert no throw and no dup READY.
         var sentBodies = new List<string>();
         var sendLock = new object();

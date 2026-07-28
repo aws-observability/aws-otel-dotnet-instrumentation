@@ -44,21 +44,16 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
 
-                // Intentional: with no endpoint configured, no exporter is attached, so snapshots are
-                // dropped (not buffered) by the no-op logging pipeline. This is the documented operator
-                // trap — see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
-                // A startup warning for the unset case is deferred to the DI hardening pass (PR4); it needs
-                // the base agent's diagnostic logger, which is not plumbed into the DI subsystem here.
+                // No endpoint => no exporter => snapshots are dropped (not buffered). Documented operator
+                // trap; see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
                 if (!string.IsNullOrEmpty(logsEndpoint))
                 {
                     options.AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = new Uri(logsEndpoint);
 
-                        // Bound each snapshot export so a wedged endpoint (accepts the connection but never
-                        // responds) can't block the drain thread indefinitely and let the capture queue grow
-                        // unbounded. Without this the exporter uses the OTel default, which is not guaranteed
-                        // to fail fast on a half-open connection. 10s matches the OTLP/HTTP spec default.
+                        // Bound each export so a wedged endpoint can't block the drain thread and grow the
+                        // queue unboundedly. 10s matches the OTLP/HTTP spec default.
                         otlp.TimeoutMilliseconds = 10_000;
                     });
                 }
@@ -104,12 +99,22 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
             };
         }
 
-        if (capture.ReturnValue != null)
+        // Exit capture: return value and/or thrown exception both go under the "return" block. Emitting
+        // `throwable` ensures a faulted method's snapshot carries the failure, not just a missing return.
+        if (capture.ReturnValue != null || capture.Exception != null)
         {
-            captures["return"] = new Dictionary<string, object?>
+            var exit = new Dictionary<string, object?>();
+            if (capture.ReturnValue != null)
             {
-                ["return_value"] = SerializeValue(capture.ReturnValue),
-            };
+                exit["return_value"] = SerializeValue(capture.ReturnValue);
+            }
+
+            if (capture.Exception != null)
+            {
+                exit["throwable"] = SerializeThrowable(capture.Exception);
+            }
+
+            captures["return"] = exit;
         }
 
         if (capture.Locals != null && capture.LineNumber > 0)
@@ -129,12 +134,7 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
         // (the CloudWatch backend and cross-SDK consumers expect these exact keys).
         if (capture.StackTrace != null)
         {
-            body["stack"] = capture.StackTrace.Select(f => new Dictionary<string, object?>
-            {
-                ["file_path"] = f.FileName,
-                ["function"] = f.MethodName,
-                ["line_number"] = f.LineNumber,
-            }).ToArray();
+            body["stack"] = SerializeStack(capture.StackTrace);
         }
 
         return JsonSerializer.Serialize(body);
@@ -143,22 +143,49 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
     private static Dictionary<string, object?> SerializeValueDict(Dictionary<string, CapturedValue> dict) =>
         dict.ToDictionary(kv => kv.Key, kv => (object?)SerializeValue(kv.Value));
 
-    // Mirrors the Java/Python OTLP body contract: a captured value is `type` plus EXACTLY ONE of
-    // is_null / not_captured_reason / value(+truncated,+size) / fields / elements(+size). Without this the
-    // body was lossy — objects (fields), collections (elements), nulls, and limit reasons all collapsed to
-    // a bare {type,value}, diverging from the sibling SDKs and dropping capture detail.
+    // Shared frame shape for the entry-time stack and a throwable's stacktrace, so the two can't drift.
+    // Keys are file_path/function/line_number to match the OTLP snapshot body schema.
+    private static Dictionary<string, object?>[] SerializeStack(StackFrameInfo[] frames) =>
+        frames.Select(f => new Dictionary<string, object?>
+        {
+            ["file_path"] = f.FileName,
+            ["function"] = f.MethodName,
+            ["line_number"] = f.LineNumber,
+        }).ToArray();
+
+    // A captured exception: type + message (already truncated at capture time) + its own filtered/capped
+    // stack frames, using the same file_path/function/line_number frame keys as the entry-time stack.
+    private static Dictionary<string, object?> SerializeThrowable(CapturedValue exception)
+    {
+        var map = new Dictionary<string, object?>
+        {
+            ["type"] = exception.Type,
+            ["message"] = exception.Value,
+        };
+
+        if (exception.Truncated)
+        {
+            map["truncated"] = true;
+        }
+
+        if (exception.StackFrames != null)
+        {
+            map["stacktrace"] = SerializeStack(exception.StackFrames);
+        }
+
+        return map;
+    }
+
+    // A captured value is `type` plus EXACTLY ONE of: is_null / not_captured_reason / value(+truncated) /
+    // fields / elements(+size). Order matters. A *truncated* collection/object still emits elements/fields
+    // WITH size (the size vs count conveys truncation) — not_captured_reason is only for values with no
+    // partial data to emit (Depth/Timeout/AlreadyCaptured).
     private static Dictionary<string, object?> SerializeValue(CapturedValue v)
     {
         var map = new Dictionary<string, object?> { ["type"] = v.Type };
 
-        // Order matches Java's capturedValueToValue exactly-one-of contract. Note a *truncated* collection/
-        // object still serializes as elements/fields WITH size (Java's ofCollection(type,elements,length)) —
-        // its NotCapturedReason (CollectionSize) is NOT emitted as not_captured_reason; the size vs element
-        // count conveys the truncation. not_captured_reason is only for values with NO partial data to emit
-        // (Depth/Timeout/AlreadyCaptured), where Fields/Elements are null.
         if (v.Type == "null")
         {
-            // ValueSerializer encodes a null as Type == "null"; emit the is_null variant to match siblings.
             map["is_null"] = true;
         }
         else if (v.Fields != null)
