@@ -29,6 +29,7 @@ alongside the standard ADOT auto-instrumentation variables:
 | `OTEL_AWS_OTLP_LOGS_ENDPOINT` | *(unset)* | Where captured snapshots are sent — the local collector/agent's OTLP logs endpoint. **Required** to see any data (see below). |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL` | `http://localhost:2000` | The local CloudWatch Agent that delivers your probe configurations. Usually the default is correct. |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL` | `600` | Seconds between checks for new/changed probes (minimum 10). |
+| `OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL` | `60` | Seconds between checks for new/changed breakpoints (minimum 10). |
 
 Your service name and environment come from the standard OpenTelemetry variables `OTEL_SERVICE_NAME`
 and `OTEL_RESOURCE_ATTRIBUTES` (`deployment.environment.name=...`).
@@ -122,7 +123,9 @@ log directory at a writable location:
 export OTEL_DOTNET_AUTO_LOG_DIRECTORY="$HOME/.otel-dotnet-auto/logs"   # any writable dir
 ```
 
-Or create the default with the right ownership:
+Setting `OTEL_DOTNET_AUTO_LOG_DIRECTORY` is the preferred fix, especially in containers or multi-tenant
+hosts. As a local-development last resort you can instead create the default path with the right
+ownership:
 
 ```bash
 sudo mkdir -p /var/log/opentelemetry && sudo chown "$(whoami)" /var/log/opentelemetry

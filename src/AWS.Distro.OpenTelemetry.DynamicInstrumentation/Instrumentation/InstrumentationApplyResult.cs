@@ -9,8 +9,8 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 // ran but an individual value could not be fully serialized (depth/width/field/timeout limits). The two are
 // reported on different channels: an instrumentation failure is an ERROR status on the configuration (see
 // MapErrorCause); a capture failure is a per-value NotCapturedReason emitted inside the snapshot, never an
-// ERROR on the configuration. Emission of the ERROR status itself lands with StatusReporter in PR3; this
-// enum + MapErrorCause is the taxonomy that PR3 wires to the backend.
+// ERROR on the configuration. The ERROR status itself is emitted by StatusReporter; this enum +
+// MapErrorCause is the taxonomy that gets wired to the backend error causes.
 internal enum InstrumentationApplyResult
 {
     /// <summary>At least one definition was registered with the profiler. Note: a method with mixed arities

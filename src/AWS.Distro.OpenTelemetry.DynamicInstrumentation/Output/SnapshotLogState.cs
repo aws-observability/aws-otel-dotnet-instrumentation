@@ -22,12 +22,14 @@ internal sealed class SnapshotLogState : IReadOnlyList<KeyValuePair<string, obje
             new("event.name", "aws.dynamic_instrumentation.snapshot"),
             new("aws.di.snapshot_id", Guid.NewGuid().ToString()),
             new("aws.di.location_hash", capture.LocationHash),
+
+            // Capture time recorded on the user's thread. Emitted explicitly because the LogRecord's own
+            // Timestamp is set later, at emit time on the drain thread — not the true capture instant.
+            new("aws.di.timestamp_ms", capture.TimestampMs),
             new("aws.di.instrumentation_level", level),
 
-            // config is null only for an orphaned capture: one enqueued while its config was live, then
-            // drained after the config was removed (registry.Get returns null). "PROBE" is the safe default
-            // — it is the backend's default instrumentation type and the common case, so an orphaned snapshot
-            // is attributed to the more-likely kind rather than dropped or tagged with an error sentinel.
+            // config is null only for an orphaned capture (enqueued while live, drained after removal).
+            // "PROBE" is the safe default — the backend's default type and the common case.
             new("aws.di.instrumentation_type", config?.Type.ToString() ?? "PROBE"),
             new("aws.di.code_unit", config?.CodeUnit ?? string.Empty),
             new("aws.di.class_name", config?.ClassName ?? string.Empty),
@@ -38,6 +40,18 @@ internal sealed class SnapshotLogState : IReadOnlyList<KeyValuePair<string, obje
             new("aws.di.thread_id", capture.ThreadId),
             new("aws.di.thread_name", capture.ThreadName ?? string.Empty),
         };
+
+        // Trace/span IDs captured on the user's thread must be plumbed explicitly — the drain thread's
+        // Activity.Current is unrelated to the probed call. Emitted only when the call ran in an active trace.
+        if (!string.IsNullOrEmpty(capture.TraceId))
+        {
+            this.attributes.Add(new("aws.di.trace_id", capture.TraceId));
+        }
+
+        if (!string.IsNullOrEmpty(capture.SpanId))
+        {
+            this.attributes.Add(new("aws.di.span_id", capture.SpanId));
+        }
     }
 
     public PendingCapture Capture { get; }
