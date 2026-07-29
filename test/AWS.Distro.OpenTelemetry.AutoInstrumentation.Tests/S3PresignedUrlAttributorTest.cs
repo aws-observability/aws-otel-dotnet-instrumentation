@@ -15,28 +15,6 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class S3PresignedUrlAttributorTest
 {
-    private static PresignedAwsUrl? PresignedUrl(string? method, string host, string path, string extraQueryParameters = "")
-    {
-        return PresignedAwsUrlParser.Parse(
-            "https://" + host + path +
-            "?X-Amz-Algorithm=Redacted" +
-            "&X-Amz-Credential=Redacted" +
-            "&X-Amz-Signature=Redacted" +
-            "&X-Amz-Date=Redacted" +
-            "&X-Amz-Expires=Redacted" +
-            "&X-Amz-SignedHeaders=Redacted" +
-            extraQueryParameters,
-            method);
-    }
-
-    private static PresignedUrlAttribution Attribute(PresignedAwsUrl? url)
-    {
-        Assert.NotNull(url);
-        PresignedUrlAttribution? attribution = S3PresignedUrlAttributor.Attribute(url!);
-        Assert.NotNull(attribution);
-        return attribution!;
-    }
-
     [Fact]
     public void TestResolvesBucketForEndpointVariant()
     {
@@ -54,6 +32,7 @@ public class S3PresignedUrlAttributorTest
             ("example-bucket.s3-accelerate.dualstack.amazonaws.com", "/object", "example-bucket"),
             ("example-bucket.s3-fips.us-west-2.amazonaws.com", "/object", "example-bucket"),
             ("example-bucket.s3-fips.dualstack.us-east-1.amazonaws.com", "/object", "example-bucket"),
+
             // Path-style: bucket is the first path segment
             ("s3.amazonaws.com", "/example-bucket/object", "example-bucket"),
             ("s3.us-west-2.amazonaws.com", "/example-bucket/object", "example-bucket"),
@@ -83,10 +62,12 @@ public class S3PresignedUrlAttributorTest
             ("HEAD", "/object", string.Empty, "HeadObject"),
             ("DELETE", "/object", string.Empty, "DeleteObject"),
             ("PATCH", "/object", string.Empty, "UnknownRemoteOperation"),
+
             // ListObjectsV2 is bucket-level only. Presence of list-type is the marker (value blanked).
             ("GET", "/", "&list-type=Redacted", "ListObjectsV2"),
             ("GET", "/object", "&list-type=Redacted", "GetObject"),
             ("PUT", "/object", "&list-type=Redacted", "PutObject"),
+
             // Multipart
             ("PUT", "/object", "&partNumber=Redacted&uploadId=Redacted", "UploadPart"),
             ("PUT", "/object", "&uploadId=Redacted", "PutObject"),
@@ -96,6 +77,7 @@ public class S3PresignedUrlAttributorTest
             ("POST", "/object", "&uploads", "CreateMultipartUpload"),
             ("GET", "/", "&uploads", "ListMultipartUploads"),
             ("GET", "/object", "&uploads", "GetObject"),
+
             // ACL / tagging (object- and bucket-level). These are valueless flags.
             ("GET", "/object", "&acl", "GetObjectAcl"),
             ("PUT", "/object", "&acl", "PutObjectAcl"),
@@ -107,6 +89,7 @@ public class S3PresignedUrlAttributorTest
             ("GET", "/", "&tagging", "GetBucketTagging"),
             ("PUT", "/", "&tagging", "PutBucketTagging"),
             ("DELETE", "/", "&tagging", "DeleteBucketTagging"),
+
             // Object-only subresources
             ("GET", "/object", "&retention", "GetObjectRetention"),
             ("PUT", "/object", "&retention", "PutObjectRetention"),
@@ -130,6 +113,7 @@ public class S3PresignedUrlAttributorTest
         (string Method, string Path, string ExtraQuery, string ExpectedOperation)[] cases =
         {
             ("GET", "/example-bucket", "&list-type=Redacted", "ListObjectsV2"),
+
             // Trailing slash after the bucket is bucket-level, not an object key.
             ("GET", "/example-bucket/", "&list-type=Redacted", "ListObjectsV2"),
             ("GET", "/example-bucket/", string.Empty, "UnknownRemoteOperation"),
@@ -155,8 +139,10 @@ public class S3PresignedUrlAttributorTest
         {
             // Access point host (bucket not identifiable from the endpoint form)
             "example-bucket.s3-accesspoint.us-west-2.amazonaws.com",
+
             // Custom CNAME
             "s3.mycompany.com",
+
             // Non-S3 AWS service endpoint
             "sqs.us-west-2.amazonaws.com",
         };
@@ -198,5 +184,27 @@ public class S3PresignedUrlAttributorTest
 
         Assert.Equal("AWS::S3", attribution.RemoteService);
         Assert.Null(attribution.RemoteResource);
+    }
+
+    private static PresignedAwsUrl? PresignedUrl(string? method, string host, string path, string extraQueryParameters = "")
+    {
+        return PresignedAwsUrlParser.Parse(
+            "https://" + host + path +
+            "?X-Amz-Algorithm=Redacted" +
+            "&X-Amz-Credential=Redacted" +
+            "&X-Amz-Signature=Redacted" +
+            "&X-Amz-Date=Redacted" +
+            "&X-Amz-Expires=Redacted" +
+            "&X-Amz-SignedHeaders=Redacted" +
+            extraQueryParameters,
+            method);
+    }
+
+    private static PresignedUrlAttribution Attribute(PresignedAwsUrl? url)
+    {
+        Assert.NotNull(url);
+        PresignedUrlAttribution? attribution = S3PresignedUrlAttributor.Attribute(url!);
+        Assert.NotNull(attribution);
+        return attribution!;
     }
 }

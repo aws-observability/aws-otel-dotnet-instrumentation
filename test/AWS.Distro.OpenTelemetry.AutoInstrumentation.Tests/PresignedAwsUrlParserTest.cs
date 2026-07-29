@@ -15,20 +15,6 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class PresignedAwsUrlParserTest
 {
-    // A realistic sanitized presigned URL: the agent redacts the credential and signature values
-    // before attribution runs. The non-redacted presigned parameters remain (also redacted here,
-    // matching runtime behavior where every value is blanked).
-    private static string PresignedUrl(string host, string path)
-    {
-        return "https://" + host + path +
-            "?X-Amz-Algorithm=Redacted" +
-            "&X-Amz-Credential=Redacted" +
-            "&X-Amz-Signature=Redacted" +
-            "&X-Amz-Date=Redacted" +
-            "&X-Amz-Expires=Redacted" +
-            "&X-Amz-SignedHeaders=Redacted";
-    }
-
     [Fact]
     public void TestParsesPresignedUrl()
     {
@@ -108,8 +94,23 @@ public class PresignedAwsUrlParserTest
             PresignedAwsUrlParser.Parse(PresignedUrl("example-bucket.s3.us-west-2.amazonaws.com", string.Empty), null);
 
         Assert.NotNull(presignedAwsUrl);
+
         // An empty path defaults to "/".
         Assert.Equal("/", presignedAwsUrl!.GetPath());
         Assert.Null(presignedAwsUrl.GetHttpMethod());
+    }
+
+    // A realistic sanitized presigned URL: the agent redacts the credential and signature values
+    // before attribution runs. The non-redacted presigned parameters remain (also redacted here,
+    // matching runtime behavior where every value is blanked).
+    private static string PresignedUrl(string host, string path)
+    {
+        return "https://" + host + path +
+            "?X-Amz-Algorithm=Redacted" +
+            "&X-Amz-Credential=Redacted" +
+            "&X-Amz-Signature=Redacted" +
+            "&X-Amz-Date=Redacted" +
+            "&X-Amz-Expires=Redacted" +
+            "&X-Amz-SignedHeaders=Redacted";
     }
 }

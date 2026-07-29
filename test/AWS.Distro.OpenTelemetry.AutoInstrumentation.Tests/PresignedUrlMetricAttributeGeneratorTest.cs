@@ -47,19 +47,6 @@ public class PresignedUrlMetricAttributeGeneratorTest : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    // A realistic sanitized presigned URL: the agent redacts every query value before attribution
-    // runs, so all six SigV4 parameters carry the literal "Redacted".
-    private static string PresignedUrl(string host, string path)
-    {
-        return "https://" + host + path +
-            "?X-Amz-Algorithm=Redacted" +
-            "&X-Amz-Credential=Redacted" +
-            "&X-Amz-Signature=Redacted" +
-            "&X-Amz-Date=Redacted" +
-            "&X-Amz-Expires=Redacted" +
-            "&X-Amz-SignedHeaders=Redacted";
-    }
-
     [Fact]
     public void TestPresignedS3AttributionDisabledByDefault()
     {
@@ -69,6 +56,7 @@ public class PresignedUrlMetricAttributeGeneratorTest : IDisposable
         span.SetTag(AttributeHttpRequestMethod, "PUT");
 
         ActivityTagsCollection attributes = this.DependencyAttributes(span);
+
         // The generic HTTP fallback derives the remote service from the URL host and appends the
         // port (443 for HTTPS).
         Assert.Equal("example-bucket.s3.us-west-2.amazonaws.com:443", attributes[AttributeAWSRemoteService]);
@@ -169,6 +157,7 @@ public class PresignedUrlMetricAttributeGeneratorTest : IDisposable
         ActivityTagsCollection attributes = this.DependencyAttributes(span);
         Assert.Equal("PeerService", attributes[AttributeAWSRemoteService]);
         Assert.Equal("PutObject", attributes[AttributeAWSRemoteOperation]);
+
         // peer.service overrides the remote service but not the resource, mirroring the SDK path: the
         // S3 bucket resource stays attached even though the service is now the peer value.
         Assert.Equal("AWS::S3::Bucket", attributes[AttributeAWSRemoteResourceType]);
@@ -225,6 +214,7 @@ public class PresignedUrlMetricAttributeGeneratorTest : IDisposable
     {
         Activity? span = this.testSource.StartActivity("presigned", ActivityKind.Client);
         Assert.NotNull(span);
+
         // Non-local-root so the dependency path runs without InternalOperation/LOCAL_ROOT handling.
         span.SetParentId(this.parentSpan.TraceId, this.parentSpan.SpanId);
         return span;
@@ -236,5 +226,18 @@ public class PresignedUrlMetricAttributeGeneratorTest : IDisposable
             this.generator.GenerateMetricAttributeMapFromSpan(span, this.resource);
         Assert.True(attributeMap.TryGetValue(MetricAttributeGeneratorConstants.DependencyMetric, out ActivityTagsCollection? dependencyMetric));
         return dependencyMetric!;
+    }
+
+    // A realistic sanitized presigned URL: the agent redacts every query value before attribution
+    // runs, so all six SigV4 parameters carry the literal "Redacted".
+    private static string PresignedUrl(string host, string path)
+    {
+        return "https://" + host + path +
+            "?X-Amz-Algorithm=Redacted" +
+            "&X-Amz-Credential=Redacted" +
+            "&X-Amz-Signature=Redacted" +
+            "&X-Amz-Date=Redacted" +
+            "&X-Amz-Expires=Redacted" +
+            "&X-Amz-SignedHeaders=Redacted";
     }
 }
