@@ -3,6 +3,7 @@
 
 using AWS.Distro.OpenTelemetry.AutoInstrumentation;
 using Xunit;
+using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsSpanProcessingUtil;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
@@ -61,9 +62,9 @@ public class S3PresignedUrlAttributorTest
             ("PUT", "/object", string.Empty, "PutObject"),
             ("HEAD", "/object", string.Empty, "HeadObject"),
             ("DELETE", "/object", string.Empty, "DeleteObject"),
-            ("PATCH", "/object", string.Empty, "UnknownRemoteOperation"),
+            ("PATCH", "/object", string.Empty, UnknownRemoteOperation),
 
-            // ListObjectsV2 is bucket-level only. Presence of list-type is the marker (value blanked).
+            // ListObjectsV2 is bucket-level only.
             ("GET", "/", "&list-type=Redacted", "ListObjectsV2"),
             ("GET", "/object", "&list-type=Redacted", "GetObject"),
             ("PUT", "/object", "&list-type=Redacted", "PutObject"),
@@ -78,7 +79,7 @@ public class S3PresignedUrlAttributorTest
             ("GET", "/", "&uploads", "ListMultipartUploads"),
             ("GET", "/object", "&uploads", "GetObject"),
 
-            // ACL / tagging (object- and bucket-level). These are valueless flags.
+            // ACL / tagging (object- and bucket-level)
             ("GET", "/object", "&acl", "GetObjectAcl"),
             ("PUT", "/object", "&acl", "PutObjectAcl"),
             ("GET", "/", "&acl", "GetBucketAcl"),
@@ -116,7 +117,7 @@ public class S3PresignedUrlAttributorTest
 
             // Trailing slash after the bucket is bucket-level, not an object key.
             ("GET", "/example-bucket/", "&list-type=Redacted", "ListObjectsV2"),
-            ("GET", "/example-bucket/", string.Empty, "UnknownRemoteOperation"),
+            ("GET", "/example-bucket/", string.Empty, UnknownRemoteOperation),
             ("GET", "/example-bucket/object", string.Empty, "GetObject"),
             ("DELETE", "/example-bucket/object", string.Empty, "DeleteObject"),
             ("GET", "/example-bucket", "&acl", "GetBucketAcl"),
@@ -162,7 +163,7 @@ public class S3PresignedUrlAttributorTest
             Attribute(PresignedUrl("GET", "example-bucket.s3.us-west-2.amazonaws.com", "/"));
 
         Assert.Equal("AWS::S3", attribution.RemoteService);
-        Assert.Equal("UnknownRemoteOperation", attribution.RemoteOperation);
+        Assert.Equal(UnknownRemoteOperation, attribution.RemoteOperation);
         Assert.NotNull(attribution.RemoteResource);
     }
 
@@ -173,7 +174,7 @@ public class S3PresignedUrlAttributorTest
             Attribute(PresignedUrl(null, "example-bucket.s3.us-west-2.amazonaws.com", "/object"));
 
         Assert.Equal("AWS::S3", attribution.RemoteService);
-        Assert.Equal("UnknownRemoteOperation", attribution.RemoteOperation);
+        Assert.Equal(UnknownRemoteOperation, attribution.RemoteOperation);
     }
 
     [Fact]

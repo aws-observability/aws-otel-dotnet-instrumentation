@@ -8,10 +8,9 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 // Tests for PresignedAwsUrlParser.
 //
-// Detection is presence-only: this distro's URL sanitization blanks every query value to the literal
-// "Redacted" before attribution runs, so the parser cannot read the X-Amz-Algorithm value (nor any
-// other value). The tests use realistic sanitized URLs (redacted credential and signature) to reflect
-// what the parser actually sees at runtime.
+// This distro's URL sanitization blanks every query value to the literal "Redacted" before
+// attribution runs, so the tests use realistic sanitized URLs to reflect what the parser sees at
+// runtime.
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class PresignedAwsUrlParserTest
 {
@@ -60,9 +59,8 @@ public class PresignedAwsUrlParserTest
     [Fact]
     public void TestAcceptsPresignedRequestRegardlessOfAlgorithmValue()
     {
-        // Presence-only detection: because sanitization blanks the X-Amz-Algorithm value, the parser
-        // must accept the request no matter what value the parameter carries (including "Redacted"
-        // or a non-SigV4 string). This is the key .NET divergence from the value-allowlist ports.
+        // The parser accepts the request regardless of the X-Amz-Algorithm value, since sanitization
+        // blanks it.
         string[] algorithmValues = { "Redacted", "AWS4-HMAC-SHA256", "AWS4-ECDSA-P256-SHA256", "anything" };
         foreach (string algorithm in algorithmValues)
         {
@@ -78,9 +76,7 @@ public class PresignedAwsUrlParserTest
     [Fact]
     public void TestAcceptsValuelessRequiredParameters()
     {
-        // A presigned parameter present with no value (e.g. "X-Amz-Expires" with an empty value)
-        // still counts: presence is the only signal. The value-allowlist ports reject empty values,
-        // but under .NET sanitization values are never trustworthy, so presence alone gates.
+        // A presigned parameter present with an empty value still counts: presence is the only signal.
         string url =
             "https://example-bucket.s3.us-west-2.amazonaws.com/object" +
             "?X-Amz-Algorithm=&X-Amz-Credential=&X-Amz-Signature=&X-Amz-Date=&X-Amz-Expires=&X-Amz-SignedHeaders=";

@@ -61,10 +61,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
-    // Opt-in flag (default off) for attributing raw-HTTP presigned S3 URL calls as AWS::S3
-    // dependencies instead of generic HTTP calls. Read at call time rather than cached in a
-    // constructor because the generator is created as a static singleton (see
-    // AwsSpanMetricsProcessorBuilder / AwsMetricAttributesSpanProcessorBuilder) before the SDK reads
+    // Opt-in flag (default off) for attributing presigned S3 URL calls as AWS::S3 dependencies. Read
+    // at call time because the generator is constructed as a static singleton before the SDK reads
     // environment configuration.
     private static readonly string PresignedUrlAttributionEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED";
 
@@ -295,7 +293,6 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         return presignedAttribution;
     }
 
-    // Whether presigned AWS URL attribution is enabled via the opt-in environment flag.
     private static bool IsPresignedUrlAttributionEnabled()
     {
         return System.Environment.GetEnvironmentVariable(PresignedUrlAttributionEnabledConfig) == "true";

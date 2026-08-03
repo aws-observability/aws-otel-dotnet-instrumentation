@@ -45,10 +45,6 @@ internal sealed class PresignedAwsUrl
     }
 
     // Returns the first value for a query parameter, or null when the parameter is absent.
-    //
-    // Note: under .NET's URL sanitization every query value is replaced with the literal "Redacted",
-    // so callers must treat a returned value as an opaque presence signal only. Operations are keyed
-    // on the presence of the parameter, never on its value. See S3PresignedUrlAttributor.
     internal string? GetFirstQueryParameterValue(string name)
     {
         if (this.queryParameters.TryGetValue(name, out List<string>? values) && values.Count > 0)
@@ -59,8 +55,7 @@ internal sealed class PresignedAwsUrl
         return null;
     }
 
-    // Whether a query parameter is present, regardless of its value. This is the primary signal used
-    // for operation resolution because sanitization strips query values.
+    // Whether a query parameter is present, regardless of its value.
     internal bool HasQueryParameter(string name)
     {
         return this.queryParameters.ContainsKey(name);

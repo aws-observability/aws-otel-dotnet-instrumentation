@@ -10,21 +10,13 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// <summary>
 /// Recognizes a SigV4/SigV4a presigned AWS URL from a span's URL.
 ///
-/// <para>Detection relies only on the presence of the six SigV4 query-string parameters that a
-/// presigned (query-authenticated) request always carries: <c>X-Amz-Algorithm</c>,
-/// <c>X-Amz-Credential</c>, <c>X-Amz-Signature</c>, <c>X-Amz-Date</c>, <c>X-Amz-Expires</c>, and
-/// <c>X-Amz-SignedHeaders</c>. Their co-occurrence — anchored by <c>X-Amz-Expires</c>, which is
-/// specific to presigned URLs — is a high-specificity fingerprint.</para>
-///
-/// <para><b>.NET-specific divergence from the Java/Python/JS ports:</b> those parsers additionally
-/// check the <c>X-Amz-Algorithm</c> value against a SigV4 algorithm allowlist and require the other
-/// parameters to be non-empty. This distro's URL sanitization (see
-/// <c>OpenTelemetry.Internal.RedactionHelper.GetRedactedQueryString</c>) blanks <b>every</b> query
-/// value to the literal <c>Redacted</c> before metric attribution runs — even a value that was
-/// originally empty becomes <c>Redacted</c>. So no query value can be read here: detection and
-/// operation resolution key on parameter <b>presence</b> only. Dropping the algorithm allowlist is
-/// safe because nothing downstream branches on SigV4 vs SigV4a — the signing service is derived from
-/// the endpoint hostname, not the credential scope.</para>
+/// <para>Detection relies on the presence of the six SigV4 query-string parameters that a presigned
+/// (query-authenticated) request always carries: <c>X-Amz-Algorithm</c>, <c>X-Amz-Credential</c>,
+/// <c>X-Amz-Signature</c>, <c>X-Amz-Date</c>, <c>X-Amz-Expires</c>, and <c>X-Amz-SignedHeaders</c>.
+/// Only presence is checked, not the values: this distro's URL sanitization
+/// (<c>OpenTelemetry.Internal.RedactionHelper.GetRedactedQueryString</c>) blanks every query value to
+/// the literal <c>Redacted</c> before metric attribution runs, so no query value can be read here.
+/// The signing service is identified downstream from the endpoint hostname, not the credential scope.</para>
 ///
 /// <para>Query-string (presigned) SigV4 authentication parameters are defined here:
 /// https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html. Per

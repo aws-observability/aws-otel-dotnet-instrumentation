@@ -15,18 +15,10 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// fails closed (returns null) so we never mis-attribute a non-S3 or unverifiable request.</para>
 ///
 /// <para>The remote operation is derived from the HTTP method, whether an object key is present
-/// (bucket- vs object-level), and the S3 subresource/multipart query parameters. Operation names
-/// follow the S3 REST API.</para>
-///
-/// <para><b>.NET-specific divergence:</b> the Java/Python/JS ports read the <c>list-type</c> value to
-/// confirm it equals <c>2</c> before mapping a bucket-level GET to <c>ListObjectsV2</c>. This distro's
-/// URL sanitization blanks every query value (see PresignedAwsUrlParser remarks), so the value is
-/// unavailable — this port keys on the <b>presence</b> of the <c>list-type</c> parameter instead. That
-/// is safe because <c>list-type</c> is unique to ListObjectsV2 in the S3 REST API (its only defined
-/// value is <c>2</c>, and no other operation uses the parameter), so its presence alone is an
-/// unambiguous marker. All other operation markers are valueless flags (e.g. <c>acl</c>,
-/// <c>tagging</c>, <c>uploads</c>) or presence-only keys (<c>uploadId</c>, <c>partNumber</c>), which
-/// survive sanitization intact.</para>
+/// (bucket- vs object-level), and the presence of S3 subresource/multipart query parameters.
+/// Query values are unavailable (URL sanitization blanks them), so operations are keyed on parameter
+/// presence only. This is unambiguous because each marker parameter selects a single operation family:
+/// e.g. <c>list-type</c> is used only by ListObjectsV2. Operation names follow the S3 REST API.</para>
 ///
 /// <para>References:
 /// <list type="bullet">
@@ -59,10 +51,10 @@ internal sealed class S3PresignedUrlAttributor
         @")?\.amazonaws\.com(?:\.cn)?";
 
     private static readonly Regex VirtualHostedS3Endpoint =
-        new Regex("^(.+)\\." + S3EndpointSuffix + "$", RegexOptions.IgnoreCase);
+        new Regex("^(.+)\\." + S3EndpointSuffix + "$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex PathStyleS3Endpoint =
-        new Regex("^" + S3EndpointSuffix + "$", RegexOptions.IgnoreCase);
+        new Regex("^" + S3EndpointSuffix + "$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private S3PresignedUrlAttributor()
     {
@@ -108,8 +100,7 @@ internal sealed class S3PresignedUrlAttributor
         string normalizedMethod = httpMethod.ToUpperInvariant();
         bool hasObjectKeyPresent = HasObjectKey(presignedAwsUrl, pathStyle);
 
-        // ListObjectsV2 is a bucket-level GET (no object key). Presence of `list-type` is a unique,
-        // unambiguous marker (see class remarks); its value is unavailable after redaction.
+        // ListObjectsV2 is a bucket-level GET (no object key).
         // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
         if (normalizedMethod == "GET" && !hasObjectKeyPresent && presignedAwsUrl.HasQueryParameter("list-type"))
         {
@@ -296,8 +287,7 @@ internal sealed class S3PresignedUrlAttributor
         }
 
         // Drop empty segments so a trailing slash (e.g. path-style "/bucket/") is not misread as an
-        // object key. Java's String.split already discards trailing empties; C#'s String.Split does
-        // not.
+        // object key.
         return normalizedPath.Split('/').Where(segment => segment.Length > 0).ToArray();
     }
 }
