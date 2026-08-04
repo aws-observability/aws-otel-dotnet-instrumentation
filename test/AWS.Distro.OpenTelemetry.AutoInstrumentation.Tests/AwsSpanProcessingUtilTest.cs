@@ -755,4 +755,47 @@ public class AwsSpanProcessingUtilTest
             AwsSpanProcessingUtil.ResetOperationPaths();
         }
     }
+
+#if !NETFRAMEWORK
+    [Fact]
+    public void TestGetIngressOperationPathOverrideTakesPrecedenceOverRouteTemplate()
+    {
+        // The configured path must win over the framework route template. Use distinct values so
+        // the assertion fails if the route template is used instead of the configured path.
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{contestId}");
+        AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            var contextMock = new Mock<HttpContext>();
+            var featuresMock = new Mock<IFeatureCollection>();
+            var exceptionHandlerFeatureMock = new Mock<IExceptionHandlerPathFeature>();
+
+            var routePattern = RoutePatternFactory.Parse("/api/contests/{id}");
+            var routeEndpoint = new RouteEndpoint(
+                requestDelegate: (context) => Task.CompletedTask,
+                routePattern: routePattern,
+                order: 0,
+                metadata: new EndpointMetadataCollection(),
+                displayName: "RouteTemplateTest");
+
+            exceptionHandlerFeatureMock.Setup(f => f.Endpoint).Returns(routeEndpoint);
+            featuresMock.Setup(f => f.Get<IExceptionHandlerPathFeature>()).Returns(exceptionHandlerFeatureMock.Object);
+            contextMock.Setup(c => c.Features).Returns(featuresMock.Object);
+
+            using var span = this.testSource.StartActivity("GET", ActivityKind.Server);
+            span!.SetTag(AttributeUrlPath, "/api/contests/42");
+            span.SetTag(AttributeHttpRequestMethod, "GET");
+            span.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(contextMock.Object));
+            span.Start();
+
+            string actualOperation = GetIngressOperation(span);
+            Assert.Equal("GET /api/contests/{contestId}", actualOperation);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+#endif
 }
