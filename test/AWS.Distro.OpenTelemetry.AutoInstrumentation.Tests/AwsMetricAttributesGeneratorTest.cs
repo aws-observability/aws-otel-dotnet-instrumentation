@@ -4,6 +4,13 @@
 using System.Diagnostics;
 using System.Reflection;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation;
+#if !NETFRAMEWORK
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+#endif
 using Moq;
 using OpenTelemetry.Resources;
 using Xunit;
@@ -352,6 +359,58 @@ public class AwsMetricAttributesGeneratorTest
         spanDataMock.SetParentId(this.parentSpan.TraceId, this.parentSpan.SpanId);
         this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
     }
+
+#if !NETFRAMEWORK
+    // Verifies the end-to-end effect of OTEL_AWS_HTTP_OPERATION_PATHS on the emitted
+    // aws.local.operation metric attribute (not just DisplayName). The span carries a route
+    // template ("/api/contests/{id}") so that, without the config, GetIngressOperation would use
+    // the route template. The configured pattern uses a distinct wildcard name ("{contestId}") so
+    // the assertion can only pass if the configured path won — a multi-segment, wildcarded value
+    // that neither route-template resolution nor URL truncation would otherwise produce.
+    [Fact]
+    public void TestServerSpanLocalOperationUsesConfiguredOperationPath()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{contestId}");
+        AutoInstrumentation.AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            this.UpdateResourceWithServiceName();
+            List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
+            {
+                new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+                new(AttributeAWSLocalService, this.serviceNameValue),
+                new(AttributeAWSLocalOperation, "GET /api/contests/{contestId}"),
+            };
+            ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
+
+            var contextMock = new Mock<HttpContext>();
+            var featuresMock = new Mock<IFeatureCollection>();
+            var exceptionHandlerFeatureMock = new Mock<IExceptionHandlerPathFeature>();
+            var routePattern = RoutePatternFactory.Parse("/api/contests/{id}");
+            var routeEndpoint = new RouteEndpoint(
+                requestDelegate: (context) => Task.CompletedTask,
+                routePattern: routePattern,
+                order: 0,
+                metadata: new EndpointMetadataCollection(),
+                displayName: "RouteTemplateTest");
+            exceptionHandlerFeatureMock.Setup(f => f.Endpoint).Returns(routeEndpoint);
+            featuresMock.Setup(f => f.Get<IExceptionHandlerPathFeature>()).Returns(exceptionHandlerFeatureMock.Object);
+            contextMock.Setup(c => c.Features).Returns(featuresMock.Object);
+
+            Activity? spanDataMock = this.testSource.StartActivity("GET", ActivityKind.Server);
+            spanDataMock.SetTag(AutoInstrumentation.AwsSpanProcessingUtil.AttributeHttpRequestMethod, "GET");
+            spanDataMock.SetTag(AutoInstrumentation.AwsSpanProcessingUtil.AttributeUrlPath, "/api/contests/42");
+            spanDataMock.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(contextMock.Object));
+            spanDataMock.SetParentId(this.parentSpan.TraceId, this.parentSpan.SpanId);
+            this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AutoInstrumentation.AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+#endif
 
     [Fact]
     public void TestProducerSpanWithAttributes()
