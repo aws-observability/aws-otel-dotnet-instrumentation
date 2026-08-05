@@ -15,6 +15,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   `OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED`
   ([#440](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/440))
 
+- Apply OTEL_AWS_HTTP_OPERATION_PATHS to aws.local.operation for ASP.NET Core spans
+  ([#441](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/441))
+
 - Add adaptive sampling support for anomaly detection and trace capture
   ([#410](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/410))
 
