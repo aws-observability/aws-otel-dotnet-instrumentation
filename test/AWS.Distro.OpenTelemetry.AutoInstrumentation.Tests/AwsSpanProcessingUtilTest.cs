@@ -19,6 +19,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 #pragma warning disable CS8602 // Possible null reference argument.
 #pragma warning disable CS8604 // Possible null reference argument.
+[Collection("OperationPaths")]
 public class AwsSpanProcessingUtilTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
