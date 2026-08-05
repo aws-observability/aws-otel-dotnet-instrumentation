@@ -61,6 +61,11 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
     private static readonly string GraphQL = "graphql";
 
+    // Opt-in flag (default off) for attributing presigned S3 URL calls as AWS::S3 dependencies. Read
+    // at call time because the generator is constructed as a static singleton before the SDK reads
+    // environment configuration.
+    private static readonly string PresignedUrlAttributionEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED";
+
     /// <inheritdoc/>
     public virtual Dictionary<string, ActivityTagsCollection> GenerateMetricAttributeMapFromSpan(Activity span, Resource resource)
     {
@@ -94,8 +99,8 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
         SetService(resource, span, attributes);
         SetEgressOperation(span, attributes);
         SetRemoteEnvironment(span, attributes);
-        SetRemoteServiceAndOperation(span, attributes);
-        bool isRemoteResourceIdentifierPresent = SetRemoteResourceTypeAndIdentifier(span, attributes);
+        PresignedUrlAttribution? presignedAttribution = SetRemoteServiceAndOperation(span, attributes);
+        bool isRemoteResourceIdentifierPresent = SetRemoteResourceTypeAndIdentifier(span, attributes, presignedAttribution);
         if (isRemoteResourceIdentifierPresent)
         {
             bool isAccountIdAndRegionPresent = SetRemoteResourceAccountIdAndRegion(span, attributes);
@@ -198,10 +203,11 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     /// `net.peer.sock.port` and `http.url` will be used to derive the RemoteService. And `http.method`
     /// and `http.url` will be used to derive the RemoteOperation.
     /// </summary>
-    private static void SetRemoteServiceAndOperation(Activity span, ActivityTagsCollection attributes)
+    private static PresignedUrlAttribution? SetRemoteServiceAndOperation(Activity span, ActivityTagsCollection attributes)
     {
         string remoteService = UnknownRemoteService;
         string remoteOperation = UnknownRemoteOperation;
+        PresignedUrlAttribution? presignedAttribution = null;
         if (IsKeyPresent(span, AttributeAWSRemoteService) || IsKeyPresent(span, AttributeAWSRemoteOperation))
         {
             remoteService = GetRemoteService(span, AttributeAWSRemoteService);
@@ -248,6 +254,18 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteService = GraphQL;
             remoteOperation = GetRemoteOperation(span, AttributeGraphqlOperationType);
         }
+        else if (IsPresignedUrlAttributionEnabled() && !IsAwsSDKSpan(span))
+        {
+            // Fallback for raw HTTP calls using a presigned URL. Exclude AWS SDK spans explicitly:
+            // they use the SDK attribution path even when their RPC service or method attributes are
+            // absent. Parse the URL only when we reach this branch.
+            presignedAttribution = PresignedUrlAttributor.Attribute(span);
+            if (presignedAttribution != null)
+            {
+                remoteService = presignedAttribution.RemoteService;
+                remoteOperation = presignedAttribution.RemoteOperation;
+            }
+        }
 
         // Peer service takes priority as RemoteService over everything but AWS Remote.
         if (IsKeyPresent(span, AttributePeerService) && !IsKeyPresent(span, AttributeAWSRemoteService))
@@ -261,13 +279,23 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteService = GenerateRemoteService(span);
         }
 
-        if (remoteOperation.Equals(UnknownRemoteOperation))
+        // When a presigned AWS URL was attributed, keep its remote operation as-is. Resolvers
+        // intentionally return UnknownRemoteOperation for ambiguous calls (e.g. a bucket-level S3
+        // GET), and falling back to the generic HTTP path here would reintroduce the
+        // high-cardinality "GET /<key>" operation this feature is meant to avoid.
+        if (remoteOperation.Equals(UnknownRemoteOperation) && presignedAttribution == null)
         {
             remoteOperation = GenerateRemoteOperation(span);
         }
 
         attributes.Add(AttributeAWSRemoteService, remoteService);
         attributes.Add(AttributeAWSRemoteOperation, remoteOperation);
+        return presignedAttribution;
+    }
+
+    private static bool IsPresignedUrlAttributionEnabled()
+    {
+        return System.Environment.GetEnvironmentVariable(PresignedUrlAttributionEnabledConfig) == "true";
     }
 
     // When the remote call operation is undetermined for http use cases,
@@ -425,7 +453,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
     // and RemoteResourceIdentifier accordingly. Right now, this sets it for DDB, S3, Kinesis,
     // and SQS (using QueueName or QueueURL). Returns true if remote resource type and identifier
     // are successfully set, false otherwise.
-    private static bool SetRemoteResourceTypeAndIdentifier(Activity span, ActivityTagsCollection attributes)
+    private static bool SetRemoteResourceTypeAndIdentifier(Activity span, ActivityTagsCollection attributes, PresignedUrlAttribution? presignedAttribution)
     {
         string? remoteResourceType = null;
         string? remoteResourceIdentifier = null;
@@ -541,6 +569,15 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             {
                 remoteResourceType = NormalizedBedrockServiceName + "::KnowledgeBase";
                 remoteResourceIdentifier = EscapeDelimiters((string?)span.GetTagItem(AttributeAWSBedrockKnowledgeBaseId));
+            }
+        }
+        else if (presignedAttribution != null)
+        {
+            RemoteResource? remoteResource = presignedAttribution.RemoteResource;
+            if (remoteResource != null)
+            {
+                remoteResourceType = remoteResource.Type;
+                remoteResourceIdentifier = EscapeDelimiters(remoteResource.Identifier);
             }
         }
         else if (IsDBSpan(span))
