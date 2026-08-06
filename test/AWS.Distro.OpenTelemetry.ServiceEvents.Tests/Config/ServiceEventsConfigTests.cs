@@ -1,0 +1,439 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
+using FluentAssertions;
+
+namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Config;
+
+/// <summary>
+/// Tests for <see cref="ServiceEventsConfig" />.
+/// </summary>
+/// <remarks>
+/// Tests modify process environment variables, so each test isolates the
+/// vars it touches via <see cref="EnvScope" />. Tests are not safe to run
+/// in parallel within the same process — xUnit's default behavior is one
+/// test class at a time which is sufficient here.
+/// </remarks>
+[Collection("EnvironmentVariables")]
+public class ServiceEventsConfigTests
+{
+    [Fact]
+    public void Defaults_ShouldMatchSpec()
+    {
+        using var _ = EnvScope.Clear(KnownEnvVars);
+        var cfg = new ServiceEventsConfig();
+
+        cfg.Enabled.Should().BeFalse();
+        cfg.ApplicationSignalsEnabled.Should().BeFalse();
+        cfg.OutputFile.Should().BeEmpty();
+        cfg.ServiceName.Should().Be("UnknownService");
+        cfg.Environment.Should().BeEmpty();
+        cfg.FunctionCallFlushInterval.Should().Be(30_000);
+        cfg.EndpointFlushInterval.Should().Be(30_000);
+        cfg.IncidentSnapshotFlushInterval.Should().Be(10_000);
+        cfg.IncidentSnapshotMaxPerPeriod.Should().Be(100);
+        cfg.IncidentSnapshotPeriodMinutes.Should().Be(1);
+        cfg.IncidentSnapshotDurationThresholdMs.Should().Be(5_000);
+        cfg.IncidentSnapshotMaxSameError.Should().Be(2);
+        cfg.SamplingMode.Should().Be("always");
+        cfg.SampleTier1Threshold.Should().Be(100);
+        cfg.SampleTier2Threshold.Should().Be(1000);
+        cfg.SampleTier2Rate.Should().Be(10);
+        cfg.SampleTier3Rate.Should().Be(100);
+        cfg.LogGroup.Should().Be("/serviceevents/telemetry");
+        cfg.FunctionInstrumentEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FromEnvironment_WhenAllUnset_ReturnsDefaults()
+    {
+        using var _ = EnvScope.Clear(KnownEnvVars);
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Enabled.Should().BeFalse();
+        cfg.ServiceName.Should().Be("UnknownService");
+        cfg.FunctionInstrumentEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FromEnvironment_WhenAllSet_ReadsValues()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
+            ["OTEL_AWS_APPLICATION_SIGNALS_ENABLED"] = "true",
+            ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = "/tmp/serviceevents.ndjson",
+            ["OTEL_SERVICE_NAME"] = "my-service",
+            ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL"] = "5000",
+            ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED"] = "true",
+            ["OTEL_AWS_SERVICE_EVENTS_LATENCY_THRESHOLDS"] = "POST /api/checkout:500,GET /api/health:50",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Enabled.Should().BeTrue();
+        cfg.ApplicationSignalsEnabled.Should().BeTrue();
+        cfg.OutputFile.Should().Be("/tmp/serviceevents.ndjson");
+        cfg.ServiceName.Should().Be("my-service");
+        cfg.FunctionCallFlushInterval.Should().Be(5000);
+        cfg.FunctionInstrumentEnabled.Should().BeTrue();
+        cfg.LatencyThresholds.Should().BeEquivalentTo(new[]
+        {
+            "POST /api/checkout:500",
+            "GET /api/health:50",
+        });
+    }
+
+    [Fact]
+    public void FromEnvironment_BoolParse_IsCaseInsensitive()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "TRUE",
+            ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED"] = "False",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Enabled.Should().BeTrue();
+        cfg.FunctionInstrumentEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FromEnvironment_InvalidInt_FallsBackToDefault()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL"] = "not-a-number",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.FunctionCallFlushInterval.Should().Be(30_000);
+    }
+
+    [Fact]
+    public void FromEnvironment_ServiceName_PrefersOtelServiceNameOverResourceAttrs()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_SERVICE_NAME"] = "explicit-name",
+            ["OTEL_RESOURCE_ATTRIBUTES"] = "service.name=attr-name,deployment.environment=prod",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.ServiceName.Should().Be("explicit-name");
+    }
+
+    [Fact]
+    public void FromEnvironment_ServiceName_FallsBackToResourceAttrs()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_RESOURCE_ATTRIBUTES"] = "service.name=attr-name",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.ServiceName.Should().Be("attr-name");
+    }
+
+    [Fact]
+    public void FromEnvironment_Environment_PrefersDeploymentEnvironmentName()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_RESOURCE_ATTRIBUTES"] = "deployment.environment=legacy,deployment.environment.name=preferred",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Environment.Should().Be("preferred");
+    }
+
+    [Fact]
+    public void FromEnvironment_Environment_FallsBackToLegacyKey()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_RESOURCE_ATTRIBUTES"] = "deployment.environment=legacy-only",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Environment.Should().Be("legacy-only");
+    }
+
+    [Fact]
+    public void FromEnvironment_Environment_FallsBackToEnvironmentEnvVar()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["ENVIRONMENT"] = "prod",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.Environment.Should().Be("prod");
+    }
+
+    [Fact]
+    public void FromEnvironment_Packages_RejectsBareStarSentinel()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE"] = "myapp,*,otherapp",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.PackagesToInstrument.Should().BeEquivalentTo(new[] { "myapp", "otherapp" });
+    }
+
+    [Fact]
+    public void FromEnvironment_PackagesExclude_ReadsValues()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_PACKAGES_EXCLUDE"] = "System.*,Microsoft.*",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.ExcludePatterns.Should().BeEquivalentTo(new[] { "System.*", "Microsoft.*" });
+    }
+
+    [Fact]
+    public void ShouldInstrumentFunction_WhenAllowlistEmpty_ReturnsFalse()
+    {
+        var cfg = new ServiceEventsConfig();
+
+        cfg.ShouldInstrumentFunction("MyApp.Service.Handle").Should().BeFalse();
+    }
+
+    [Fact]
+    public void ShouldInstrumentFunction_WhenMatchesAllowlist_ReturnsTrue()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            PackagesToInstrument = new[] { "System.Net.Http.*" },
+        };
+
+        cfg.ShouldInstrumentFunction("System.Net.Http.HttpRequestOut").Should().BeTrue();
+    }
+
+    [Fact]
+    public void ShouldInstrumentFunction_WhenNotInAllowlist_ReturnsFalse()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            PackagesToInstrument = new[] { "System.Net.Http.*" },
+        };
+
+        cfg.ShouldInstrumentFunction("Amazon.Runtime.HttpRequest").Should().BeFalse();
+    }
+
+    [Fact]
+    public void ShouldInstrumentFunction_WhenExcludeMatches_ExcludeWins()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            PackagesToInstrument = new[] { "System.*" },
+            ExcludePatterns = new[] { "System.Net.Http.*" },
+        };
+
+        cfg.ShouldInstrumentFunction("System.Net.Http.HttpRequestOut").Should().BeFalse();
+        cfg.ShouldInstrumentFunction("System.Data.SqlClient.Execute").Should().BeTrue();
+    }
+
+    [Theory]
+    // (enabledFlag, appSignalsEnabled, isLambda, expected)
+    [InlineData(null, false, true, false)]   // unset + AS off + Lambda → false (Lambda always disabled)
+    [InlineData(null, true, true, false)]    // unset + AS on + Lambda → false (Lambda wins over AS)
+    [InlineData("true", true, true, false)]  // explicit on + Lambda → still false (Lambda wins over explicit)
+    [InlineData(null, false, false, false)]  // unset + AS off → false
+    [InlineData(null, true, false, true)]    // unset + AS on → true (bundled with App Signals)
+    [InlineData("true", false, false, true)] // explicit on → true (overrides AS off)
+    [InlineData("false", true, false, false)] // explicit off → false (overrides AS on)
+    public void DetermineEnabled_AppliesSpecBundlingRule(string? enabledFlag, bool appSignalsEnabled, bool isLambda, bool expected)
+    {
+        var envVars = new Dictionary<string, string>();
+        if (enabledFlag is not null)
+        {
+            envVars["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = enabledFlag;
+        }
+
+        if (isLambda)
+        {
+            envVars["AWS_LAMBDA_FUNCTION_NAME"] = "my-fn";
+        }
+
+        using var _ = EnvScope.Set(envVars);
+
+        var cfg = new ServiceEventsConfig { ApplicationSignalsEnabled = appSignalsEnabled };
+
+        ServiceEventsConfig.DetermineEnabled(cfg).Should().Be(expected);
+    }
+
+    [Fact]
+    public void GetLatencyThresholdPatterns_ParsesValidEntries()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            LatencyThresholds = new[]
+            {
+                "POST /api/checkout:500",
+                "GET /api/health:50",
+                "* /server_request:25",
+            },
+        };
+
+        var patterns = cfg.GetLatencyThresholdPatterns();
+
+        patterns.Should().HaveCount(3);
+        patterns[0].Should().Be(("POST /api/checkout", 500.0));
+        patterns[1].Should().Be(("GET /api/health", 50.0));
+        patterns[2].Should().Be(("* /server_request", 25.0));
+    }
+
+    [Theory]
+    [InlineData("malformed-no-colon")]
+    [InlineData(":missing-method")]
+    [InlineData("GET /route:not-a-number")]
+    [InlineData("nomethod-route:100")]
+    public void GetLatencyThresholdPatterns_SkipsMalformedEntries(string entry)
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            LatencyThresholds = new[] { entry, "POST /good:100" },
+        };
+
+        var patterns = cfg.GetLatencyThresholdPatterns();
+
+        patterns.Should().HaveCount(1);
+        patterns[0].Pattern.Should().Be("POST /good");
+    }
+
+    [Fact]
+    public void ShouldTrackEndpoint_NoFilters_AllowsAll()
+    {
+        var cfg = new ServiceEventsConfig();
+        cfg.ShouldTrackEndpoint("/api/users", "GET").Should().BeTrue();
+        cfg.ShouldTrackEndpoint("/health", "GET").Should().BeTrue();
+    }
+
+    [Fact]
+    public void ShouldTrackEndpoint_IncludePatterns_OnlyTracksMatching()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            EndpointIncludePatterns = new[] { "GET /api/*", "POST /api/*" },
+        };
+
+        cfg.ShouldTrackEndpoint("/api/users", "GET").Should().BeTrue();
+        cfg.ShouldTrackEndpoint("/api/orders", "POST").Should().BeTrue();
+        cfg.ShouldTrackEndpoint("/health", "GET").Should().BeFalse();
+    }
+
+    [Fact]
+    public void ShouldTrackEndpoint_ExcludePatterns_RemovesMatching()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            EndpointExcludePatterns = new[] { "* /health", "* /metrics" },
+        };
+
+        cfg.ShouldTrackEndpoint("/api/users", "GET").Should().BeTrue();
+        cfg.ShouldTrackEndpoint("/health", "GET").Should().BeFalse();
+        cfg.ShouldTrackEndpoint("/metrics", "POST").Should().BeFalse();
+    }
+
+    [Fact]
+    public void ShouldTrackEndpoint_BothFilters_IncludeWinsThenExcludeFilters()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            EndpointIncludePatterns = new[] { "* /api/*" },
+            EndpointExcludePatterns = new[] { "* /api/internal/*" },
+        };
+
+        cfg.ShouldTrackEndpoint("/api/users", "GET").Should().BeTrue();
+        cfg.ShouldTrackEndpoint("/api/internal/debug", "GET").Should().BeFalse();
+        cfg.ShouldTrackEndpoint("/health", "GET").Should().BeFalse(); // not in include
+    }
+
+    private static readonly string[] KnownEnvVars = new[]
+    {
+        "OTEL_AWS_SERVICE_EVENTS_ENABLED",
+        "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+        "OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE",
+        "OTEL_SERVICE_NAME",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "ENVIRONMENT",
+        "OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED",
+        "OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE",
+        "OTEL_AWS_SERVICE_EVENTS_PACKAGES_EXCLUDE",
+        "OTEL_AWS_SERVICE_EVENTS_LATENCY_THRESHOLDS",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_INCLUDE_PATTERNS",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_EXCLUDE_PATTERNS",
+        "OTEL_AWS_OTLP_LOGS_ENDPOINT",
+        "OTEL_AWS_OTLP_METRICS_ENDPOINT",
+        "OTEL_AWS_SERVICE_EVENTS_LOG_GROUP",
+        "OTEL_AWS_SERVICE_EVENTS_LOG_STREAM",
+        "AWS_LAMBDA_FUNCTION_NAME",
+    };
+}
+
+/// <summary>
+/// Helper that snapshots and restores environment variables around a test
+/// scope. Use with <c>using var _ = EnvScope.Set(...)</c> or
+/// <c>EnvScope.Clear(...)</c> to keep tests hermetic.
+/// </summary>
+internal sealed class EnvScope : IDisposable
+{
+    private readonly Dictionary<string, string?> _previous = new();
+
+    private EnvScope(IEnumerable<string> trackedVars)
+    {
+        foreach (var name in trackedVars)
+        {
+            _previous[name] = Environment.GetEnvironmentVariable(name);
+        }
+    }
+
+    public static EnvScope Set(Dictionary<string, string> vars)
+    {
+        var scope = new EnvScope(vars.Keys);
+        foreach (var (k, v) in vars)
+        {
+            Environment.SetEnvironmentVariable(k, v);
+        }
+
+        return scope;
+    }
+
+    public static EnvScope Clear(IEnumerable<string> names)
+    {
+        var scope = new EnvScope(names);
+        foreach (var name in names)
+        {
+            Environment.SetEnvironmentVariable(name, null);
+        }
+
+        return scope;
+    }
+
+    public void Dispose()
+    {
+        foreach (var (k, v) in _previous)
+        {
+            Environment.SetEnvironmentVariable(k, v);
+        }
+    }
+}

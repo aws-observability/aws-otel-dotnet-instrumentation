@@ -11,6 +11,9 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Add ServiceEvents SDK foundation, DeploymentEvent, and EndpointMetrics. Targets modern .NET
+  (net8.0/net9.0/net10.0); not loaded on .NET Framework apps
+  ([#PRNUM](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/PRNUM))
 - Attribute presigned S3 URLs as `AWS::S3` dependencies in Application Signals, opt-in via
   `OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED`
   ([#440](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/440))
