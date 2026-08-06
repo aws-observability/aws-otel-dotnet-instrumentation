@@ -475,3 +475,6 @@ lychee/out.md
 .terraform*
 terraform.tfstate
 terraform.tfstate.backup
+
+# Claude Code local agent/skill definitions
+.claude/
