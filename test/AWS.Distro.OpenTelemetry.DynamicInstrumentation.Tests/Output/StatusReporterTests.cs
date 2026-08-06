@@ -52,6 +52,60 @@ public class StatusReporterTests
     }
 
     [Fact]
+    public void ReportReadyForNew_SkipsConfigThatErrored()
+    {
+        // A failed config stays registered with HitCount == 0, which is ReportReadyForNew's criterion. Call
+        // order mirrors ApplyConfigurations: ReportError during the apply loop, ReportReadyForNew after.
+        var sentBodies = new List<string>();
+        var handler = new MockHttpHandler(req =>
+        {
+            sentBodies.Add(new StreamReader(req.Content!.ReadAsStream()).ReadToEnd());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var client = new DynamicInstrumentationClient(new HttpClient(handler), "http://localhost:2000", "svc", "env");
+        var registry = new InstrumentationRegistry();
+        using var cts = new CancellationTokenSource();
+        var reporter = new StatusReporter(client, registry, cts.Token);
+
+        var config = CreateConfig();
+        registry.Register(config);
+
+        reporter.ReportError(config, "METHOD_NOT_FOUND");
+        reporter.ReportReadyForNew();
+
+        sentBodies.Should().HaveCount(1, "only the ERROR should have been sent");
+        sentBodies[0].Should().Contain("ERROR");
+        sentBodies.Should().NotContain(b => b.Contains("READY"), "READY must not follow ERROR for the same config");
+    }
+
+    [Fact]
+    public void Forget_ClearsErrorFlag_SoReAddedConfigCanReportReady()
+    {
+        // A re-add gets a fresh apply attempt, so the past failure stops suppressing READY.
+        var sentBodies = new List<string>();
+        var handler = new MockHttpHandler(req =>
+        {
+            sentBodies.Add(new StreamReader(req.Content!.ReadAsStream()).ReadToEnd());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var client = new DynamicInstrumentationClient(new HttpClient(handler), "http://localhost:2000", "svc", "env");
+        var registry = new InstrumentationRegistry();
+        using var cts = new CancellationTokenSource();
+        var reporter = new StatusReporter(client, registry, cts.Token);
+
+        var config = CreateConfig();
+        registry.Register(config);
+
+        reporter.ReportError(config, "METHOD_NOT_FOUND");
+        reporter.Forget(config.LocationHash);
+        reporter.ReportReadyForNew();
+
+        sentBodies.Should().HaveCount(2);
+        sentBodies[0].Should().Contain("ERROR");
+        sentBodies[1].Should().Contain("READY", "Forget clears the error flag so a re-add can report READY");
+    }
+
+    [Fact]
     public void ReportReadyForNew_SkipsIfAlreadyHit()
     {
         var sentCount = 0;

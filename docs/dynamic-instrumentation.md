@@ -27,6 +27,7 @@ alongside the standard ADOT auto-instrumentation variables:
 |---|---|---|
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED` | `false` | Master switch. Set to `true` to enable DI. |
 | `OTEL_AWS_OTLP_LOGS_ENDPOINT` | *(unset)* | Where captured snapshots are sent — the local collector/agent's OTLP logs endpoint. **Required** to see any data (see below). |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Protocol used to export snapshots. Set to `grpc` when the endpoint above is a gRPC receiver (`:4317`). Shared with the rest of the distro. |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL` | `http://localhost:2000` | The local CloudWatch Agent that delivers your probe configurations. Usually the default is correct. |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL` | `600` | Seconds between checks for new/changed probes (minimum 10). |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL` | `60` | Seconds between checks for new/changed breakpoints (minimum 10). |
@@ -108,10 +109,14 @@ captured but have nowhere to go and are dropped. Set it to your local collector/
 receiver:
 
 ```bash
-export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4318/v1/logs"   # HTTP
-# or, for gRPC:
+export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4318/v1/logs"   # HTTP (default)
+# or, for gRPC — the protocol must be set too, or the endpoint is treated as HTTP:
 export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4317"
+export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
 ```
+
+Snapshots are exported over `http/protobuf` unless `OTEL_EXPORTER_OTLP_PROTOCOL=grpc` is set, matching
+the rest of the distro. Pointing a gRPC endpoint at the default HTTP protocol yields no snapshots.
 
 ### App exits immediately with a "Permission denied" filesystem error
 

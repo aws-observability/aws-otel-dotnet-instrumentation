@@ -5,6 +5,7 @@ using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
@@ -44,6 +45,9 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
 
+                // Must precede AddOtlpExporter: processors run in registration order.
+                options.AddProcessor(new SnapshotTraceContextProcessor());
+
                 // No endpoint => no exporter => snapshots are dropped (not buffered). Documented operator
                 // trap; see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
                 if (!string.IsNullOrEmpty(logsEndpoint))
@@ -51,6 +55,7 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                     options.AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = new Uri(logsEndpoint);
+                        otlp.Protocol = ResolveProtocol();
 
                         // Bound each export so a wedged endpoint can't block the drain thread and grow the
                         // queue unboundedly. 10s matches the OTLP/HTTP spec default.
@@ -81,6 +86,26 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
     public void Dispose()
     {
         this.loggerFactory.Dispose();
+    }
+
+    /// <summary>
+    /// Resolves the OTLP protocol from OTEL_EXPORTER_OTLP_PROTOCOL, defaulting to HTTP/protobuf as Plugin.cs
+    /// does. The OTel SDK default is gRPC.
+    /// </summary>
+    internal static OtlpExportProtocol ResolveProtocol()
+    {
+        var protocol = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL");
+
+        return protocol switch
+        {
+#if NET8_0_OR_GREATER
+            // Grpc is [Obsolete] on .NET Framework targets; guarded to match Plugin.cs.
+            "grpc" => OtlpExportProtocol.Grpc,
+#endif
+
+            // Unset or unrecognized falls back to the default, as Plugin.cs does.
+            _ => OtlpExportProtocol.HttpProtobuf,
+        };
     }
 
     private static string FormatBody(SnapshotLogState state)

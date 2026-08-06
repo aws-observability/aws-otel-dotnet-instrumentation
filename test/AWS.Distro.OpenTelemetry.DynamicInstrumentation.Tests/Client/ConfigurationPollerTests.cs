@@ -245,7 +245,52 @@ public class ConfigurationPollerTests
         // No such logic exists in ConfigurationPoller today, so this is a tracked placeholder.
     }
 
+    [Fact]
+    public void Dispose_AfterCancellation_JoinsPollThreads()
+    {
+        // Dispose must not return while a poll thread is still live: Cleanup disposes the shared HttpClient
+        // next.
+        var client = ClientReturning("""{ "Changed": false }""");
+        using var cts = new CancellationTokenSource();
+        var poller = new ConfigurationPoller(
+            client, probeIntervalSeconds: 60, breakpointIntervalSeconds: 60, _ => true, cts.Token);
+
+        poller.Start();
+        var threads = GetPollThreads(poller);
+        threads.Should().HaveCount(2).And.AllSatisfy(t => t.Should().NotBeNull());
+
+        cts.Cancel();
+        poller.Dispose();
+
+        // The loop waits via Task.Delay(ms, ct), which wakes on cancel, so both threads must have exited by
+        // the time Dispose returns — not merely been asked to.
+        threads.Should().AllSatisfy(t => t!.IsAlive.Should().BeFalse("Dispose must join the poll threads"));
+    }
+
+    [Fact]
+    public void Dispose_WithoutStart_DoesNotThrow()
+    {
+        // Cleanup can run on a failed init path where Start never ran.
+        var client = ClientReturning("""{ "Changed": false }""");
+        var poller = new ConfigurationPoller(
+            client, probeIntervalSeconds: 60, breakpointIntervalSeconds: 60, _ => true, CancellationToken.None);
+
+        var dispose = () => poller.Dispose();
+
+        dispose.Should().NotThrow();
+    }
+
     // --- Fingerprint-path helpers ---
+
+    private static Thread?[] GetPollThreads(ConfigurationPoller poller)
+    {
+        var flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        return new[]
+        {
+            (Thread?)typeof(ConfigurationPoller).GetField("probeThread", flags)!.GetValue(poller),
+            (Thread?)typeof(ConfigurationPoller).GetField("breakpointThread", flags)!.GetValue(poller),
+        };
+    }
 
     private static ConfigurationPoller CreatePoller(
         DynamicInstrumentationClient client, Func<List<InstrumentationConfiguration>, bool> onChanged) =>

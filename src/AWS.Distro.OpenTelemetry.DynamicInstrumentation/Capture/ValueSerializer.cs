@@ -236,10 +236,24 @@ internal static class ValueSerializer
         int count = 0;
         bool fieldCountExceeded = false;
 
+        // Counted independently of the cap so a truncated object reports its true size. The emitter's
+        // `fields` branch precedes `not_captured_reason`, so size is the truncation signal here.
+        int totalMemberCount = 0;
+
         try
         {
             var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
-            foreach (var field in type.GetFields(bindingFlags))
+
+            // Reflected once and reused for both the count and the capture walk; this runs on the user's
+            // thread in every woven method.
+            var typeFields = type.GetFields(bindingFlags);
+            var readableProperties = type.GetProperties(bindingFlags)
+                .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
+                .ToArray();
+
+            totalMemberCount = typeFields.Length + readableProperties.Length;
+
+            foreach (var field in typeFields)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
@@ -260,17 +274,12 @@ internal static class ValueSerializer
                 }
             }
 
-            foreach (var prop in type.GetProperties(bindingFlags))
+            foreach (var prop in readableProperties)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
                     fieldCountExceeded = true;
                     break;
-                }
-
-                if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
-                {
-                    continue;
                 }
 
                 try
@@ -295,6 +304,7 @@ internal static class ValueSerializer
         {
             Type = typeName,
             Fields = fields,
+            OriginalSize = fieldCountExceeded ? totalMemberCount : null,
             NotCapturedReason = fieldCountExceeded ? NotCapturedReason.FieldCount : NotCapturedReason.None,
         };
     }

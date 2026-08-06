@@ -26,6 +26,10 @@ internal sealed class StatusReporter : IDisposable
     // re-reports READY/DISABLED. Cleared per-config on removal via Forget.
     private readonly HashSet<string> reportedReady = new();
     private readonly HashSet<string> reportedDisabled = new();
+
+    // Failed configs stay registered with HitCount == 0, which is ReportReadyForNew's criterion. Cleared in
+    // Forget.
+    private readonly HashSet<string> errored = new();
     private Timer? timer;
 
     public StatusReporter(DynamicInstrumentationClient client, InstrumentationRegistry registry, CancellationToken ct)
@@ -54,7 +58,7 @@ internal sealed class StatusReporter : IDisposable
             foreach (var reg in this.registry.GetAll())
             {
                 var locationHash = reg.Config.LocationHash;
-                if (this.reportedReady.Contains(locationHash))
+                if (this.reportedReady.Contains(locationHash) || this.errored.Contains(locationHash))
                 {
                     continue;
                 }
@@ -83,8 +87,13 @@ internal sealed class StatusReporter : IDisposable
     /// <param name="errorCause">The backend error cause code.</param>
     public void ReportError(InstrumentationConfiguration config, string errorCause)
     {
-        // No lock needed: ERROR touches none of the gated shared state (dedup sets, registry enumeration) —
-        // it just emits one entry from the passed config.
+        // Under the gate because `errored` is read by ReportReadyForNew and ReportStatuses. Flagged before
+        // the send so a failed send still suppresses READY.
+        lock (this.gate)
+        {
+            this.errored.Add(config.LocationHash);
+        }
+
         var statuses = new List<StatusEntry>
         {
             new()
@@ -111,6 +120,9 @@ internal sealed class StatusReporter : IDisposable
         {
             this.reportedReady.Remove(locationHash);
             this.reportedDisabled.Remove(locationHash);
+
+            // A re-added config gets a fresh apply attempt, so a past failure stops suppressing READY.
+            this.errored.Remove(locationHash);
         }
     }
 

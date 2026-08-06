@@ -250,6 +250,22 @@ public class ValueSerializerTests
 
         result.Fields.Should().HaveCount(1);
         result.NotCapturedReason.Should().Be(NotCapturedReason.FieldCount);
+
+        // TestObj has exactly two readable members.
+        result.OriginalSize.Should().Be(2, "a field-count-capped object must report its true member count");
+    }
+
+    [Fact]
+    public void Serialize_ObjectWithinFieldCap_HasNoOriginalSize()
+    {
+        // An object that fits carries no size.
+        var obj = new TestObj { Name = "Alice", Age = 30 };
+
+        var result = ValueSerializer.Serialize(obj, DefaultLimits with { MaxFieldsPerObject = 10 });
+
+        result.Fields.Should().HaveCount(2);
+        result.NotCapturedReason.Should().Be(NotCapturedReason.None);
+        result.OriginalSize.Should().BeNull("an object that fits the cap is not truncated");
     }
 
     [Fact]
