@@ -304,7 +304,14 @@ public class Plugin
         // (Current is null), and never allowed to break the customer's tracer pipeline.
         try
         {
-            ServiceEventsInstrumentation.Current?.RegisterTracerProcessors(builder);
+            // Gated on IsInitialized for the same reason as the RecordException site below:
+            // Current is non-null even when ServiceEvents is disabled. RegisterTracerProcessors
+            // also no-ops internally when the collectors were never created, but relying on that
+            // would be an implicit contract rather than an explicit gate.
+            if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+            {
+                ServiceEventsInstrumentation.Current.RegisterTracerProcessors(builder);
+            }
         }
         catch (Exception ex)
         {
@@ -472,7 +479,11 @@ public class Plugin
         // ServiceEvents needs it to populate IncidentSnapshot's exception_info and to upgrade
         // EndpointErrorMetrics' `exception` dimension from the HTTP{status} fallback to the real
         // exception type.
-        if (ServiceEventsInstrumentation.Current != null)
+        // IsInitialized (not a null check on Current) is the correct gate: GetOrCreate always
+        // constructs the singleton, and Initialize() returns early without setting initialized
+        // when ServiceEvents is disabled — Lambda, an explicit OTEL_AWS_SERVICE_EVENTS_ENABLED=false,
+        // App Signals off with no explicit enable, or missing OTLP endpoints when force-enabled.
+        if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
         {
             options.RecordException = true;
         }
