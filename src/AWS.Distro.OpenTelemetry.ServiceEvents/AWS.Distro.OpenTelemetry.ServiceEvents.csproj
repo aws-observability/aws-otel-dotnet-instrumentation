@@ -51,9 +51,4 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Project reference to the AWS distro plugin so we can co-load through OTEL_DOTNET_AUTO_PLUGINS. -->
-    <ProjectReference Include="..\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj" />
-  </ItemGroup>
-
 </Project>

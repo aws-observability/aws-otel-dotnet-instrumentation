@@ -55,6 +55,15 @@ public sealed record ServiceEventsConfig
     /// <summary>Gets serviceEvents SDK version. Override via <c>OTEL_AWS_SERVICE_EVENTS_SDK_VERSION</c>.</summary>
     public string SdkVersion { get; init; } = "0.1.0";
 
+    /// <summary>
+    /// Gets the AWS distro version stamped onto <c>telemetry.distro.version</c>. Supplied by the
+    /// distro's plugin, which hosts ServiceEvents and owns the authoritative version string, so
+    /// both the main telemetry resource and ServiceEvents' own resource report the same value.
+    /// Empty when ServiceEvents is constructed outside the distro (e.g. unit tests), in which case
+    /// the attribute is omitted rather than reporting a wrong version.
+    /// </summary>
+    public string DistroVersion { get; init; } = string.Empty;
+
     /// <summary>Gets functionCall flush cadence in milliseconds.</summary>
     public int FunctionCallFlushInterval { get; init; } = 30_000;
 

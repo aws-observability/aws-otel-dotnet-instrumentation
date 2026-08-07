@@ -60,6 +60,12 @@
   <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
     <ProjectReference Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" PrivateAssets="All" />
   </ItemGroup>
+  <!-- ServiceEvents is hosted by this project's Plugin, so it ships and loads with the existing
+       distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry for customers. Targets net8.0+ only;
+       excluded from the net472 build (the classic ASP.NET hooks were never implemented). -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
+    <ProjectReference Include="../AWS.Distro.OpenTelemetry.ServiceEvents/AWS.Distro.OpenTelemetry.ServiceEvents.csproj" PrivateAssets="All" />
+  </ItemGroup>
 
   <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
     <!-- NuGet packages -->

@@ -5,9 +5,11 @@
 Ported from the ServiceEvents contract-test suite shared by the Python/Node/Java
 SDKs, adapted for .NET:
 
-  * Container is instrumented via the .NET auto-instrumentation profiler + the
-    ServiceEvents plugin (CORECLR_* + OTEL_DOTNET_AUTO_PLUGINS), instead of the
-    Python distro/configurator env vars.
+  * Container is instrumented via the .NET auto-instrumentation profiler
+    (CORECLR_* + OTEL_DOTNET_AUTO_PLUGINS), instead of the Python
+    distro/configurator env vars. ServiceEvents itself needs no plugin entry of
+    its own — it is hosted by the AWS distro plugin, so the plugin list here is
+    the same single value the distro's launch scripts set for every customer.
   * Flush cadence is set through the SDK's public flush env vars
     (OTEL_AWS_SERVICE_EVENTS_*_FLUSH_INTERVAL); the .NET SDK has no internal
     DEBUG_SE_TEST_CONFIG hook.
@@ -66,15 +68,14 @@ _MOCK_COLLECTOR_HTTP_PORT: int = 4316
 _MOCK_COLLECTOR_ALIAS: str = "collector"
 _NETWORK_NAME: str = "serviceevents-contract-test-network"
 
-# The .NET auto-instrumentation profiler GUID + plugins. ServiceEvents is bootstrapped by
-# its own ServiceEventsPlugin (which calls ServiceEventsInstrumentation.Initialize), so it
-# must be co-loaded alongside the AWS distro plugin — colon-separated, matching the
-# simple-sample / petsite k8s deploy manifests. Without ServiceEventsPlugin, ServiceEvents
-# never initializes and no signals are emitted.
+# The .NET auto-instrumentation profiler GUID + plugin list. This is deliberately the
+# SINGLE standard entry that the distro's own launch scripts set (instrument.sh,
+# adot-launch.sh/.cmd, the PowerShell module) — no ServiceEvents-specific entry. ServiceEvents
+# is hosted by the AWS distro plugin itself, so it initializes with no customer configuration
+# change. If this suite passes with only this entry, the customer-does-nothing path works.
 _CORECLR_PROFILER_GUID: str = "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
 _OTEL_DOTNET_AUTO_PLUGINS: str = (
     "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation"
-    ":AWS.Distro.OpenTelemetry.ServiceEvents.ServiceEventsPlugin, AWS.Distro.OpenTelemetry.ServiceEvents"
 )
 
 

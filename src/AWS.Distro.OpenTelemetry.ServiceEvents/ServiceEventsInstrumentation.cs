@@ -23,9 +23,11 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents;
 /// <remarks>
 /// Mirrors the Python SDK's <c>ServiceEventsInstrumentation</c> class
 /// (<c>aws-opentelemetry-distro/.../telemend/telemend_instrumentation.py</c>).
-/// One instance per process, created by <see cref="ServiceEventsPlugin.Initializing" />.
+/// One instance per process, created by the AWS distro's plugin during its
+/// <c>Initializing()</c> hook (ServiceEvents is hosted by that plugin rather than
+/// registered as a separate <c>OTEL_DOTNET_AUTO_PLUGINS</c> entry).
 /// </remarks>
-internal sealed class ServiceEventsInstrumentation : IDisposable
+public sealed class ServiceEventsInstrumentation : IDisposable
 {
     /// <summary>Logger category name used for the general signal pipeline.</summary>
     internal const string GeneralLoggerCategory = "AWS.Distro.OpenTelemetry.ServiceEvents.General";
@@ -75,6 +77,17 @@ internal sealed class ServiceEventsInstrumentation : IDisposable
     /// <summary>
     /// Gets the singleton instance, creating it on first call.
     /// </summary>
+    /// <param name="config">
+    /// Configuration to build the instance from, normally
+    /// <see cref="ServiceEventsConfig.FromEnvironment" /> with the hosting distro's version
+    /// supplied via <see cref="ServiceEventsConfig.DistroVersion" />. Ignored if an instance
+    /// already exists.
+    /// </param>
+    /// <param name="loggerFactory">
+    /// Optional logger factory for the host's logging pipeline. When null, an internal
+    /// factory is used.
+    /// </param>
+    /// <returns>The process-wide singleton.</returns>
     public static ServiceEventsInstrumentation GetOrCreate(ServiceEventsConfig config, ILoggerFactory? loggerFactory = null)
     {
         if (instance is not null)
@@ -389,8 +402,14 @@ internal sealed class ServiceEventsInstrumentation : IDisposable
             // emit telemetry.distro.{name,version}). Our pipeline builds its own Resource, so
             // these are not inherited from the main telemetry resource and must be set here.
             ["telemetry.distro.name"] = "aws-otel-dotnet-instrumentation",
-            ["telemetry.distro.version"] = AutoInstrumentation.Version.version + "-aws",
         };
+
+        // Supplied by the hosting distro plugin (which owns the version string) rather than read
+        // across the assembly boundary. Omitted when unset so we never report a wrong version.
+        if (!string.IsNullOrEmpty(this.config.DistroVersion))
+        {
+            attrs["telemetry.distro.version"] = this.config.DistroVersion + "-aws";
+        }
 
         // deployment.environment(.name): omit entirely when unset — no sentinel (spec v2.5 §2).
         if (!string.IsNullOrEmpty(this.config.Environment))

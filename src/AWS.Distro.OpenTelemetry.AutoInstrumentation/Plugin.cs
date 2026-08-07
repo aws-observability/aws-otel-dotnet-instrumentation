@@ -24,6 +24,8 @@ using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+using AWS.Distro.OpenTelemetry.ServiceEvents;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 #endif
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
@@ -100,6 +102,7 @@ public class Plugin
     {
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
+        this.InitializeServiceEvents();
 #endif
     }
 
@@ -295,6 +298,20 @@ public class Plugin
             }
         }
 
+#if !NETFRAMEWORK
+        // ServiceEvents registers its BaseProcessor<Activity> collectors last, so they observe
+        // activities after the distro's own processors. No-op when ServiceEvents is disabled
+        // (Current is null), and never allowed to break the customer's tracer pipeline.
+        try
+        {
+            ServiceEventsInstrumentation.Current?.RegisterTracerProcessors(builder);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents processor registration failed; feature degraded.");
+        }
+#endif
+
         return builder;
     }
 
@@ -449,6 +466,16 @@ public class Plugin
                 this.ShouldSampleParent(activity);
             }
         };
+
+        // Gated on ServiceEvents being active: recording exceptions adds an `exception` event to
+        // server spans, so it must not change telemetry for customers who have ServiceEvents off.
+        // ServiceEvents needs it to populate IncidentSnapshot's exception_info and to upgrade
+        // EndpointErrorMetrics' `exception` dimension from the HTTP{status} fallback to the real
+        // exception type.
+        if (ServiceEventsInstrumentation.Current != null)
+        {
+            options.RecordException = true;
+        }
     }
 #endif
 
@@ -591,6 +618,28 @@ public class Plugin
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
+        }
+    }
+
+    // ServiceEvents is hosted by this plugin (rather than a separate plugin/DLL) so it ships and
+    // loads with the existing distribution — customers get the feature on upgrade with no
+    // OTEL_DOTNET_AUTO_PLUGINS change. Enablement follows Application Signals unless
+    // OTEL_AWS_SERVICE_EVENTS_ENABLED is set explicitly, and is always off in Lambda; that rule
+    // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
+    // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
+    // shipped in the .NET Framework build.
+    private void InitializeServiceEvents()
+    {
+        try
+        {
+            // The distro owns the authoritative version string; pass it in so ServiceEvents'
+            // resource reports the same telemetry.distro.version as DistroAttributes above.
+            var config = ServiceEventsConfig.FromEnvironment() with { DistroVersion = Version.version };
+            ServiceEventsInstrumentation.GetOrCreate(config).Initialize();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents initialization failed; feature disabled.");
         }
     }
 #endif
