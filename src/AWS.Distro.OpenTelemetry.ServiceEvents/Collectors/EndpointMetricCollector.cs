@@ -40,6 +40,11 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
 
     private ConcurrentDictionary<string, EndpointAggregation> aggregations = new(StringComparer.Ordinal);
 
+    // Number of RecordRequest calls currently in progress. Collect() waits for this to reach zero
+    // after swapping the map, so a request that resolved its aggregation from the outgoing map has
+    // finished writing before that map is read. See Collect().
+    private int recordsInFlight;
+
     /// <summary>Initializes a new instance of the <see cref="EndpointMetricCollector"/> class.</summary>
     /// <param name="flushIntervalMs">Flush cadence in milliseconds.</param>
     /// <param name="emitter">OTLP emitter for summaries and error metrics.</param>
@@ -77,29 +82,41 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
         string? errorType = null,
         string? functionName = null)
     {
-        var operation = $"{method} {route}";
-        var agg = this.aggregations.GetOrAdd(operation, _ => new EndpointAggregation(route, method));
+        // Marks this write as in progress for the whole duration of the update, so a concurrent
+        // Collect() cannot read the outgoing map until every writer holding a reference to it has
+        // finished. Two interlocked operations per request; negligible next to the request itself.
+        Interlocked.Increment(ref this.recordsInFlight);
 
-        agg.RecordDuration(durationNs);
-
-        if (statusCode >= 500)
+        try
         {
-            agg.IncrementFaults();
+            var operation = $"{method} {route}";
+            var agg = this.aggregations.GetOrAdd(operation, _ => new EndpointAggregation(route, method));
+
+            agg.RecordDuration(durationNs);
+
+            if (statusCode >= 500)
+            {
+                agg.IncrementFaults();
+            }
+            else if (statusCode >= 400)
+            {
+                agg.IncrementErrors();
+            }
+
+            // exception_breakdown + the count metric are fault-only: 5xx with a captured exception
+            // type (spec §3/§7). A 4xx increments request.errors but produces no breakdown entry, and
+            // a 5xx without an exception type produces none either (no synthetic UnknownError).
+            if (statusCode >= 500 && !string.IsNullOrEmpty(errorType))
+            {
+                agg.RecordError(
+                    failureType: statusCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    exceptionType: errorType!,
+                    functionName: string.IsNullOrEmpty(functionName) ? "unknown" : functionName!);
+            }
         }
-        else if (statusCode >= 400)
+        finally
         {
-            agg.IncrementErrors();
-        }
-
-        // exception_breakdown + the count metric are fault-only: 5xx with a captured exception
-        // type (spec §3/§7). A 4xx increments request.errors but produces no breakdown entry, and
-        // a 5xx without an exception type produces none either (no synthetic UnknownError).
-        if (statusCode >= 500 && !string.IsNullOrEmpty(errorType))
-        {
-            agg.RecordError(
-                failureType: statusCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                exceptionType: errorType!,
-                functionName: string.IsNullOrEmpty(functionName) ? "unknown" : functionName!);
+            Interlocked.Decrement(ref this.recordsInFlight);
         }
     }
 
@@ -120,6 +137,20 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
     {
         // Atomic swap-and-reset: drain everything accumulated this window.
         var swapped = Interlocked.Exchange(ref this.aggregations, new ConcurrentDictionary<string, EndpointAggregation>(StringComparer.Ordinal));
+
+        // Close the swap race before reading anything out of the detached map. RecordRequest resolves
+        // its aggregation from whatever `aggregations` pointed at when it started, so a request that
+        // began just before the swap writes into `swapped` after the exchange has already returned.
+        // Reading immediately would miss those updates entirely — the requests are simply lost, once
+        // per flush. Waiting for the in-flight count to reach zero guarantees every writer that could
+        // still be holding `swapped` has finished; writers that started after the swap are using the
+        // new map and are only waited on incidentally.
+        //
+        // Bounded, because a request that never completes must not stall the flush loop or block
+        // shutdown. On timeout we drain anyway and accept the original (now much narrower) race, so
+        // this is never worse than not waiting. Under load the wait is negligible: at 2000 rps with
+        // sub-millisecond responses fewer than two requests are typically in flight.
+        this.WaitForInFlightWrites(TimeSpan.FromMilliseconds(250));
 
         if (swapped.IsEmpty)
         {
@@ -159,6 +190,34 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
                 this.emitter.EmitEndpointErrorMetrics(errorMetrics);
             }
         }
+    }
+
+    /// <summary>
+    /// Spin until no <see cref="RecordRequest" /> call is in progress, or the timeout elapses.
+    /// </summary>
+    /// <param name="timeout">Maximum time to wait before draining regardless.</param>
+    /// <returns><c>true</c> if all in-flight writes completed; <c>false</c> on timeout.</returns>
+    private bool WaitForInFlightWrites(TimeSpan timeout)
+    {
+        if (Volatile.Read(ref this.recordsInFlight) == 0)
+        {
+            return true;
+        }
+
+        var spin = default(SpinWait);
+        var deadline = Environment.TickCount64 + (long)timeout.TotalMilliseconds;
+
+        while (Volatile.Read(ref this.recordsInFlight) > 0)
+        {
+            if (Environment.TickCount64 >= deadline)
+            {
+                return false;
+            }
+
+            spin.SpinOnce();
+        }
+
+        return true;
     }
 
     /// <summary>

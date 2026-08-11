@@ -150,7 +150,7 @@ class ServiceEventsTestInfrastructure(TestCase):
             # Latency triggers: high global threshold + per-endpoint override for /slow-success.
             .with_env("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_DURATION_THRESHOLD_MS", GLOBAL_LATENCY_THRESHOLD_MS)
             .with_env("OTEL_AWS_SERVICE_EVENTS_LATENCY_THRESHOLDS", LATENCY_THRESHOLDS)
-            .with_env("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_PERIOD", "1000")
+            .with_env("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_MINUTE", "1000")
             .with_env("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_SAME_ERROR", "100")
             .with_env("OTEL_AWS_OTLP_LOGS_ENDPOINT", otlp_logs_endpoint)
             .with_env("OTEL_AWS_OTLP_METRICS_ENDPOINT", otlp_metrics_endpoint)

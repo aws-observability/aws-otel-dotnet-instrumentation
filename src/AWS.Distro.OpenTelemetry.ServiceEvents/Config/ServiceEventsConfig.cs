@@ -22,9 +22,32 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// <item><description>Use <c>with</c> expressions for test overrides.</description></item>
 /// </list>
 /// </para>
+/// <para>
+/// Because the surface mirrors Python field-for-field, some properties are parsed here before the
+/// component that reads them exists — the FunctionCall knobs (<c>PACKAGES_*</c>,
+/// <c>FUNCTION_INSTRUMENT_ENABLED</c>, <c>SAMPLING_MODE</c>, <c>SAMPLE_TIER*</c>,
+/// <c>FUNCTION_CALL_FLUSH_INTERVAL</c>) and the incident-snapshot cadence knob
+/// (<c>INCIDENT_SNAPSHOT_FLUSH_INTERVAL</c>) land with their collectors in a follow-up change.
+/// They are intentionally inert here rather than dead:
+/// parsing is validated by unit tests so the contract is fixed before the consumers arrive. Config
+/// backing a component that this assembly <i>does</i> ship must always be consumed — an unread
+/// property there is a bug, not scaffolding.
+/// </para>
 /// </remarks>
 public sealed record ServiceEventsConfig
 {
+    /// <summary>
+    /// ServiceEvents schema version. Deliberately a constant rather than a configurable property:
+    /// the other SDKs derive this from their package version and expose no override, and a value a
+    /// customer can rewrite would let telemetry misreport which SDK produced it.
+    /// <para>
+    /// Version identity that actually reaches the wire does not come from here — it rides on the
+    /// resource as <c>telemetry.sdk.version</c> (from the OTel SDK) and
+    /// <c>telemetry.distro.version</c> (from <see cref="DistroVersion" />, supplied by the distro).
+    /// </para>
+    /// </summary>
+    internal const string SdkVersion = "0.1.0";
+
     /// <summary>
     /// Gets a value indicating whether master kill switch. Defaults to false; the bundling-with-Application-Signals
     /// rule (see <see cref="DetermineEnabled" />) is authoritative for whether
@@ -52,9 +75,6 @@ public sealed record ServiceEventsConfig
     /// <summary>Gets deployment environment, from <c>OTEL_RESOURCE_ATTRIBUTES[deployment.environment(.name)]</c> or <c>ENVIRONMENT</c>. Empty when unset — omitted from signals, no sentinel (spec v2.5).</summary>
     public string Environment { get; init; } = string.Empty;
 
-    /// <summary>Gets serviceEvents SDK version. Override via <c>OTEL_AWS_SERVICE_EVENTS_SDK_VERSION</c>.</summary>
-    public string SdkVersion { get; init; } = "0.1.0";
-
     /// <summary>
     /// Gets the AWS distro version stamped onto <c>telemetry.distro.version</c>. Supplied by the
     /// distro's plugin, which hosts ServiceEvents and owns the authoritative version string, so
@@ -73,17 +93,20 @@ public sealed record ServiceEventsConfig
     /// <summary>Gets incidentSnapshot flush cadence in milliseconds.</summary>
     public int IncidentSnapshotFlushInterval { get; init; } = 10_000;
 
-    /// <summary>Gets maximum incident snapshots within a rate-limit window.</summary>
-    public int IncidentSnapshotMaxPerPeriod { get; init; } = 100;
-
-    /// <summary>Gets rate-limit window length in minutes.</summary>
-    public int IncidentSnapshotPeriodMinutes { get; init; } = 1;
+    /// <summary>
+    /// Gets the maximum number of incident snapshots per minute. The window is fixed at one minute
+    /// and is deliberately not configurable, per the env-vars spec.
+    /// </summary>
+    public int IncidentSnapshotMaxPerMinute { get; init; } = 100;
 
     /// <summary>Gets default duration threshold (ms) for latency-triggered snapshots.</summary>
     public int IncidentSnapshotDurationThresholdMs { get; init; } = 5_000;
 
-    /// <summary>Gets per-error dedup ceiling for incident snapshots.</summary>
-    public int IncidentSnapshotMaxSameError { get; init; } = 2;
+    /// <summary>
+    /// Gets the per-error dedup ceiling for incident snapshots: at most this many snapshots per
+    /// distinct error per minute.
+    /// </summary>
+    public int IncidentSnapshotMaxSameError { get; init; } = 1;
 
     /// <summary>
     /// Gets per-endpoint latency thresholds in <c>METHOD /route:threshold_ms</c> form,
@@ -143,10 +166,21 @@ public sealed record ServiceEventsConfig
     /// <summary>Gets the OTLP metrics endpoint, from the shared <c>OTEL_AWS_OTLP_METRICS_ENDPOINT</c>. Same defaulting rule as <see cref="LogsEndpoint" />.</summary>
     public string MetricsEndpoint { get; init; } = string.Empty;
 
-    /// <summary>Gets cloudWatch log group header (<c>x-aws-log-group</c>).</summary>
+    /// <summary>
+    /// Gets the CloudWatch log group, sent as the <c>x-aws-log-group</c> header on every OTLP log
+    /// request. Consumed by the collector / CloudWatch agent to route records to a log group, so it
+    /// is sent regardless of whether the endpoint is a collector or CloudWatch directly — the same
+    /// as Java and JS.
+    /// </summary>
     public string LogGroup { get; init; } = "/serviceevents/telemetry";
 
-    /// <summary>Gets cloudWatch log stream header. Empty falls back to <see cref="ServiceName" />.</summary>
+    /// <summary>
+    /// Gets the CloudWatch log stream, sent as the <c>x-aws-log-stream</c> header.
+    /// <see cref="FromEnvironment" /> falls back to <see cref="ServiceName" /> when the env var is
+    /// unset, matching where Java applies the same fallback (<c>TelemendConfig</c>, not its
+    /// exporter). Directly constructed instances keep the empty default, in which case the header is
+    /// omitted rather than sent empty.
+    /// </summary>
     public string LogStream { get; init; } = string.Empty;
 
     /// <summary>
@@ -175,21 +209,23 @@ public sealed record ServiceEventsConfig
     {
         var defaults = new ServiceEventsConfig();
 
+        // Resolved once because the log stream falls back to it, matching Java's
+        // getStringEnv("OTEL_AWS_TELEMEND_LOG_STREAM", parsedServiceName).
+        var serviceName = GetServiceName(defaults.ServiceName);
+
         return new ServiceEventsConfig
         {
             Enabled = GetBool("OTEL_AWS_SERVICE_EVENTS_ENABLED", defaults.Enabled),
             ApplicationSignalsEnabled = GetBool("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", defaults.ApplicationSignalsEnabled),
             OutputFile = GetString("OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE", defaults.OutputFile),
-            ServiceName = GetServiceName(defaults.ServiceName),
+            ServiceName = serviceName,
             Environment = GetEnvironment(defaults.Environment),
-            SdkVersion = GetString("OTEL_AWS_SERVICE_EVENTS_SDK_VERSION", defaults.SdkVersion),
 
             FunctionCallFlushInterval = GetInt("OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL", defaults.FunctionCallFlushInterval),
             EndpointFlushInterval = GetInt("OTEL_AWS_SERVICE_EVENTS_ENDPOINT_FLUSH_INTERVAL", defaults.EndpointFlushInterval),
             IncidentSnapshotFlushInterval = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_FLUSH_INTERVAL", defaults.IncidentSnapshotFlushInterval),
 
-            IncidentSnapshotMaxPerPeriod = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_PERIOD", defaults.IncidentSnapshotMaxPerPeriod),
-            IncidentSnapshotPeriodMinutes = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_PERIOD_MINUTES", defaults.IncidentSnapshotPeriodMinutes),
+            IncidentSnapshotMaxPerMinute = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_MINUTE", defaults.IncidentSnapshotMaxPerMinute),
             IncidentSnapshotDurationThresholdMs = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_DURATION_THRESHOLD_MS", defaults.IncidentSnapshotDurationThresholdMs),
             IncidentSnapshotMaxSameError = GetInt("OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_SAME_ERROR", defaults.IncidentSnapshotMaxSameError),
             LatencyThresholds = GetList("OTEL_AWS_SERVICE_EVENTS_LATENCY_THRESHOLDS", defaults.LatencyThresholds),
@@ -209,7 +245,7 @@ public sealed record ServiceEventsConfig
             LogsEndpoint = GetString("OTEL_AWS_OTLP_LOGS_ENDPOINT", defaults.LogsEndpoint),
             MetricsEndpoint = GetString("OTEL_AWS_OTLP_METRICS_ENDPOINT", defaults.MetricsEndpoint),
             LogGroup = GetString("OTEL_AWS_SERVICE_EVENTS_LOG_GROUP", defaults.LogGroup),
-            LogStream = GetString("OTEL_AWS_SERVICE_EVENTS_LOG_STREAM", defaults.LogStream),
+            LogStream = GetString("OTEL_AWS_SERVICE_EVENTS_LOG_STREAM", serviceName),
 
             FunctionInstrumentEnabled = GetBool("OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED", defaults.FunctionInstrumentEnabled),
 

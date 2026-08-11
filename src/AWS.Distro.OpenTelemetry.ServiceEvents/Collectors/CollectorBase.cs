@@ -66,6 +66,8 @@ internal abstract class CollectorBase : IDisposable
     /// <summary>Stop the timer and perform a final drain. Idempotent.</summary>
     public void Dispose()
     {
+        Timer? pending;
+
         lock (this.stateLock)
         {
             if (this.disposed)
@@ -74,8 +76,28 @@ internal abstract class CollectorBase : IDisposable
             }
 
             this.disposed = true;
-            this.timer?.Dispose();
+            pending = this.timer;
             this.timer = null;
+        }
+
+        // Wait for an in-flight tick to finish before the final drain. The parameterless
+        // Timer.Dispose() returns immediately, which used to produce two problems: the `collecting`
+        // guard turned the final RunCollectSafely() below into a no-op (losing the last window), and
+        // the caller went on to dispose the OTLP providers underneath a Collect() that was still
+        // emitting. Timer.Dispose(WaitHandle) signals only once all callbacks have returned.
+        if (pending is not null)
+        {
+            using var timerDrained = new ManualResetEvent(false);
+            if (pending.Dispose(timerDrained))
+            {
+                // Bounded so a wedged Collect() cannot hang process shutdown; ProcessExit gives us
+                // only a couple of seconds in total. On timeout we skip the final flush rather than
+                // race the still-running tick.
+                if (!timerDrained.WaitOne(TimeSpan.FromSeconds(2)))
+                {
+                    return;
+                }
+            }
         }
 
         // Final flush outside the lock so we don't hold it during emission.

@@ -141,7 +141,7 @@ public class SehHistogramTests
     }
 
     [Fact]
-    public void Record_BeyondBucketCap_RejectsNewBucketsButKeepsExistingOnes()
+    public void Record_BeyondBucketCap_FoldsIntoNearestBucketWithoutCreatingNewOnes()
     {
         var h = new SehHistogram(maxBuckets: 3);
 
@@ -150,14 +150,22 @@ public class SehHistogramTests
         h.Record(10000.0).Should().BeTrue();
         h.Record(1000000.0).Should().BeTrue();
 
-        // A 4th distinct bucket is rejected.
-        h.Record(100000000.0).Should().BeFalse();
+        // A 4th distinct bucket would exceed the cap, so the sample is folded into the nearest
+        // existing bucket rather than dropped. Dropping it used to leave the caller's count and
+        // sum describing more samples than the buckets contained.
+        h.Record(100000000.0).Should().BeTrue("the sample must be folded, not discarded");
 
-        // But a value landing in an existing bucket still records.
+        // A value landing in an existing bucket still records as before.
         h.Record(101.0).Should().BeTrue();
 
-        var (values, _) = h.GetValuesAndCounts();
-        values.Should().HaveCount(3);
+        var (_, counts) = h.GetValuesAndCounts();
+
+        counts.Should().HaveCount(3, "folding must not create a new bucket");
+        counts.Sum().Should().Be(5, "every recorded sample must be represented in some bucket");
+        h.Count.Should().Be(5);
+
+        var (_, max, _, _) = h.GetStatistics();
+        max.Should().Be(100000000.0, "the folded sample still sets the observed maximum");
     }
 
     [Theory]
@@ -191,25 +199,21 @@ public class SehHistogramTests
     {
         var h = new SehHistogram(maxBuckets: 100);
 
-        // 100k samples across a wide range (1ns..60ms). Exponential bucketing
-        // keeps the bucket count bounded; samples that would create a new bucket
-        // beyond the cap are rejected.
+        // 100k samples across a wide range (1ns..60ms). Exponential bucketing keeps the bucket
+        // count bounded; samples that would exceed the cap fold into the nearest existing bucket,
+        // so every sample is represented somewhere.
         var rnd = new Random(42);
-        var accepted = 0;
         for (var i = 0; i < 100_000; i++)
         {
-            if (h.Record(rnd.Next(1, 60_000_000)))
-            {
-                accepted++;
-            }
+            h.Record(rnd.Next(1, 60_000_000)).Should().BeTrue();
         }
 
         var (values, counts) = h.GetValuesAndCounts();
 
         values.Count.Should().BeLessThanOrEqualTo(100, "the bucket cap bounds memory regardless of sample count");
 
-        // Invariant: only accepted samples are counted, and bucket counts sum to the total count.
-        counts.Sum().Should().Be(accepted);
-        h.Count.Should().Be(accepted);
+        // The invariant that the desync bug violated: bucket counts account for every sample.
+        counts.Sum().Should().Be(100_000);
+        h.Count.Should().Be(100_000);
     }
 }

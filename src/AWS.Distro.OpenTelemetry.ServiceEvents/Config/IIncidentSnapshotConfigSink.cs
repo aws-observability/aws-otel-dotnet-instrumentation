@@ -11,7 +11,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 internal interface IIncidentSnapshotConfigSink
 {
     /// <summary>Apply a fresh incident-snapshot configuration.</summary>
-    /// <param name="maxPerPeriod">Max snapshots per rate-limit window.</param>
+    /// <param name="maxPerMinute">Max snapshots per minute; the window is fixed at one minute.</param>
     /// <param name="maxSameError">Per-error dedup ceiling.</param>
-    void UpdateIncidentConfig(int maxPerPeriod, int maxSameError);
+    void UpdateIncidentConfig(int maxPerMinute, int maxSameError);
 }

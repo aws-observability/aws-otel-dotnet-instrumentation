@@ -63,7 +63,22 @@ internal sealed class DeploymentEventEmitter : IDisposable
         this.disposed = true;
         try
         {
-            this.timer?.Dispose();
+            // Wait for a periodic re-emission that is already running, so the shutdown emit below
+            // cannot interleave with it and the caller does not dispose the OTLP providers while an
+            // emit is still in flight. Same reasoning as CollectorBase.Dispose; far less likely to
+            // matter here because the cadence is 24 hours, but the pattern should not differ.
+            // Bounded so shutdown can never hang on it.
+            var pending = this.timer;
+            this.timer = null;
+
+            if (pending is not null)
+            {
+                using var drained = new ManualResetEvent(false);
+                if (pending.Dispose(drained))
+                {
+                    drained.WaitOne(TimeSpan.FromSeconds(2));
+                }
+            }
         }
         catch
         {

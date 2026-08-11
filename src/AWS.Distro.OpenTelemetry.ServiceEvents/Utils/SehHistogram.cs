@@ -63,7 +63,7 @@ internal sealed class SehHistogram
     /// </summary>
     /// <param name="value">Value to record (e.g. duration in nanoseconds).</param>
     /// <param name="weight">Weight for this sample (default 1.0).</param>
-    /// <returns><c>true</c> if recorded; <c>false</c> if rejected because the bucket cap was reached for a new bucket.</returns>
+    /// <returns>Always <c>true</c>: a sample that would exceed the bucket cap is folded into the nearest existing bucket rather than dropped.</returns>
     /// <exception cref="ArgumentOutOfRangeException">If value/weight is NaN, infinite, weight &lt;= 0, or value is out of the supported range.</exception>
     public bool Record(double value, double weight = 1.0)
     {
@@ -71,10 +71,22 @@ internal sealed class SehHistogram
 
         var bucketNum = GetBucket(value);
 
-        // Enforce the bucket cap only when this would create a *new* bucket.
+        // At the bucket cap, fold the sample into the nearest existing bucket instead of dropping it.
+        //
+        // Dropping produced metrics that did not add up: the caller (EndpointAggregation) keeps its
+        // own count/sum and emits Counts from this histogram, so a rejected sample left
+        // Sum(Counts) < Count with the surplus duration in no bucket at all, and left Max
+        // understating whenever the rejected sample was the slowest one. Folding keeps
+        // Sum(Counts) == Count and keeps Count/Sum/Min/Max honest; the only cost is that the
+        // folded sample is attributed to an adjacent latency bucket, which is a far smaller
+        // distortion than losing it. The cap is 100 distinct buckets spanning ~13,780x, so this
+        // only triggers for an endpoint mixing very fast and very slow responses in one window.
+        //
+        // This is a deliberate divergence: Java and Python currently drop the sample (their
+        // seh_histogram returns false and the caller ignores it), so they carry the inconsistency.
         if (!this.buckets.ContainsKey(bucketNum) && this.buckets.Count >= this.maxBuckets)
         {
-            return false;
+            bucketNum = this.FindNearestBucket(bucketNum);
         }
 
         this.Count += weight;
@@ -208,5 +220,31 @@ internal sealed class SehHistogram
         }
 
         return Math.Exp((bucketNum + 0.5) * BucketFactor);
+    }
+
+    /// <summary>
+    /// Nearest occupied bucket to <paramref name="bucketNum" />, by bucket-number distance. Ties
+    /// resolve toward the lower bucket so the fold is deterministic. Only reached on the
+    /// bucket-cap path, so this linear scan never runs while there is still room.
+    /// </summary>
+    private int FindNearestBucket(int bucketNum)
+    {
+        var nearest = bucketNum;
+        var bestDistance = long.MaxValue;
+
+        foreach (var candidate in this.buckets.Keys)
+        {
+            // Widened to long because the zero bucket is Int16.MinValue while ordinary duration
+            // buckets are positive, so the span is large enough to be worth being explicit about.
+            var distance = Math.Abs((long)candidate - bucketNum);
+
+            if (distance < bestDistance || (distance == bestDistance && candidate < nearest))
+            {
+                bestDistance = distance;
+                nearest = candidate;
+            }
+        }
+
+        return nearest;
     }
 }

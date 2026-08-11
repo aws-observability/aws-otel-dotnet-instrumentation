@@ -32,10 +32,10 @@ public class ServiceEventsConfigTests
         cfg.FunctionCallFlushInterval.Should().Be(30_000);
         cfg.EndpointFlushInterval.Should().Be(30_000);
         cfg.IncidentSnapshotFlushInterval.Should().Be(10_000);
-        cfg.IncidentSnapshotMaxPerPeriod.Should().Be(100);
-        cfg.IncidentSnapshotPeriodMinutes.Should().Be(1);
+        cfg.IncidentSnapshotMaxPerMinute.Should().Be(100);
         cfg.IncidentSnapshotDurationThresholdMs.Should().Be(5_000);
-        cfg.IncidentSnapshotMaxSameError.Should().Be(2);
+        cfg.IncidentSnapshotMaxSameError.Should().Be(
+            1, "the env-vars spec sets the per-error dedup ceiling to 1");
         cfg.SamplingMode.Should().Be("always");
         cfg.SampleTier1Threshold.Should().Be(100);
         cfg.SampleTier2Threshold.Should().Be(1000);
@@ -43,6 +43,27 @@ public class ServiceEventsConfigTests
         cfg.SampleTier3Rate.Should().Be(100);
         cfg.LogGroup.Should().Be("/serviceevents/telemetry");
         cfg.FunctionInstrumentEnabled.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Pins the incident-snapshot rate-limit env var names to the env-vars spec. The window is fixed
+    /// at one minute there and is deliberately not configurable, so the knob is
+    /// <c>MAX_PER_MINUTE</c>; an earlier <c>MAX_PER_PERIOD</c> plus a <c>PERIOD_MINUTES</c> window
+    /// override existed in no spec and matched no other SDK's customer-facing surface.
+    /// </summary>
+    [Fact]
+    public void FromEnvironment_ReadsIncidentSnapshotRateLimitsUnderTheSpecNames()
+    {
+        using var _ = EnvScope.Set(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_MINUTE"] = "250",
+            ["OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_SAME_ERROR"] = "7",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.IncidentSnapshotMaxPerMinute.Should().Be(250);
+        cfg.IncidentSnapshotMaxSameError.Should().Be(7);
     }
 
     [Fact]

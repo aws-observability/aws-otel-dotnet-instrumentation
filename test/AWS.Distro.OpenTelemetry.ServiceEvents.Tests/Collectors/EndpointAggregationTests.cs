@@ -139,4 +139,54 @@ public class EndpointAggregationTests
         agg.SumDurationNs.Should().Be(10_000L * 1_000_000);
         agg.BuildDurationMetrics().Count.Should().Be(10_000);
     }
+
+    /// <summary>
+    /// The emitted duration metrics must stay internally consistent even when an endpoint's
+    /// latencies span more distinct buckets than the histogram cap allows.
+    /// </summary>
+    /// <remarks>
+    /// <c>RecordDuration</c> bumps <c>count</c>/<c>sumDurationNs</c> for every sample, while
+    /// <c>Counts</c> comes from the histogram. When the histogram silently dropped samples at the
+    /// 100-bucket cap, the emitted record claimed more requests than its buckets contained,
+    /// <c>Sum</c> included durations present in no bucket, and <c>Max</c> understated whenever the
+    /// dropped sample was the slowest one. 1ns..10s at 1.1x per bucket needs far more than 100
+    /// buckets, so this walks straight through the cap.
+    /// </remarks>
+    [Fact]
+    public void BuildDurationMetrics_WhenLatenciesExceedTheBucketCap_StaysSelfConsistent()
+    {
+        var agg = new EndpointAggregation("/wide", "GET");
+
+        // Step by 1.2x: wider than the histogram's 1.1x bucket width, so each sample lands in its
+        // own bucket, and 1ns..10s at that rate needs ~125 of them against a cap of 100.
+        var durations = new List<long>();
+        for (var ns = 1L; ns <= 10_000_000_000L; ns = (long)(ns * 1.2) + 1)
+        {
+            durations.Add(ns);
+        }
+
+        durations.Count.Should().BeGreaterThan(
+            100, "the sample set must actually exceed the 100-bucket cap for this test to bite");
+
+        foreach (var ns in durations)
+        {
+            agg.RecordDuration(ns);
+        }
+
+        var metrics = agg.BuildDurationMetrics();
+
+        metrics.Count.Should().Be(durations.Count, "every request must be counted");
+        metrics.Counts.Sum().Should().Be(
+            metrics.Count,
+            "bucket counts must account for every counted request; dropping a sample at the cap " +
+            "used to leave Sum(Counts) < Count");
+
+        // Durations are nanoseconds internally and microseconds on the wire.
+        metrics.Sum.Should().BeApproximately(durations.Sum() / 1000.0, 0.001);
+        metrics.Min.Should().BeApproximately(durations.Min() / 1000.0, 0.001);
+        metrics.Max.Should().BeApproximately(
+            durations.Max() / 1000.0,
+            0.001,
+            "the slowest request must still set Max even if its own bucket could not be created");
+    }
 }

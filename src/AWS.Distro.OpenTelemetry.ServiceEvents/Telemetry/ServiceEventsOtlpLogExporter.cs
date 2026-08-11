@@ -52,11 +52,25 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private readonly Uri endpoint;
+    private readonly string? logGroup;
+    private readonly string? logStream;
 
-    public ServiceEventsOtlpLogExporter(string endpoint)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ServiceEventsOtlpLogExporter"/> class.
+    /// </summary>
+    /// <param name="endpoint">OTLP/HTTP logs endpoint.</param>
+    /// <param name="logGroup">
+    /// CloudWatch log group, sent as <c>x-aws-log-group</c>. Omitted when null or empty.
+    /// </param>
+    /// <param name="logStream">
+    /// CloudWatch log stream, sent as <c>x-aws-log-stream</c>. Omitted when null or empty.
+    /// </param>
+    public ServiceEventsOtlpLogExporter(string endpoint, string? logGroup = null, string? logStream = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(endpoint);
         this.endpoint = new Uri(endpoint);
+        this.logGroup = logGroup;
+        this.logStream = logStream;
     }
 
     /// <inheritdoc />
@@ -92,9 +106,33 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
 
         try
         {
+            // Suppress instrumentation for the duration of the export. Without this the HTTP client
+            // instrumentation traces our own export POST as if it were a customer dependency call,
+            // putting ServiceEvents' self-telemetry into the customer's traces (and, when the export
+            // target is reachable through an instrumented path, risking export-triggers-export
+            // feedback). This is what the stock OTLP exporters do for the same reason.
+            using var suppress = SuppressInstrumentationScope.Begin();
+
             using var content = new ByteArrayContent(logsData.ToArray());
             content.Headers.ContentType = new MediaTypeHeaderValue("application/x-protobuf");
-            using var response = HttpClient.PostAsync(this.endpoint, content).GetAwaiter().GetResult();
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, this.endpoint) { Content = content };
+
+            // Log group/stream routing metadata, read by the collector or the CloudWatch agent's
+            // OTLP logs pipeline to decide where records land. Sent unconditionally, matching Java
+            // (TelemendInstrumentation) and JS (otlp-emitter); a collector that does not care simply
+            // ignores them.
+            if (!string.IsNullOrEmpty(this.logGroup))
+            {
+                request.Headers.TryAddWithoutValidation("x-aws-log-group", this.logGroup);
+            }
+
+            if (!string.IsNullOrEmpty(this.logStream))
+            {
+                request.Headers.TryAddWithoutValidation("x-aws-log-stream", this.logStream);
+            }
+
+            using var response = HttpClient.Send(request);
             return response.IsSuccessStatusCode ? ExportResult.Success : ExportResult.Failure;
         }
         catch

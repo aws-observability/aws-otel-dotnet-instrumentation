@@ -273,8 +273,18 @@ public class Plugin
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            var alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
-            builder.SetSampler(alwaysRecordSampler);
+        }
+
+        // AlwaysRecordSampler upgrades a Drop decision to RecordOnly so processors still observe
+        // the activity. Application Signals needs that for its span metrics; ServiceEvents needs it
+        // for exactly the same reason — EndpointActivityProcessor.OnEnd only runs for activities the
+        // SDK considers recorded, so without this a standalone ServiceEvents deployment using a
+        // sampling sampler (OTEL_TRACES_SAMPLER=traceidratio, always_off, ...) would silently thin
+        // out or lose its endpoint metrics. The customer's own sampling decision is untouched: the
+        // configured sampler still decides what gets exported as a trace.
+        if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
+        {
+            builder.SetSampler(AlwaysRecordSampler.Create(this.sampler));
         }
         else
         {
@@ -288,7 +298,7 @@ public class Plugin
         if (BackupSamplerEnabled == "true" && SamplerUtil.IsXraySampler())
         {
             var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
-            if (this.IsApplicationSignalsEnabled())
+            if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
             {
                 builder.SetSampler(AlwaysRecordSampler.Create(alwaysOnSampler));
             }
@@ -609,6 +619,19 @@ public class Plugin
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
     // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
     // DI is a modern-profiler feature not shipped in the .NET Framework build.
+    // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
+    // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
+    // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
+    // Always false on .NET Framework, where ServiceEvents is not shipped.
+    private static bool IsServiceEventsActive()
+    {
+#if !NETFRAMEWORK
+        return ServiceEventsInstrumentation.Current?.IsInitialized == true;
+#else
+        return false;
+#endif
+    }
+
     private void InitializeDynamicInstrumentation()
     {
         try
@@ -646,7 +669,28 @@ public class Plugin
             // The distro owns the authoritative version string; pass it in so ServiceEvents'
             // resource reports the same telemetry.distro.version as DistroAttributes above.
             var config = ServiceEventsConfig.FromEnvironment() with { DistroVersion = Version.version };
-            ServiceEventsInstrumentation.GetOrCreate(config).Initialize();
+            var instrumentation = ServiceEventsInstrumentation.GetOrCreate(config);
+            instrumentation.Initialize();
+
+            // Without this, Dispose() never runs outside tests: the agent does not own the
+            // providers ServiceEvents builds privately, so the final endpoint drain, the shutdown
+            // DeploymentEvent and any buffered logs are lost on a graceful exit. ProcessExit is the
+            // broadest hook available here — it covers a normal return from Main and SIGTERM on
+            // Linux (which the runtime surfaces as ProcessExit), though not SIGKILL or a crash,
+            // where no in-process hook could help anyway. The runtime allows only a couple of
+            // seconds in this handler, so Dispose must stay bounded; it is idempotent, so a later
+            // ResetForTests or explicit dispose is harmless.
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try
+                {
+                    instrumentation.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    Logger.LogWarning(disposeEx, "ServiceEvents shutdown flush failed.");
+                }
+            };
         }
         catch (Exception ex)
         {

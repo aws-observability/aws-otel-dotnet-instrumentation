@@ -221,11 +221,22 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     {
         var builder = ResourceBuilder.CreateEmpty()
             .AddEnvironmentVariableDetector()
-            .AddTelemetrySdk()
             .AddAWSEC2Detector()
             .AddAWSEKSDetector()
             .AddAWSECSDetector();
         return builder.Build();
+    }
+
+    /// <summary>
+    /// Attributes every signal must carry regardless of infrastructure detection:
+    /// <c>telemetry.sdk.*</c> and <c>process.pid</c>. Deliberately outside
+    /// <see cref="BuildDetectedResource" />, which runs only when <c>RESOURCE_DETECTORS_ENABLED</c>
+    /// is on — that switch exists to skip AWS infra/IMDS lookups, not to strip the SDK's own
+    /// identity off the telemetry.
+    /// </summary>
+    private static Resource BuildBaseResource()
+    {
+        return ResourceBuilder.CreateEmpty().AddTelemetrySdk().Build();
     }
 
     private static ILoggerFactory BuildLoggerFactory(ServiceEventsConfig config, Dictionary<string, object> resourceAttrs)
@@ -254,7 +265,8 @@ public sealed class ServiceEventsInstrumentation : IDisposable
                 // structured nested body + serviceevents/1.0 scope that the cross-SDK wire
                 // format requires. OTel .NET's string-only LogRecord.Body makes the stock
                 // exporter emit a stringified body + wrong scope. See ServiceEventsOtlpLogExporter.
-                options.AddProcessor(new BatchLogRecordExportProcessor(new ServiceEventsOtlpLogExporter(endpoint)));
+                options.AddProcessor(new BatchLogRecordExportProcessor(
+                    new ServiceEventsOtlpLogExporter(endpoint, config.LogGroup, config.LogStream)));
             });
         });
     }
@@ -364,7 +376,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         if (string.IsNullOrEmpty(this.config.LogsEndpoint) || string.IsNullOrEmpty(this.config.MetricsEndpoint))
         {
             this.logger.LogError(
-                "ServiceEvents is force-enabled (OTEL_AWS_SERVICE_EVENTS_ENABLED=true) without Application Signals, but OTEL_AWS_SERVICE_EVENTS_LOGS_ENDPOINT and/or OTEL_AWS_SERVICE_EVENTS_METRICS_ENDPOINT are unset. Refusing to initialize — set both endpoints explicitly or enable Application Signals.");
+                "ServiceEvents is force-enabled (OTEL_AWS_SERVICE_EVENTS_ENABLED=true) without Application Signals, but OTEL_AWS_OTLP_LOGS_ENDPOINT and/or OTEL_AWS_OTLP_METRICS_ENDPOINT are unset. Refusing to initialize — set both endpoints explicitly or enable Application Signals.");
             return false;
         }
 
@@ -443,6 +455,22 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         // false to avoid IMDS/EKS metadata lookups at build time. Detectors run once here (the
         // dictionary is shared by the logger + meter providers), and our explicit attributes
         // above win over any detector-supplied key.
+        // telemetry.sdk.* and process.pid are not infrastructure detection, so they are applied
+        // unconditionally — RESOURCE_DETECTORS_ENABLED=false must not leave signals without the
+        // SDK identity that every other signal in the pipeline carries.
+        foreach (var kvp in BuildBaseResource().Attributes)
+        {
+            if (!attrs.ContainsKey(kvp.Key))
+            {
+                attrs[kvp.Key] = kvp.Value;
+            }
+        }
+
+        if (!attrs.ContainsKey("process.pid"))
+        {
+            attrs["process.pid"] = System.Environment.ProcessId;
+        }
+
         if (DetectorsEnabled())
         {
             foreach (var kvp in BuildDetectedResource().Attributes)

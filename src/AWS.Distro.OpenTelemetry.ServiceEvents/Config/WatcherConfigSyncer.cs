@@ -59,7 +59,7 @@ internal sealed class WatcherConfigSyncer
         }
 
         sinkSnapshot?.UpdateIncidentConfig(
-            maxPerPeriod: snapshot.IncidentSnapshotMaxPerPeriod,
+            maxPerMinute: snapshot.IncidentSnapshotMaxPerMinute,
             maxSameError: snapshot.IncidentSnapshotMaxSameError);
     }
 }
