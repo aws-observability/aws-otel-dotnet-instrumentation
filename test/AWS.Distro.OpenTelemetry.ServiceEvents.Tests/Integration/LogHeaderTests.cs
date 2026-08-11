@@ -71,7 +71,7 @@ public class LogHeaderTests
     /// Bring ServiceEvents up against a loopback OTLP endpoint, flush, and return the headers of
     /// the first log-export request received.
     /// </summary>
-    private static Dictionary<string, string>? CaptureExportHeaders(Dictionary<string, string?> extraEnv)
+    private static Dictionary<string, string>? CaptureExportHeaders(Dictionary<string, string> extraEnv)
     {
         var logsPort = FreePort();
 
@@ -108,16 +108,13 @@ public class LogHeaderTests
             }
         });
 
-        var env = new Dictionary<string, string?>
+        var env = new Dictionary<string, string>
         {
             ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
             ["OTEL_AWS_APPLICATION_SIGNALS_ENABLED"] = "false",
             ["RESOURCE_DETECTORS_ENABLED"] = "false",
             ["OTEL_AWS_OTLP_LOGS_ENDPOINT"] = $"http://127.0.0.1:{logsPort}/v1/logs",
             ["OTEL_AWS_OTLP_METRICS_ENDPOINT"] = $"http://127.0.0.1:{metricsPort}/v1/metrics",
-
-            // OUTPUT_FILE would bypass the OTLP exporter entirely.
-            ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = null,
         };
 
         foreach (var (key, value) in extraEnv)
@@ -127,6 +124,9 @@ public class LogHeaderTests
 
         try
         {
+            // OUTPUT_FILE would bypass the OTLP exporter entirely, so it must be unset for this
+            // test regardless of what the ambient environment has.
+            using (EnvScope.Clear(new[] { "OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE" }))
             using (EnvScope.Set(env))
             {
                 ServiceEventsInstrumentation.ResetForTests();
