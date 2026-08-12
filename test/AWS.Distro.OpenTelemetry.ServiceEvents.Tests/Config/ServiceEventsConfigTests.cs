@@ -54,7 +54,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_ReadsIncidentSnapshotRateLimitsUnderTheSpecNames()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_MINUTE"] = "250",
             ["OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_SAME_ERROR"] = "7",
@@ -81,7 +81,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_WhenAllSet_ReadsValues()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
             ["OTEL_AWS_APPLICATION_SIGNALS_ENABLED"] = "true",
@@ -110,7 +110,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_BoolParse_IsCaseInsensitive()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "TRUE",
             ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED"] = "False",
@@ -125,7 +125,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_InvalidInt_FallsBackToDefault()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL"] = "not-a-number",
         });
@@ -138,7 +138,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_ServiceName_PrefersOtelServiceNameOverResourceAttrs()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_SERVICE_NAME"] = "explicit-name",
             ["OTEL_RESOURCE_ATTRIBUTES"] = "service.name=attr-name,deployment.environment=prod",
@@ -152,7 +152,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_ServiceName_FallsBackToResourceAttrs()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_RESOURCE_ATTRIBUTES"] = "service.name=attr-name",
         });
@@ -165,7 +165,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_Environment_PrefersDeploymentEnvironmentName()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_RESOURCE_ATTRIBUTES"] = "deployment.environment=legacy,deployment.environment.name=preferred",
         });
@@ -178,7 +178,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_Environment_FallsBackToLegacyKey()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_RESOURCE_ATTRIBUTES"] = "deployment.environment=legacy-only",
         });
@@ -191,7 +191,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_Environment_FallsBackToEnvironmentEnvVar()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["ENVIRONMENT"] = "prod",
         });
@@ -204,7 +204,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_Packages_RejectsBareStarSentinel()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE"] = "myapp,*,otherapp",
         });
@@ -217,7 +217,7 @@ public class ServiceEventsConfigTests
     [Fact]
     public void FromEnvironment_PackagesExclude_ReadsValues()
     {
-        using var _ = EnvScope.Set(new()
+        using var _ = EnvScope.Isolate(new()
         {
             ["OTEL_AWS_SERVICE_EVENTS_PACKAGES_EXCLUDE"] = "System.*,Microsoft.*",
         });
@@ -292,7 +292,10 @@ public class ServiceEventsConfigTests
             envVars["AWS_LAMBDA_FUNCTION_NAME"] = "my-fn";
         }
 
-        using var _ = EnvScope.Set(envVars);
+        // Isolate, not Set: this theory deliberately omits keys to exercise the defaults, so an
+        // ambient OTEL_AWS_SERVICE_EVENTS_ENABLED or AWS_LAMBDA_FUNCTION_NAME would silently
+        // change the outcome.
+        using var _ = EnvScope.Isolate(envVars);
 
         var cfg = new ServiceEventsConfig { ApplicationSignalsEnabled = appSignalsEnabled };
 
@@ -418,6 +421,51 @@ public class ServiceEventsConfigTests
 /// </summary>
 internal sealed class EnvScope : IDisposable
 {
+    /// <summary>
+    /// Every environment variable that can influence <c>ServiceEventsConfig</c> or the emitted
+    /// resource. <see cref="Isolate" /> clears all of them so a test cannot be affected by ambient
+    /// values it never set.
+    /// </summary>
+    /// <remarks>
+    /// Keep this complete. A missing entry is a silent flake: an integration test asserting on an
+    /// omitted attribute passed locally and failed on any machine that happened to export the
+    /// variable. <c>ENVIRONMENT</c> and <c>OTEL_RESOURCE_ATTRIBUTES</c> both feed
+    /// <c>deployment.environment</c>, and the deployment/git variables are read directly by
+    /// <c>DeploymentEventEmitter</c> rather than through the config record.
+    /// </remarks>
+    internal static readonly string[] AllInfluencingVars = new[]
+    {
+        "OTEL_AWS_SERVICE_EVENTS_ENABLED",
+        "OTEL_AWS_APPLICATION_SIGNALS_ENABLED",
+        "OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE",
+        "OTEL_SERVICE_NAME",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "ENVIRONMENT",
+        "RESOURCE_DETECTORS_ENABLED",
+        "AWS_LAMBDA_FUNCTION_NAME",
+        "OTEL_AWS_OTLP_LOGS_ENDPOINT",
+        "OTEL_AWS_OTLP_METRICS_ENDPOINT",
+        "OTEL_AWS_SERVICE_EVENTS_LOG_GROUP",
+        "OTEL_AWS_SERVICE_EVENTS_LOG_STREAM",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_FUNCTION_CALL_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_FLUSH_INTERVAL",
+        "OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_PER_MINUTE",
+        "OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_MAX_SAME_ERROR",
+        "OTEL_AWS_SERVICE_EVENTS_INCIDENT_SNAPSHOT_DURATION_THRESHOLD_MS",
+        "OTEL_AWS_SERVICE_EVENTS_LATENCY_THRESHOLDS",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_INCLUDE_PATTERNS",
+        "OTEL_AWS_SERVICE_EVENTS_ENDPOINT_EXCLUDE_PATTERNS",
+        "OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE",
+        "OTEL_AWS_SERVICE_EVENTS_PACKAGES_EXCLUDE",
+        "OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED",
+        "OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA",
+        "OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL",
+        "OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID",
+        "OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL",
+        "OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP",
+    };
+
     private readonly Dictionary<string, string?> _previous = new();
 
     private EnvScope(IEnumerable<string> trackedVars)
@@ -431,6 +479,31 @@ internal sealed class EnvScope : IDisposable
     public static EnvScope Set(Dictionary<string, string> vars)
     {
         var scope = new EnvScope(vars.Keys);
+        foreach (var (k, v) in vars)
+        {
+            Environment.SetEnvironmentVariable(k, v);
+        }
+
+        return scope;
+    }
+
+    /// <summary>
+    /// Clear every variable in <see cref="AllInfluencingVars" />, then apply <paramref name="vars" />.
+    /// Use this instead of <see cref="Set" /> for tests that assert on emitted output, so the
+    /// assertion cannot be perturbed by a variable exported on the host.
+    /// </summary>
+    public static EnvScope Isolate(Dictionary<string, string> vars)
+    {
+        var tracked = new HashSet<string>(AllInfluencingVars, StringComparer.Ordinal);
+        tracked.UnionWith(vars.Keys);
+
+        var scope = new EnvScope(tracked);
+
+        foreach (var name in tracked)
+        {
+            Environment.SetEnvironmentVariable(name, null);
+        }
+
         foreach (var (k, v) in vars)
         {
             Environment.SetEnvironmentVariable(k, v);

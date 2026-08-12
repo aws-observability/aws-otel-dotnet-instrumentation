@@ -124,10 +124,9 @@ public class LogHeaderTests
 
         try
         {
-            // OUTPUT_FILE would bypass the OTLP exporter entirely, so it must be unset for this
-            // test regardless of what the ambient environment has.
-            using (EnvScope.Clear(new[] { "OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE" }))
-            using (EnvScope.Set(env))
+            // Isolate clears the whole influencing surface first, so OUTPUT_FILE (which would
+            // bypass the OTLP exporter entirely) is unset regardless of the ambient environment.
+            using (EnvScope.Isolate(env))
             {
                 ServiceEventsInstrumentation.ResetForTests();
                 var inst = ServiceEventsInstrumentation.GetOrCreate(ServiceEventsConfig.FromEnvironment());

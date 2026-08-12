@@ -83,8 +83,8 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
         string? functionName = null)
     {
         // Marks this write as in progress for the whole duration of the update, so a concurrent
-        // Collect() cannot read the outgoing map until every writer holding a reference to it has
-        // finished. Two interlocked operations per request; negligible next to the request itself.
+        // Collect() waits for writers holding the outgoing map before reading it (bounded — see
+        // Collect). Two interlocked operations per request; negligible next to the request itself.
         Interlocked.Increment(ref this.recordsInFlight);
 
         try
@@ -142,9 +142,10 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
         // its aggregation from whatever `aggregations` pointed at when it started, so a request that
         // began just before the swap writes into `swapped` after the exchange has already returned.
         // Reading immediately would miss those updates entirely — the requests are simply lost, once
-        // per flush. Waiting for the in-flight count to reach zero guarantees every writer that could
-        // still be holding `swapped` has finished; writers that started after the swap are using the
-        // new map and are only waited on incidentally.
+        // per flush. Waiting for the in-flight count to reach zero means every writer that could
+        // still be holding `swapped` has finished — except on the timeout path below, where we drain
+        // anyway and the original race remains for whatever is still in flight. Writers that started
+        // after the swap are using the new map and are only waited on incidentally.
         //
         // Bounded, because a request that never completes must not stall the flush loop or block
         // shutdown. On timeout we drain anyway and accept the original (now much narrower) race, so

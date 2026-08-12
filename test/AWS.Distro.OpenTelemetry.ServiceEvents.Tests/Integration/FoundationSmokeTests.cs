@@ -28,7 +28,7 @@ public class FoundationSmokeTests
 
         try
         {
-            using (var envScope = EnvScope.Set(new()
+            using (var envScope = EnvScope.Isolate(new()
             {
                 ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
                 ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,
@@ -95,7 +95,7 @@ public class FoundationSmokeTests
 
         try
         {
-            using (var envScope = EnvScope.Set(new()
+            using (var envScope = EnvScope.Isolate(new()
             {
                 ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "false",
                 ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,

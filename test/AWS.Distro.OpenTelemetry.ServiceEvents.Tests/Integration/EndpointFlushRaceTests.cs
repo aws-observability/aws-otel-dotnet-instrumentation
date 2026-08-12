@@ -53,7 +53,7 @@ public class EndpointFlushRaceTests
         {
             long issued;
 
-            using (EnvScope.Set(new()
+            using (EnvScope.Isolate(new()
             {
                 ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
                 ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,

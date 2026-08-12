@@ -138,8 +138,13 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             return route;
         }
 
-        // No route matched (404 / scanner traffic): collapse to the first path segment to bound
+        // No route matched (404 / scanner traffic): collapse to the first path segment to reduce
         // metric cardinality (spec §3) — e.g. "/wp-admin/setup.php" → "/wp-admin".
+        //
+        // This reduces cardinality but does not bound it: traffic spread across many distinct first
+        // segments still yields one aggregation per segment per flush window. The window resets on
+        // every flush so nothing accumulates, and no SDK caps this today, so the behaviour is
+        // deliberately consistent across SDKs rather than capped here unilaterally.
         if (activity.GetTagItem("url.path") is string path && !string.IsNullOrEmpty(path))
         {
             return FirstPathSegment(path);

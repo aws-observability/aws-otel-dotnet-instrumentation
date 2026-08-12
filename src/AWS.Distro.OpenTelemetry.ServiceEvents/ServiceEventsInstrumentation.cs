@@ -211,16 +211,14 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Build a resource carrying the SDK + AWS infrastructure attributes (telemetry.sdk.*,
-    /// host.*, container.id, k8s.pod.name, cloud.*). The environment-variable detector picks up
-    /// the operator-injected <c>OTEL_RESOURCE_ATTRIBUTES</c> (k8s.pod.name / k8s.node.name /
-    /// k8s.namespace.name / service.instance.id / cloud.platform=aws_eks) — the same source the
-    /// AWS distro uses for those.
+    /// Build a resource carrying the AWS infrastructure attributes discovered by querying the
+    /// environment the process runs in (<c>host.*</c>, <c>container.id</c>, <c>cloud.*</c>).
+    /// These detectors reach out to instance metadata endpoints, which is what
+    /// <c>RESOURCE_DETECTORS_ENABLED=false</c> is for.
     /// </summary>
     private static Resource BuildDetectedResource()
     {
         var builder = ResourceBuilder.CreateEmpty()
-            .AddEnvironmentVariableDetector()
             .AddAWSEC2Detector()
             .AddAWSEKSDetector()
             .AddAWSECSDetector();
@@ -229,14 +227,26 @@ public sealed class ServiceEventsInstrumentation : IDisposable
 
     /// <summary>
     /// Attributes every signal must carry regardless of infrastructure detection:
-    /// <c>telemetry.sdk.*</c> and <c>process.pid</c>. Deliberately outside
-    /// <see cref="BuildDetectedResource" />, which runs only when <c>RESOURCE_DETECTORS_ENABLED</c>
-    /// is on — that switch exists to skip AWS infra/IMDS lookups, not to strip the SDK's own
-    /// identity off the telemetry.
+    /// <c>telemetry.sdk.*</c>, <c>process.pid</c>, and whatever the operator injected through
+    /// <c>OTEL_RESOURCE_ATTRIBUTES</c> (<c>k8s.pod.name</c> / <c>k8s.node.name</c> /
+    /// <c>k8s.namespace.name</c> / <c>service.instance.id</c> / <c>cloud.platform=aws_eks</c>).
     /// </summary>
+    /// <remarks>
+    /// Deliberately outside the <c>RESOURCE_DETECTORS_ENABLED</c> gate. That switch exists to skip
+    /// the AWS infra detectors' instance-metadata lookups, which are slow or absent off-AWS —
+    /// reading an environment variable is neither, and the distro itself applies
+    /// <c>AddEnvironmentVariableDetector</c> unconditionally (Plugin.cs), with its own gate
+    /// covering only EC2/EKS/ECS. Gating it here also had a worse consequence than dropping
+    /// attributes: <c>service.instance.id</c> falls back to a fresh <see cref="Guid" /> below, so a
+    /// disabled gate replaced the operator's instance id with a random one and broke correlation
+    /// with the rest of the distro's telemetry.
+    /// </remarks>
     private static Resource BuildBaseResource()
     {
-        return ResourceBuilder.CreateEmpty().AddTelemetrySdk().Build();
+        return ResourceBuilder.CreateEmpty()
+            .AddEnvironmentVariableDetector()
+            .AddTelemetrySdk()
+            .Build();
     }
 
     private static ILoggerFactory BuildLoggerFactory(ServiceEventsConfig config, Dictionary<string, object> resourceAttrs)

@@ -26,7 +26,7 @@ public class EndpointMetricSmokeTests
 
         try
         {
-            using (var _ = EnvScope.Set(new()
+            using (var _ = EnvScope.Isolate(new()
             {
                 ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
                 ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,
@@ -110,7 +110,7 @@ public class EndpointMetricSmokeTests
 
         try
         {
-            using (var _ = EnvScope.Set(new()
+            using (var _ = EnvScope.Isolate(new()
             {
                 ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
                 ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,
