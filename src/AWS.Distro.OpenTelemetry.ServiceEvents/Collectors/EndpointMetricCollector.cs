@@ -151,7 +151,9 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
         // shutdown. On timeout we drain anyway and accept the original (now much narrower) race, so
         // this is never worse than not waiting. Under load the wait is negligible: at 2000 rps with
         // sub-millisecond responses fewer than two requests are typically in flight.
-        this.WaitForInFlightWrites(TimeSpan.FromMilliseconds(250));
+        // Clamped during shutdown so this wait draws from the same deadline as the rest of the
+        // teardown; unchanged (250ms) on a periodic tick, which is not racing process exit.
+        this.WaitForInFlightWrites(this.ClampToShutdownBudget(TimeSpan.FromMilliseconds(250)));
 
         if (swapped.IsEmpty)
         {

@@ -196,6 +196,27 @@ public sealed record ServiceEventsConfig
     /// </summary>
     public string DotnetServiceCodeNamespace { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Gets the VCS commit SHA for the running build, surfaced as deployment provenance on the
+    /// DeploymentEvent and as a resource attribute. Empty when the deployment pipeline does not
+    /// supply it.
+    /// </summary>
+    public string GitCommitSha { get; init; } = string.Empty;
+
+    /// <summary>Gets the VCS repository URL for the running build. Empty when not supplied.</summary>
+    public string GitRepoUrl { get; init; } = string.Empty;
+
+    /// <summary>Gets the deployment identifier supplied by the pipeline. Empty when not supplied.</summary>
+    public string DeploymentId { get; init; } = string.Empty;
+
+    /// <summary>Gets a link to the deployment record. Empty when not supplied.</summary>
+    public string DeploymentUrl { get; init; } = string.Empty;
+
+    /// <summary>Gets the deployment timestamp supplied by the pipeline, passed through as given
+    /// rather than parsed, since the backend accepts the pipeline's own format. Empty when not
+    /// supplied.</summary>
+    public string DeploymentTimestamp { get; init; } = string.Empty;
+
     /// <summary>Gets resource attributes from OTel detectors (cloud/host/container/k8s).</summary>
     public ResourceAttributes ResourceAttributes { get; init; } = new();
 
@@ -250,6 +271,12 @@ public sealed record ServiceEventsConfig
             FunctionInstrumentEnabled = GetBool("OTEL_AWS_SERVICE_EVENTS_FUNCTION_INSTRUMENT_ENABLED", defaults.FunctionInstrumentEnabled),
 
             DotnetServiceCodeNamespace = GetString("OTEL_AWS_SERVICE_EVENTS_DOTNET_SERVICE_CODE_NAMESPACE", defaults.DotnetServiceCodeNamespace),
+
+            GitCommitSha = GetString("OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA", defaults.GitCommitSha),
+            GitRepoUrl = GetString("OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL", defaults.GitRepoUrl),
+            DeploymentId = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID", defaults.DeploymentId),
+            DeploymentUrl = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL", defaults.DeploymentUrl),
+            DeploymentTimestamp = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP", defaults.DeploymentTimestamp),
 
             ResourceAttributes = resourceAttributes ?? new ResourceAttributes(),
         };

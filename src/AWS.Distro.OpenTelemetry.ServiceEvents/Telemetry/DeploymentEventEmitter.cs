@@ -1,7 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Models;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 
@@ -25,6 +27,12 @@ internal sealed class DeploymentEventEmitter : IDisposable
 {
     private static readonly TimeSpan ReEmissionInterval = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// What the dispose path would wait for an in-flight re-emission if it had the whole shutdown
+    /// window to itself. Clamped by the shared budget in practice.
+    /// </summary>
+    private static readonly TimeSpan TimerDrainWait = TimeSpan.FromMilliseconds(250);
+
     private readonly ServiceEventsOtlpEmitter emitter;
     private readonly DeploymentContext context;
     private Timer? timer;
@@ -37,15 +45,15 @@ internal sealed class DeploymentEventEmitter : IDisposable
     }
 
     /// <summary>
-    /// Build deployment context from the current environment, emit a
-    /// <c>startup</c> event once immediately, and schedule periodic
-    /// (<c>periodic</c>) re-emissions every 24 hours.
+    /// Take deployment context from the resolved config, emit a <c>startup</c> event once
+    /// immediately, and schedule periodic (<c>periodic</c>) re-emissions every 24 hours.
     /// </summary>
     /// <param name="emitter">The OTLP emitter to feed.</param>
+    /// <param name="config">Resolved config supplying the deployment/VCS provenance.</param>
     /// <returns>An owner that schedules the re-emission timer.</returns>
-    public static DeploymentEventEmitter StartAndEmit(ServiceEventsOtlpEmitter emitter)
+    public static DeploymentEventEmitter StartAndEmit(ServiceEventsOtlpEmitter emitter, ServiceEventsConfig config)
     {
-        var context = DeploymentContext.FromEnvironment();
+        var context = DeploymentContext.FromConfig(config);
         var owner = new DeploymentEventEmitter(emitter, context);
         owner.Emit("startup");
         owner.timer = new Timer(_ => owner.Emit("periodic"), state: null, ReEmissionInterval, ReEmissionInterval);
@@ -53,7 +61,16 @@ internal sealed class DeploymentEventEmitter : IDisposable
     }
 
     /// <summary>Stop the re-emission timer and emit a final <c>shutdown</c> event.</summary>
-    public void Dispose()
+    public void Dispose() => this.Dispose(ShutdownBudget.FromNow(ShutdownBudget.Default));
+
+    /// <summary>
+    /// Stop the re-emission timer and emit a final <c>shutdown</c> event, drawing any wait from a
+    /// shared shutdown deadline. Idempotent.
+    /// </summary>
+    /// <param name="budget">
+    /// Deadline shared with the other disposables torn down in the same pass.
+    /// </param>
+    internal void Dispose(ShutdownBudget budget)
     {
         if (this.disposed)
         {
@@ -67,16 +84,20 @@ internal sealed class DeploymentEventEmitter : IDisposable
             // cannot interleave with it and the caller does not dispose the OTLP providers while an
             // emit is still in flight. Same reasoning as CollectorBase.Dispose; far less likely to
             // matter here because the cadence is 24 hours, but the pattern should not differ.
-            // Bounded so shutdown can never hang on it.
+            // Drawn from the shared budget so it cannot consume the window the exporter flush needs.
             var pending = this.timer;
             this.timer = null;
 
             if (pending is not null)
             {
-                using var drained = new ManualResetEvent(false);
-                if (pending.Dispose(drained))
+                // Not a `using`, for the same reason as CollectorBase.Dispose: the runtime will
+                // signal this handle when the in-flight callback returns, so disposing it while that
+                // is still pending crashes the process from a thread-pool thread. Disposed only when
+                // the wait actually completed, or when no signal is coming at all.
+                var drained = new ManualResetEvent(false);
+                if (!pending.Dispose(drained) || drained.WaitOne(budget.Clamp(TimerDrainWait)))
                 {
-                    drained.WaitOne(TimeSpan.FromSeconds(2));
+                    drained.Dispose();
                 }
             }
         }
@@ -102,7 +123,7 @@ internal sealed class DeploymentEventEmitter : IDisposable
         }
     }
 
-    /// <summary>Immutable deployment context read once from the environment.</summary>
+    /// <summary>Immutable deployment context, resolved once at startup.</summary>
     private sealed record DeploymentContext(
         string? GitCommitSha,
         string? GitRepoUrl,
@@ -110,12 +131,19 @@ internal sealed class DeploymentEventEmitter : IDisposable
         string? DeploymentUrl,
         string? DeploymentTimestamp)
     {
-        public static DeploymentContext FromEnvironment() => new(
-            GitCommitSha: NullIfEmpty(Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA")),
-            GitRepoUrl: NullIfEmpty(Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL")),
-            DeploymentId: NullIfEmpty(Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID")),
-            DeploymentUrl: NullIfEmpty(Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL")),
-            DeploymentTimestamp: NullIfEmpty(Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP")));
+        /// <summary>
+        /// Project the deployment provenance out of the resolved config. Sourced from config rather
+        /// than read from the environment directly so there is one place that decides what an env
+        /// var means, and so a caller can construct an emitter without mutating process state.
+        /// </summary>
+        /// <param name="config">The resolved ServiceEvents config.</param>
+        /// <returns>The deployment context for this process.</returns>
+        public static DeploymentContext FromConfig(ServiceEventsConfig config) => new(
+            GitCommitSha: NullIfEmpty(config.GitCommitSha),
+            GitRepoUrl: NullIfEmpty(config.GitRepoUrl),
+            DeploymentId: NullIfEmpty(config.DeploymentId),
+            DeploymentUrl: NullIfEmpty(config.DeploymentUrl),
+            DeploymentTimestamp: NullIfEmpty(config.DeploymentTimestamp));
 
         public DeploymentEvent ToEvent(string trigger) => new(
             Trigger: trigger,

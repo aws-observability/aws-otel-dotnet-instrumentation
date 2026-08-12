@@ -5,6 +5,7 @@ using System.Diagnostics.Metrics;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenTelemetry;
@@ -136,13 +137,13 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         catch (Exception ex)
         {
             this.logger.LogError(ex, "ServiceEvents OTLP emitter construction failed; aborting initialization");
-            this.DisposeProvidersOnFailure();
+            this.DisposeProviders();
             return;
         }
 
         // M2: emit DeploymentEvent at process start and schedule the 24h re-emission timer.
         // This is the first signal that flows end-to-end.
-        this.deploymentEventEmitter = DeploymentEventEmitter.StartAndEmit(this.emitter!);
+        this.deploymentEventEmitter = DeploymentEventEmitter.StartAndEmit(this.emitter!, this.config);
 
         // M3: start the endpoint metric collector. Fed by EndpointActivityProcessor,
         // which is registered on the customer's TracerProvider via the plugin's
@@ -169,7 +170,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     /// <summary>Tear down OTLP providers. Idempotent.</summary>
     public void Dispose()
     {
-        this.DisposeProvidersOnFailure();
+        this.DisposeProviders();
         this.initialized = false;
     }
 
@@ -321,13 +322,22 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             ?? throw new InvalidOperationException("Failed to build meter provider.");
     }
 
-    private void DisposeProvidersOnFailure()
+    // Shared by the normal Dispose() path and the abort path in Initialize(), which is why it is not
+    // named for either one: the teardown order and the shutdown budget are identical whether we are
+    // shutting down cleanly or unwinding a half-built pipeline.
+    private void DisposeProviders()
     {
+        // One deadline for every wait below. Each step's own cap is generous on its own, but they run
+        // sequentially and the process-exit window they share is not — overrunning it gets the
+        // process killed mid-flush, losing exactly the telemetry the final drain exists to save.
+        // The exporter flushes that follow (logger factory, meter provider) get whatever is left.
+        var budget = ShutdownBudget.FromNow(ShutdownBudget.Default);
+
         // Dispose the collector first — its final Collect() flushes through the emitter,
         // so the emitter/providers must still be alive at this point.
         try
         {
-            this.endpointCollector?.Dispose();
+            this.endpointCollector?.Dispose(budget);
         }
         catch
         { /* swallow */
@@ -335,7 +345,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
 
         try
         {
-            this.deploymentEventEmitter?.Dispose();
+            this.deploymentEventEmitter?.Dispose(budget);
         }
         catch
         { /* swallow */
@@ -407,9 +417,9 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         this.emitter = new ServiceEventsOtlpEmitter(
             generalLogger,
             this.meter,
-            deploymentId: System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID") ?? string.Empty,
-            gitCommitSha: System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA") ?? string.Empty,
-            gitRepoUrl: System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL") ?? string.Empty);
+            deploymentId: this.config.DeploymentId,
+            gitCommitSha: this.config.GitCommitSha,
+            gitRepoUrl: this.config.GitRepoUrl);
     }
 
     private Dictionary<string, object> BuildResourceAttributes()
@@ -441,22 +451,19 @@ public sealed class ServiceEventsInstrumentation : IDisposable
 
         // Deployment + VCS provenance as resource attributes so they surface as
         // @resource.* on the metrics (and logs), matching the other SDKs' wire format.
-        var deploymentId = System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID");
-        if (!string.IsNullOrEmpty(deploymentId))
+        if (!string.IsNullOrEmpty(this.config.DeploymentId))
         {
-            attrs["aws.service_events.deployment.id"] = deploymentId;
+            attrs["aws.service_events.deployment.id"] = this.config.DeploymentId;
         }
 
-        var gitCommitSha = System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA");
-        if (!string.IsNullOrEmpty(gitCommitSha))
+        if (!string.IsNullOrEmpty(this.config.GitCommitSha))
         {
-            attrs["vcs.ref.head.revision"] = gitCommitSha;
+            attrs["vcs.ref.head.revision"] = this.config.GitCommitSha;
         }
 
-        var gitRepoUrl = System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL");
-        if (!string.IsNullOrEmpty(gitRepoUrl))
+        if (!string.IsNullOrEmpty(this.config.GitRepoUrl))
         {
-            attrs["vcs.repository.url.full"] = gitRepoUrl;
+            attrs["vcs.repository.url.full"] = this.config.GitRepoUrl;
         }
 
         // Infra/SDK resource detectors (telemetry.sdk.*, host.*, container.id, k8s.pod.name,

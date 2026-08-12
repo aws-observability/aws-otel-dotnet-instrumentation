@@ -66,6 +66,35 @@ public class ServiceEventsConfigTests
         cfg.IncidentSnapshotMaxSameError.Should().Be(7);
     }
 
+    /// <summary>
+    /// The deployment/VCS provenance vars belong to config like every other var. They used to be
+    /// read straight from the environment at three separate call sites — the OTLP emitter, the
+    /// resource attributes, and the DeploymentEvent context — which meant three places decided what
+    /// an env var meant and none of them were covered here.
+    /// </summary>
+    [Fact]
+    public void FromEnvironment_ReadsDeploymentAndVcsProvenance()
+    {
+        using var _ = EnvScope.Isolate(new()
+        {
+            ["OTEL_AWS_SERVICE_EVENTS_GIT_COMMIT_SHA"] = "0f1e2d3",
+            ["OTEL_AWS_SERVICE_EVENTS_GIT_REPO_URL"] = "https://github.com/example/repo",
+            ["OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID"] = "deploy-42",
+            ["OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL"] = "https://deploy.example/42",
+            ["OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP"] = "2026-07-16T00:00:00Z",
+        });
+
+        var cfg = ServiceEventsConfig.FromEnvironment();
+
+        cfg.GitCommitSha.Should().Be("0f1e2d3");
+        cfg.GitRepoUrl.Should().Be("https://github.com/example/repo");
+        cfg.DeploymentId.Should().Be("deploy-42");
+        cfg.DeploymentUrl.Should().Be("https://deploy.example/42");
+        cfg.DeploymentTimestamp.Should().Be(
+            "2026-07-16T00:00:00Z",
+            "the timestamp is passed through as the pipeline supplied it rather than reformatted");
+    }
+
     [Fact]
     public void FromEnvironment_WhenAllUnset_ReturnsDefaults()
     {
@@ -76,6 +105,8 @@ public class ServiceEventsConfigTests
         cfg.Enabled.Should().BeFalse();
         cfg.ServiceName.Should().Be("UnknownService");
         cfg.FunctionInstrumentEnabled.Should().BeTrue();
+        cfg.GitCommitSha.Should().BeEmpty("provenance is absent unless a pipeline supplies it");
+        cfg.DeploymentId.Should().BeEmpty();
     }
 
     [Fact]
