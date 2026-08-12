@@ -126,7 +126,9 @@ internal partial class Build : NukeBuild
                     DirectoryExistsPolicy.Merge,
                     FileExistsPolicy.Skip);
 
-            // Bundle the ServiceEvents plugin (co-loaded via OTEL_DOTNET_AUTO_PLUGINS).
+            // Bundle ServiceEvents.dll into the distribution. It is not a separate plugin and gets
+            // no OTEL_DOTNET_AUTO_PLUGINS entry — the distro's own Plugin references its types
+            // directly, so the assembly just has to sit beside it on disk.
             // Merge + Skip so the distro's dependency versions copied above win on any
             // overlap; this only adds ServiceEvents.dll and any deps not already present.
             FileSystemTasks.CopyDirectoryRecursively(

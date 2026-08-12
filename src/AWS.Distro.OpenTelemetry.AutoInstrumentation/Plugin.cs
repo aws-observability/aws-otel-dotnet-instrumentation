@@ -613,16 +613,13 @@ public class Plugin
         return headers;
     }
 
-#if !NETFRAMEWORK
-    // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
-    // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
-    // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
-    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
-    // DI is a modern-profiler feature not shipped in the .NET Framework build.
     // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
     // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
     // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
-    // Always false on .NET Framework, where ServiceEvents is not shipped.
+    //
+    // Deliberately declared outside the #if !NETFRAMEWORK region below. The sampler gate in
+    // AfterConfigureTracerProvider calls this unconditionally, so the method has to exist on every
+    // target framework — including net472, where ServiceEvents is not shipped and it returns false.
     private static bool IsServiceEventsActive()
     {
 #if !NETFRAMEWORK
@@ -632,6 +629,12 @@ public class Plugin
 #endif
     }
 
+#if !NETFRAMEWORK
+    // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
+    // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
+    // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
+    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
+    // DI is a modern-profiler feature not shipped in the .NET Framework build.
     private void InitializeDynamicInstrumentation()
     {
         try
