@@ -27,7 +27,11 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 /// contract: a customer running neither feature must keep their sampler untouched.
 /// </para>
 /// </remarks>
-[Collection("ServiceEventsSingleton")]
+// Shares a collection with every other class that mutates process-global state — the environment
+// and the ServiceEvents singleton. The guard assertions below caught this the hard way: run in
+// parallel, TracerConfigurerTest's constructor flips OTEL_AWS_APPLICATION_SIGNALS_ENABLED to "true"
+// mid-test, which would otherwise make the positive case pass for the wrong reason.
+[Collection("ProcessGlobalState")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class ServiceEventsSamplerGateTest
 {

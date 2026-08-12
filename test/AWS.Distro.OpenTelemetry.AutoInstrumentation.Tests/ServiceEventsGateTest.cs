@@ -27,7 +27,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 /// exercises the default path a customer actually hits.
 /// </para>
 /// </summary>
-[Collection("ServiceEventsSingleton")]
+[Collection("ProcessGlobalState")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class ServiceEventsGateTest
 {
