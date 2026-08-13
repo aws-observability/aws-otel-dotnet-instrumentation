@@ -15,4 +15,8 @@
   <ItemGroup>
     <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="$(CloudWatchPluginPackageVersion)" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
 </Project>
