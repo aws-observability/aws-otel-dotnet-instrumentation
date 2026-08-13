@@ -135,7 +135,7 @@ jobs:
           export OTEL_METRIC_EXPORT_INTERVAL="500"
           export OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED="false"
 
-          output="$("${OTEL_DOTNET_AUTO_HOME}/instrument.sh" \
+          output="$(bash "${OTEL_DOTNET_AUTO_HOME}/instrument.sh" \
             dotnet "${RUNNER_TEMP}/cloudwatch-plugin-smoke/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest.dll" 2>&1)"
           echo "${output}"
           grep -F "traces.span.metrics.calls" <<< "${output}"
