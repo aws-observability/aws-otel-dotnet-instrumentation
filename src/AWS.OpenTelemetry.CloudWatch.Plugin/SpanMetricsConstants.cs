@@ -45,7 +45,7 @@ internal static class SpanMetricsConstants
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion;
 
-        if (string.IsNullOrEmpty(informationalVersion))
+        if (informationalVersion is null || informationalVersion.Length == 0)
         {
             return "unknown";
         }

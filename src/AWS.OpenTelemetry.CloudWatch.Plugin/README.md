@@ -52,37 +52,26 @@ When combining this with another plugin, separate assembly-qualified names with
 ## Manual OpenTelemetry SDK registration
 
 The span metrics connector emits `traces.span.metrics.calls` and
-`traces.span.metrics.duration` from recorded spans. Wire the sampler and
-processor into the OpenTelemetry SDK directly:
+`traces.span.metrics.duration` from recorded spans. Wire it into the
+application's existing OpenTelemetry builders:
 
 ```csharp
 using AWS.OpenTelemetry.CloudWatch.Plugin;
-using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-using var meterProvider = Sdk.CreateMeterProviderBuilder()
-    .AddMeter(SpanMetricsConnector.ScopeName)
-    .AddOtlpExporter()
-    .Build();
-
-using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-    .SetSampler(new AlwaysRecordSampler())
-    .AddProcessor(new SpanMetricsConnector())
-    .AddOtlpExporter()
-    .Build();
-```
-
-Wrap an application-defined sampler to preserve its export decisions:
-
-```csharp
 var sampler = new ParentBasedSampler(new TraceIdRatioBasedSampler(0.1));
 
 tracerBuilder
     .SetSampler(new AlwaysRecordSampler(sampler))
     .AddProcessor(new SpanMetricsConnector());
+
 meterBuilder.AddMeter(SpanMetricsConnector.ScopeName);
 ```
+
+`SpanMetricsConnector` creates the .NET `Meter` and its instruments.
+`AddMeter` subscribes the application's existing `MeterProvider` to that meter;
+it does not create another provider.
 
 `AlwaysRecordSampler` converts drop decisions to record-only decisions so the
 connector observes every span without changing which spans are exported. A
