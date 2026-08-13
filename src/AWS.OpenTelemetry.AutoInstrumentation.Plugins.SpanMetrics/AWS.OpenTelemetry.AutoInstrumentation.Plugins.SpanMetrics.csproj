@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <Description>OpenTelemetry .NET auto-instrumentation plugin that derives call count and duration metrics from spans.</Description>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
+    <LangVersion>10.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+  <PropertyGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <IsPackable>true</IsPackable>
+    <PackageProjectUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation/</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>docs/readme.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>See release notes at https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases</PackageReleaseNotes>
+    <PackageTags>OpenTelemetry;OTEL;tracing;metrics;AWS</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(_IsPacking)' == 'true' ">
+    <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
+  </ItemGroup>
+</Project>

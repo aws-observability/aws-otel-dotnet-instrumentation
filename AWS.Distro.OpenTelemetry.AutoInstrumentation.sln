@@ -49,6 +49,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.Dy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests", "test\AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests\AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.csproj", "{227046A4-554B-47D9-8B27-604E785D3B0C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics", "src\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.csproj", "{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.Tests", "test\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.Tests\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.Tests.csproj", "{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -155,6 +159,30 @@ Global
 		{227046A4-554B-47D9-8B27-604E785D3B0C}.Release|x64.Build.0 = Release|Any CPU
 		{227046A4-554B-47D9-8B27-604E785D3B0C}.Release|x86.ActiveCfg = Release|Any CPU
 		{227046A4-554B-47D9-8B27-604E785D3B0C}.Release|x86.Build.0 = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|x64.Build.0 = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Debug|x86.Build.0 = Debug|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|x64.ActiveCfg = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|x64.Build.0 = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|x86.ActiveCfg = Release|Any CPU
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6}.Release|x86.Build.0 = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|x64.Build.0 = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Debug|x86.Build.0 = Debug|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|x64.ActiveCfg = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|x64.Build.0 = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|x86.ActiveCfg = Release|Any CPU
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -170,5 +198,7 @@ Global
 		{3E5D9A9C-5280-4061-9B6A-5E2FDAF6FE49} = {7E420F1D-B6D6-47AF-A430-5368FE14D2AA}
 		{F42CE997-9C69-409A-8CB5-9B47D9CE594A} = {BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}
 		{227046A4-554B-47D9-8B27-604E785D3B0C} = {DD015346-5FF7-4298-AD31-326B18040908}
+		{FDC85286-C183-4CB9-9AFE-2CEB46E548C6} = {BDFD4285-9DB0-4F47-8EDC-7F32A781DCD4}
+		{82E90AD6-F77F-456C-AD8B-0CE3C30A3A95} = {DD015346-5FF7-4298-AD31-326B18040908}
 	EndGlobalSection
 EndGlobal
