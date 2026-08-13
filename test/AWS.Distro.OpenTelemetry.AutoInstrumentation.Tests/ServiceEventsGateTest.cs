@@ -58,11 +58,63 @@ public class ServiceEventsGateTest
     }
 
     /// <summary>
+    /// The distro and ServiceEvents must agree on what <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED</c>
+    /// means, for every casing.
+    /// <para>
+    /// They did not. This side compared ordinally against <c>"true"</c> while ServiceEvents compared
+    /// case-insensitively, so <c>=True</c> left ServiceEvents suppressing its EndpointSummary because
+    /// it believed App Signals was carrying that data, while the distro never configured App Signals
+    /// at all. The per-endpoint summary — the headline signal of this feature — was then emitted by
+    /// neither pipeline, with no error anywhere, and the customer's sampler was silently replaced.
+    /// </para>
+    /// <para>
+    /// Asserting equality of the two readings rather than a specific value is deliberate: either
+    /// side flipping to a stricter or looser parse in future reintroduces the same class of bug, and
+    /// this fails when they diverge regardless of which one moved.
+    /// </para>
+    /// </summary>
+    /// <param name="rawValue">Casing variant of the flag value to test.</param>
+    [Theory]
+    [InlineData("true")]
+    [InlineData("True")]
+    [InlineData("TRUE")]
+    [InlineData("tRuE")]
+    [InlineData("false")]
+    [InlineData("False")]
+    [InlineData("")]
+    public void ApplicationSignalsFlag_IsReadIdenticallyByTheDistroAndServiceEvents(string rawValue)
+    {
+        var original = System.Environment.GetEnvironmentVariable(Plugin.ApplicationSignalsEnabledConfig);
+        System.Environment.SetEnvironmentVariable(Plugin.ApplicationSignalsEnabledConfig, rawValue);
+
+        try
+        {
+            var distroReading = Plugin.IsEnvFlagTrue(Plugin.ApplicationSignalsEnabledConfig);
+            var serviceEventsReading = ServiceEventsConfig.FromEnvironment().ApplicationSignalsEnabled;
+
+            serviceEventsReading.Should().Be(
+                distroReading,
+                "the distro and ServiceEvents both branch on this flag, and when they disagree the " +
+                "per-endpoint summary is suppressed by one side and never emitted by the other");
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable(Plugin.ApplicationSignalsEnabledConfig, original);
+        }
+    }
+
+    /// <summary>
     /// Puts ServiceEvents into the exact state that made the original gate wrong: singleton
     /// created, but Initialize() bailed out because the feature is disabled.
     /// </summary>
     private static ServiceEventsInstrumentation CreateDisabledInstrumentation()
     {
+        // Reset first. The singleton is process-global and GetOrCreate returns whatever already
+        // exists, so without this the assertions below would read another test's initialized
+        // instance and this test would depend on execution order. ServiceEventsSamplerGateTest
+        // resets for the same reason.
+        ServiceEventsInstrumentation.ResetForTests();
+
         // The config is built in memory rather than via FromEnvironment() on purpose. Environment
         // variables are process-global and xUnit runs test classes in parallel, so reading
         // OTEL_AWS_APPLICATION_SIGNALS_ENABLED here would race with other classes that set it

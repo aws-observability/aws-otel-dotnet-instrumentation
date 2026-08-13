@@ -328,6 +328,12 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
         return b.ToArray();
     }
 
+    // Probes long before double, which is correct and not the cause of the integral-double bug:
+    // TryGetValue<long> defers to JsonElement.TryGetInt64, which rejects a token carrying a fraction
+    // or exponent, so "2000.0" falls through to the double branch on its own. The defect was upstream,
+    // where serialization wrote the double 2000.0 as the token "2000" and destroyed the distinction
+    // before this code ever saw it. Fixed in ServiceEventsOtlpEmitter.BodyJsonOptions; reordering the
+    // probes here would have retyped genuinely integer fields (a duration's Counts and Count) instead.
     private static byte[] JsonValueToAnyValue(JsonValue val)
     {
         var b = new List<byte>();

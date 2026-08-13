@@ -36,7 +36,7 @@ internal static class CallPathCapture
 
     /// <summary>Create the per-request frame buffer on a server span. Call from OnStart.</summary>
     public static void Begin(Activity serverSpan)
-        => serverSpan.SetCustomProperty(PropertyKey, new ConcurrentQueue<CallPathEntry>());
+        => serverSpan.SetCustomProperty(PropertyKey, new FrameBuffer());
 
     /// <summary>
     /// Append a frame to the buffer on the nearest server-span ancestor of <paramref name="childSpan" />.
@@ -45,44 +45,71 @@ internal static class CallPathCapture
     /// </summary>
     public static void Append(Activity childSpan, CallPathEntry frame)
     {
-        var queue = FindBuffer(childSpan);
-        if (queue is null)
+        var buffer = FindBuffer(childSpan);
+        if (buffer is null)
         {
             return;
         }
 
-        if (queue.Count < MaxFrames)
+        // Claim a slot before enqueuing, rather than testing the count and then adding. A request can
+        // have concurrent child spans (any async fan-out), and check-then-act let two of them both
+        // observe room and both enqueue — overshooting MaxFrames, or appending the truncation
+        // sentinel twice. Reserve hands every caller a distinct index, so exactly one of them can see
+        // the boundary value and the sentinel is written exactly once.
+        var slot = buffer.Reserve();
+
+        if (slot <= MaxFrames)
         {
-            queue.Enqueue(frame);
+            buffer.Frames.Enqueue(frame);
         }
-        else if (queue.Count == MaxFrames)
+        else if (slot == MaxFrames + 1)
         {
             // duration_ns == 0 marks this as a partial (unsampled/truncated) frame per spec §5.
-            queue.Enqueue(new CallPathEntry(TruncatedSentinel, null, 0, false, false));
+            buffer.Frames.Enqueue(new CallPathEntry(TruncatedSentinel, null, 0, false, false));
         }
     }
 
     /// <summary>Drain the buffer off a server span (ordered as captured). Empty when none.</summary>
     public static IReadOnlyList<CallPathEntry> Drain(Activity serverSpan)
     {
-        if (serverSpan.GetCustomProperty(PropertyKey) is not ConcurrentQueue<CallPathEntry> queue)
+        if (serverSpan.GetCustomProperty(PropertyKey) is not FrameBuffer buffer)
         {
             return Array.Empty<CallPathEntry>();
         }
 
-        return queue.ToArray();
+        return buffer.Frames.ToArray();
     }
 
-    private static ConcurrentQueue<CallPathEntry>? FindBuffer(Activity span)
+    private static FrameBuffer? FindBuffer(Activity span)
     {
         for (var a = span; a is not null; a = a.Parent)
         {
-            if (a.GetCustomProperty(PropertyKey) is ConcurrentQueue<CallPathEntry> queue)
+            if (a.GetCustomProperty(PropertyKey) is FrameBuffer buffer)
             {
-                return queue;
+                return buffer;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The frames captured for one request, plus the reservation counter that bounds them.
+    /// </summary>
+    /// <remarks>
+    /// The counter is separate from <see cref="Frames" />'s own count on purpose: it has to be
+    /// incremented atomically to decide who gets a slot, and <see cref="ConcurrentQueue{T}.Count" />
+    /// can only be read, not claimed against.
+    /// </remarks>
+    private sealed class FrameBuffer
+    {
+        private int appended;
+
+        /// <summary>Gets the frames captured so far, in append order.</summary>
+        internal ConcurrentQueue<CallPathEntry> Frames { get; } = new();
+
+        /// <summary>Claim the next slot index. Each caller receives a distinct, increasing value.</summary>
+        /// <returns>This caller's 1-based slot index.</returns>
+        internal int Reserve() => Interlocked.Increment(ref this.appended);
     }
 }

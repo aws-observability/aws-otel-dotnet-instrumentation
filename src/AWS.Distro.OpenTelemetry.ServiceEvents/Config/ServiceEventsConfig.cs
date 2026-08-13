@@ -49,11 +49,20 @@ public sealed record ServiceEventsConfig
     internal const string SdkVersion = "0.1.0";
 
     /// <summary>
-    /// Gets a value indicating whether master kill switch. Defaults to false; the bundling-with-Application-Signals
-    /// rule (see <see cref="DetermineEnabled" />) is authoritative for whether
-    /// ServiceEvents actually runs.
+    /// Gets the explicit master kill switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>:
+    /// <c>true</c> forces ServiceEvents on, <c>false</c> forces it off, and <c>null</c> means the
+    /// variable was unset and the Application-Signals bundling rule decides. See
+    /// <see cref="DetermineEnabled" />.
     /// </summary>
-    public bool Enabled { get; init; } = false;
+    /// <remarks>
+    /// Nullable because the rule genuinely has three cases and a plain <c>bool</c> cannot express
+    /// "unset". It was a <c>bool</c>, which is why <see cref="DetermineEnabled" /> re-read the
+    /// environment itself and this property went unused — the value on the config object had no
+    /// effect on whether ServiceEvents ran, so constructing a config in a test proved nothing about
+    /// enablement. One source of truth now, and enablement is testable without mutating process
+    /// state.
+    /// </remarks>
+    public bool? Enabled { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether Application Signals is enabled. Used to suppress signals that
@@ -236,7 +245,7 @@ public sealed record ServiceEventsConfig
 
         return new ServiceEventsConfig
         {
-            Enabled = GetBool("OTEL_AWS_SERVICE_EVENTS_ENABLED", defaults.Enabled),
+            Enabled = GetNullableBool("OTEL_AWS_SERVICE_EVENTS_ENABLED"),
             ApplicationSignalsEnabled = GetBool("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", defaults.ApplicationSignalsEnabled),
             OutputFile = GetString("OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE", defaults.OutputFile),
             ServiceName = serviceName,
@@ -301,15 +310,12 @@ public sealed record ServiceEventsConfig
             return false;
         }
 
-        var explicitFlag = System.Environment.GetEnvironmentVariable("OTEL_AWS_SERVICE_EVENTS_ENABLED");
-        if (string.Equals(explicitFlag, "true", StringComparison.OrdinalIgnoreCase))
+        // Read from the config rather than the environment. This used to re-read
+        // OTEL_AWS_SERVICE_EVENTS_ENABLED directly, which meant config.Enabled was dead and the
+        // decision could not be exercised without mutating process-global state.
+        if (config.Enabled is bool explicitFlag)
         {
-            return true;
-        }
-
-        if (string.Equals(explicitFlag, "false", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
+            return explicitFlag;
         }
 
         return config.ApplicationSignalsEnabled;
@@ -468,6 +474,34 @@ public sealed record ServiceEventsConfig
 
     private static string GetString(string envVar, string defaultValue) =>
         System.Environment.GetEnvironmentVariable(envVar) ?? defaultValue;
+
+    /// <summary>
+    /// Read a tri-state boolean flag: <c>true</c>/<c>false</c> when explicitly set (case-insensitive,
+    /// matching <see cref="GetBool" /> and the distro's own flag parsing), <c>null</c> when unset or
+    /// unrecognised so the caller can distinguish "off" from "not specified".
+    /// </summary>
+    private static bool? GetNullableBool(string envVar)
+    {
+        var raw = System.Environment.GetEnvironmentVariable(envVar);
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+
+        if (string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(raw, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // An unrecognised value is not a decision. Treated as unset so the bundling rule applies,
+        // rather than silently reading as false and disabling the feature on a typo.
+        return null;
+    }
 
     private static bool GetBool(string envVar, bool defaultValue)
     {

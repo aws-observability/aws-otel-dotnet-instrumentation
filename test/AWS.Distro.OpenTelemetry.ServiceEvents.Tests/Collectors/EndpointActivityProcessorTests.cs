@@ -131,6 +131,78 @@ public class EndpointActivityProcessorTests : IDisposable
         recorder.Calls[0].ErrorType.Should().Be("RuntimeException");
     }
 
+    /// <summary>
+    /// The call-path buffer is only allocated when something will drain it. The incident trigger is
+    /// the only consumer, and it is absent until the incident collector is wired, so allocating
+    /// unconditionally cost a queue and a custom property on every server span for data nobody read.
+    /// </summary>
+    [Fact]
+    public void OnStart_WithoutAnIncidentTrigger_AllocatesNoCallPathBuffer()
+    {
+        var processor = new EndpointActivityProcessor(new FakeRecorder(), new ServiceEventsConfig());
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        processor.OnStart(activity);
+
+        activity.GetCustomProperty(CallPathCapture.PropertyKey).Should().BeNull(
+            "nothing drains the buffer without an incident trigger, so it must not be allocated");
+    }
+
+    /// <summary>
+    /// The default configuration has no <c>exception</c> event to read, because ServiceEvents
+    /// deliberately does not enable <c>RecordException</c> — that would attach exception messages and
+    /// stack traces to the customer's own exported spans. The type comes from the <c>error.type</c>
+    /// tag instead, which the ASP.NET Core instrumentation sets on the error path regardless.
+    /// </summary>
+    [Fact]
+    public void OnEnd_5xxWithErrorTypeTagOnly_CapturesExceptionTypeWithoutAnExceptionEvent()
+    {
+        var recorder = new FakeRecorder();
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig());
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "GET");
+        activity.SetTag("http.route", "/exception");
+        activity.SetTag("http.response.status_code", 500);
+        activity.SetTag("error.type", "System.InvalidOperationException");
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        recorder.Calls.Should().ContainSingle();
+        recorder.Calls[0].ErrorType.Should().Be(
+            "System.InvalidOperationException",
+            "error.type carries the same GetType().FullName the exception event would have, so the " +
+            "dimension is unchanged without putting messages or stacks on the customer's span");
+    }
+
+    /// <summary>
+    /// The semantic conventions let <c>error.type</c> hold a protocol error code when no exception was
+    /// involved, so a hand-returned 500 can set it to the literal <c>"500"</c>. That must not be
+    /// mistaken for an exception type.
+    /// </summary>
+    [Fact]
+    public void OnEnd_5xxWithStatusCodeShapedErrorType_DoesNotTreatItAsAnExceptionType()
+    {
+        var recorder = new FakeRecorder();
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig());
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "GET");
+        activity.SetTag("http.route", "/error-status");
+        activity.SetTag("http.response.status_code", 500);
+        activity.SetTag("error.type", "500");
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        recorder.Calls.Should().ContainSingle();
+        recorder.Calls[0].ErrorType.Should().NotBe(
+            "500",
+            "a status code is not an exception type; reporting it as one would put exception=\"500\" " +
+            "on the metric, which is neither the real type nor the HTTP{status} fallback shape");
+    }
+
     [Fact]
     public void OnEnd_5xxWithoutExceptionEvent_EmitsNoSyntheticErrorType()
     {

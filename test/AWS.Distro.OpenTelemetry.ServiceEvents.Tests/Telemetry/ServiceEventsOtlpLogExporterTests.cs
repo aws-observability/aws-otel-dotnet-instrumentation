@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 using FluentAssertions;
@@ -71,6 +72,57 @@ public class ServiceEventsOtlpLogExporterTests
         frame0["error"].Should().Be(true);
         var frame1 = callPath[1].Should().BeOfType<Dictionary<string, object?>>().Subject;
         frame1["error"].Should().Be(false);
+    }
+
+    /// <summary>
+    /// A float-typed body field whose value happens to be a whole number must reach the wire as OTLP
+    /// <c>double_value</c>, and a genuinely integer field must reach it as <c>int_value</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A duration <c>Max</c>/<c>Min</c>/<c>Sum</c> of 2000.0 used to go out as an integer while Java
+    /// and Python emit a double for the same field, so a consumer switching on the AnyValue case saw a
+    /// different type depending on which SDK wrote the record.
+    /// </para>
+    /// <para>
+    /// The cause was serialization, not encoding: the body is packed to a JSON string and reparsed on
+    /// the way out, and <c>System.Text.Json</c> writes the double 2000.0 as the token <c>2000</c>,
+    /// which is then indistinguishable from an integer. So this test runs the whole chain — serialize
+    /// with the emitter's options, reparse, encode, decode — because asserting against a hand-written
+    /// JSON string would pass whether or not the serialization half of the fix is present.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Body_WholeNumberFloatsSurviveSerializationAsDoubles()
+    {
+        // Types as the model declares them: Values/Max/Min/Sum are double, Counts/Count are long.
+        var body = new Dictionary<string, object?>
+        {
+            ["Values"] = new[] { 2000.0d, 1.5d },
+            ["Counts"] = new[] { 2L, 1L },
+            ["Max"] = 2000.0d,
+            ["Min"] = 1.5d,
+            ["Count"] = 3L,
+            ["Sum"] = 6000.0d,
+        };
+
+        var bodyJson = JsonSerializer.Serialize(body, ServiceEventsOtlpEmitter.BodyJsonOptions);
+        var decoded = AnyValueDecoder.Decode(
+            ServiceEventsOtlpLogExporter.JsonNodeToAnyValue(JsonNode.Parse(bodyJson)));
+        var wire = decoded.Should().BeOfType<Dictionary<string, object?>>().Subject;
+
+        wire["Max"].Should().BeOfType<double>(
+            "Max is a float field, and a whole value does not make it an integer").And.Be(2000.0d);
+        wire["Sum"].Should().BeOfType<double>().And.Be(6000.0d);
+        wire["Min"].Should().BeOfType<double>("a non-integral float was never in doubt").And.Be(1.5d);
+        wire["Values"].Should().BeOfType<List<object?>>().Subject
+            .Should().AllBeOfType<double>("every bucket boundary is a float, whole-valued or not");
+
+        wire["Count"].Should().BeOfType<long>(
+            "Count is a long in the model and must stay an integer — this is what makes reordering " +
+            "the encoder's type probes the wrong fix").And.Be(3L);
+        wire["Counts"].Should().BeOfType<List<object?>>().Subject
+            .Should().AllBeOfType<long>("bucket counts are integers");
     }
 }
 

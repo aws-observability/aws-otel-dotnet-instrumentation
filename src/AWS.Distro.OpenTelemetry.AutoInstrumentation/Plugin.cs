@@ -484,19 +484,20 @@ public class Plugin
             }
         };
 
-        // Gated on ServiceEvents being active: recording exceptions adds an `exception` event to
-        // server spans, so it must not change telemetry for customers who have ServiceEvents off.
-        // ServiceEvents needs it to populate IncidentSnapshot's exception_info and to upgrade
-        // EndpointErrorMetrics' `exception` dimension from the HTTP{status} fallback to the real
-        // exception type.
-        // IsInitialized (not a null check on Current) is the correct gate: GetOrCreate always
-        // constructs the singleton, and Initialize() returns early without setting initialized
-        // when ServiceEvents is disabled — Lambda, an explicit OTEL_AWS_SERVICE_EVENTS_ENABLED=false,
-        // App Signals off with no explicit enable, or missing OTLP endpoints when force-enabled.
-        if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
-        {
-            options.RecordException = true;
-        }
+        // Deliberately does NOT set options.RecordException, even though ServiceEvents wants the
+        // exception type for EndpointErrorMetrics' `exception` dimension.
+        //
+        // RecordException makes OTel attach an `exception` event carrying exception.message and
+        // exception.stacktrace to the customer's own server spans, which their trace pipeline then
+        // exports. Messages and stacks routinely contain connection strings, tokens and user
+        // identifiers, so switching it on would leak that into customer-visible telemetry — and
+        // because ServiceEvents is on by default with Application Signals, it would do so silently
+        // on upgrade, for customers who never asked for ServiceEvents at all. Self-telemetry must
+        // not change what the customer's spans contain.
+        //
+        // ServiceEvents gets the type from the `error.type` tag instead, which the ASP.NET Core
+        // instrumentation sets on the error path regardless of this option, and which is a type name
+        // rather than a message. See EndpointActivityProcessor.ReadExceptionDetails.
     }
 #endif
 
@@ -535,6 +536,46 @@ public class Plugin
         };
     }
 #endif
+
+    /// <summary>
+    /// Read a boolean environment flag the way this distro reads every boolean environment flag:
+    /// case-insensitively.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Extracted so there is exactly one answer to "does this value mean true", because there being
+    /// two answers was a real bug. These comparisons used to be written inline and ordinally, so
+    /// <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED=True</c> read as disabled here while ServiceEvents
+    /// (<c>ServiceEventsConfig.GetBool</c>, case-insensitive, matching the Java/Python/JS distros)
+    /// read it as enabled. ServiceEvents then suppressed its own EndpointSummary on the grounds that
+    /// App Signals already carries that data, while this side never configured App Signals at all —
+    /// so the per-endpoint summary was emitted by neither pipeline, silently, and the customer's
+    /// sampler was swapped for AlwaysRecordSampler as well.
+    /// </para>
+    /// <para>
+    /// Use this rather than an inline comparison for any new flag, so the next reader cannot
+    /// reintroduce the disagreement.
+    /// </para>
+    /// </remarks>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>true</c> in any casing.</returns>
+    internal static bool IsEnvFlagTrue(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a boolean environment flag is explicitly set to <c>false</c>, in any casing. Used for
+    /// flags that default to on, where only an explicit false turns them off.
+    /// </summary>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>false</c> in any casing.</returns>
+    internal static bool IsEnvFlagFalse(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "false",
+            StringComparison.OrdinalIgnoreCase);
 
     private static int GetMetricExportInterval()
     {
@@ -744,15 +785,14 @@ public class Plugin
         }
     }
 
-    private bool IsApplicationSignalsEnabled()
-    {
-        return System.Environment.GetEnvironmentVariable(ApplicationSignalsEnabledConfig) == "true";
-    }
+    private bool IsApplicationSignalsEnabled() => IsEnvFlagTrue(ApplicationSignalsEnabledConfig);
 
     private bool IsApplicationSignalsRuntimeEnabled()
     {
+        // Defaults to on, so only an explicit false disables it. An operator writing
+        // RUNTIME_ENABLED=False plainly means off, and the previous ordinal comparison left it on.
         return this.IsApplicationSignalsEnabled() &&
-               !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
+               !IsEnvFlagFalse(ApplicationSignalsRuntimeEnabledConfig);
     }
 
     private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)

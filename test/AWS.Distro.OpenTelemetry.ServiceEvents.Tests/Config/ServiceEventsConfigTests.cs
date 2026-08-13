@@ -24,7 +24,9 @@ public class ServiceEventsConfigTests
         using var _ = EnvScope.Clear(KnownEnvVars);
         var cfg = new ServiceEventsConfig();
 
-        cfg.Enabled.Should().BeFalse();
+        cfg.Enabled.Should().BeNull(
+            "the kill switch is tri-state: unset means the Application Signals bundling rule decides, " +
+            "which is a different thing from an explicit false");
         cfg.ApplicationSignalsEnabled.Should().BeFalse();
         cfg.OutputFile.Should().BeEmpty();
         cfg.ServiceName.Should().Be("UnknownService");
@@ -102,7 +104,7 @@ public class ServiceEventsConfigTests
 
         var cfg = ServiceEventsConfig.FromEnvironment();
 
-        cfg.Enabled.Should().BeFalse();
+        cfg.Enabled.Should().BeNull("an unset kill switch defers to the bundling rule");
         cfg.ServiceName.Should().Be("UnknownService");
         cfg.FunctionInstrumentEnabled.Should().BeTrue();
         cfg.GitCommitSha.Should().BeEmpty("provenance is absent unless a pipeline supplies it");
@@ -328,9 +330,42 @@ public class ServiceEventsConfigTests
         // change the outcome.
         using var _ = EnvScope.Isolate(envVars);
 
-        var cfg = new ServiceEventsConfig { ApplicationSignalsEnabled = appSignalsEnabled };
+        // Built via FromEnvironment so the kill switch travels the real path — env var into
+        // config.Enabled, config into the decision. Constructing the config by hand would set only
+        // ApplicationSignalsEnabled and leave Enabled unset, which is what let the property go dead
+        // in the first place: DetermineEnabled re-read the environment, so a hand-built config could
+        // never disagree with it and the wiring was never covered.
+        var cfg = ServiceEventsConfig.FromEnvironment() with { ApplicationSignalsEnabled = appSignalsEnabled };
 
         ServiceEventsConfig.DetermineEnabled(cfg).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// The enablement decision reads the config object, not the environment.
+    /// <para>
+    /// This is the case the theory above cannot cover: it sets the environment variable and builds the
+    /// config from it, so both a config-reading and an environment-reading implementation pass. Here
+    /// the environment is empty and the value exists only on the config, which is exactly what was
+    /// broken — <c>DetermineEnabled</c> re-read the environment, so <c>config.Enabled</c> had no
+    /// effect on anything and setting it proved nothing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DetermineEnabled_ReadsTheConfigObjectRatherThanTheEnvironment()
+    {
+        // Nothing set: any environment read returns null, so only the config can supply an answer.
+        using var _ = EnvScope.Isolate(new());
+
+        ServiceEventsConfig.DetermineEnabled(new ServiceEventsConfig { Enabled = true })
+            .Should().BeTrue("an explicit true on the config must force ServiceEvents on");
+
+        ServiceEventsConfig.DetermineEnabled(
+                new ServiceEventsConfig { Enabled = false, ApplicationSignalsEnabled = true })
+            .Should().BeFalse("an explicit false on the config must win over the bundling rule");
+
+        ServiceEventsConfig.DetermineEnabled(
+                new ServiceEventsConfig { Enabled = null, ApplicationSignalsEnabled = true })
+            .Should().BeTrue("unset must defer to Application Signals, not read as false");
     }
 
     [Fact]

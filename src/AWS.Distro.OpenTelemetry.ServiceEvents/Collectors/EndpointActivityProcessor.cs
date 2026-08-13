@@ -46,7 +46,11 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     {
         // Create the per-request call_path frame buffer on the server span so instrumented
         // child spans can append to it (used by latency incidents; see CallPathCapture).
-        if (activity.Kind == ActivityKind.Server)
+        //
+        // Gated on there being an incident trigger, because it is the only thing that ever drains the
+        // buffer. Without one this allocated a queue and a custom property on every single server
+        // span and then threw them away — per-request hot-path cost for data nobody read.
+        if (this.incidentTrigger is not null && activity.Kind == ActivityKind.Server)
         {
             CallPathCapture.Begin(activity);
         }
@@ -89,10 +93,36 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     }
 
     /// <summary>
-    /// Read the exception type/message/stack trace from the span's <c>exception</c>
-    /// event. Unlike <see cref="ReadError" />, this returns the real exception type
-    /// (no <c>HTTP{status}</c> fallback) and null when no exception was recorded.
+    /// Read the exception type/message/stack trace for a failed request. Unlike
+    /// <see cref="ReadError" />, this returns the real exception type (no <c>HTTP{status}</c>
+    /// fallback) and null when no exception information is available at all.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two sources, in order of richness:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>
+    /// The span's <c>exception</c> event, which carries type, message and stack. It exists only when
+    /// something enabled <c>RecordException</c> — the customer's own configuration, or another
+    /// instrumentation. ServiceEvents deliberately does not enable it (see
+    /// <c>Plugin.ConfigureTracesOptions</c>): that event lands on the customer's exported spans, and
+    /// messages and stacks carry secrets and PII. When a customer has opted into it themselves we
+    /// read it, because then the data is already in their telemetry by their own choice.
+    /// </description></item>
+    /// <item><description>
+    /// The <c>error.type</c> tag, which the ASP.NET Core instrumentation sets on the error path
+    /// independently of <c>RecordException</c>. Type only, which is all
+    /// <c>EndpointErrorMetrics</c>' <c>exception</c> dimension needs, and a type name carries no
+    /// payload data. This is the source in the default configuration.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// Nothing here reads a message or stack from <c>error.type</c> because it has none; incident
+    /// snapshots that need them will have to capture the exception through a private channel rather
+    /// than by mutating the customer's span.
+    /// </para>
+    /// </remarks>
     private static (string? Type, string? Message, string? StackTrace) ReadExceptionDetails(Activity activity)
     {
         foreach (var evt in activity.Events)
@@ -127,7 +157,45 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             }
         }
 
+        // No exception event, so fall back to error.type. The instrumentation sets it to
+        // exc.GetType().FullName — the same string the exception event's exception.type carries — so
+        // the dimension value is identical either way.
+        if (activity.GetTagItem("error.type") is string errorType && IsExceptionTypeName(errorType))
+        {
+            return (errorType, null, null);
+        }
+
         return (null, null, null);
+    }
+
+    /// <summary>
+    /// Whether an <c>error.type</c> value is an exception type name rather than a status code.
+    /// </summary>
+    /// <remarks>
+    /// The semantic conventions allow <c>error.type</c> to hold a protocol-level error code when no
+    /// exception was involved, so on a hand-returned 500 it can be the literal <c>"500"</c>. Feeding
+    /// that through as an exception type would produce <c>exception="500"</c>, which is neither the
+    /// real type nor the <c>HTTP{status}</c> shape callers expect — so digit-only values are rejected
+    /// and left to <see cref="ReadError" />'s fallback.
+    /// </remarks>
+    /// <param name="errorType">The raw <c>error.type</c> tag value.</param>
+    /// <returns><c>true</c> when the value looks like an exception type name.</returns>
+    private static bool IsExceptionTypeName(string errorType)
+    {
+        if (string.IsNullOrEmpty(errorType))
+        {
+            return false;
+        }
+
+        foreach (var c in errorType)
+        {
+            if (!char.IsDigit(c))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Resolve the route template: <c>http.route</c> → first segment of <c>url.path</c> → DisplayName.</summary>
@@ -176,10 +244,19 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     }
 
     /// <summary>
-    /// Extract the exception type from the span when it errored. Reads the OTel
-    /// <c>exception</c> event's <c>exception.type</c> tag. Function name is not
-    /// available at the HTTP-span level, so it is reported as <c>"unknown"</c>.
+    /// Extract the exception type from the span when it errored, for the
+    /// <c>EndpointErrorMetrics</c> <c>exception</c> dimension. Function name is not available at the
+    /// HTTP-span level, so it is reported as <c>"unknown"</c>.
     /// </summary>
+    /// <remarks>
+    /// Two sources, richest first: the <c>exception</c> event's <c>exception.type</c>, which exists
+    /// only when something enabled <c>RecordException</c>, then the <c>error.type</c> tag, which the
+    /// ASP.NET Core instrumentation sets on the error path regardless. ServiceEvents deliberately does
+    /// not enable <c>RecordException</c> — it would attach exception messages and stack traces to the
+    /// customer's exported spans (see <c>Plugin.ConfigureTracesOptions</c>) — so in the default
+    /// configuration <c>error.type</c> is the source. Both carry <c>GetType().FullName</c>, so the
+    /// dimension value is the same either way.
+    /// </remarks>
     private static (string? ErrorType, string? FunctionName) ReadError(Activity activity, int statusCode)
     {
         var isError = statusCode >= 400 || activity.Status == ActivityStatusCode.Error;
@@ -205,7 +282,12 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             }
         }
 
-        // No exception type was captured. Per spec §3/§7 we emit NO synthetic exception
+        if (activity.GetTagItem("error.type") is string errorType && IsExceptionTypeName(errorType))
+        {
+            return (errorType, "unknown");
+        }
+
+        // No exception type from either source. Per spec §3/§7 we emit NO synthetic exception
         // (no "HTTP{code}" / "UnknownError"): a 5xx that returned a status without raising
         // increments request.faults but produces no breakdown entry or count data point.
         return (null, null);

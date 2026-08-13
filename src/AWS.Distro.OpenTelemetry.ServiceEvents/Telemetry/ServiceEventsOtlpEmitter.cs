@@ -3,6 +3,9 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 using Microsoft.Extensions.Logging;
 
@@ -46,6 +49,16 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
     internal const string EndpointSummaryEventName = "aws.service_events.endpoint_summary";
     internal const string IncidentSnapshotEventName = "aws.service_events.incident_snapshot";
     internal const string DeploymentEventEventName = "aws.service_events.deployment_event";
+
+    /// <summary>
+    /// Serialization for the structured body. Carries a converter that keeps integral doubles
+    /// recognisably float once the body has been through JSON, so they reach the wire as
+    /// <c>double_value</c> rather than <c>int_value</c>.
+    /// </summary>
+    internal static readonly JsonSerializerOptions BodyJsonOptions = new()
+    {
+        Converters = { new PreserveFloatDoubleConverter() },
+    };
 
     private readonly ILogger generalLogger;
     private readonly Counter<long> errorCounter;
@@ -247,7 +260,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
     {
         if (body is not null)
         {
-            attributes.Add(new("body", System.Text.Json.JsonSerializer.Serialize(body)));
+            attributes.Add(new("body", System.Text.Json.JsonSerializer.Serialize(body, BodyJsonOptions)));
         }
 
         // Use a synthetic event id so log filters can target ServiceEvents events
@@ -323,5 +336,52 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
         public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() => this.attributes.GetEnumerator();
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => this.GetEnumerator();
+    }
+
+    /// <summary>
+    /// Writes <see cref="double" /> values so that whole numbers keep a decimal point: the double
+    /// 2000.0 is written as <c>2000.0</c> rather than <c>2000</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The body's float-typed fields — a duration's <c>Values</c>, <c>Max</c>, <c>Min</c> and
+    /// <c>Sum</c> — are <c>double</c> in the model, but the default writer emits an integral double as
+    /// a bare integer token. The body is packed into a JSON string and reparsed on the way to the wire
+    /// (OTel .NET's LogRecord body is string-only), and by then <c>2000</c> is indistinguishable from
+    /// an integer, so the field went out as OTLP <c>int_value</c> while Java and Python emit a double
+    /// for the same field. A consumer switching on the AnyValue case sees a different type depending
+    /// on which SDK produced the record.
+    /// </para>
+    /// <para>
+    /// Keeping the decimal point preserves the distinction the CLR types already made, with no list of
+    /// field names anywhere: fields declared <c>long</c> — a duration's <c>Counts</c> and
+    /// <c>Count</c> — take the default integer path and stay integers.
+    /// </para>
+    /// </remarks>
+    private sealed class PreserveFloatDoubleConverter : JsonConverter<double>
+    {
+        /// <inheritdoc />
+        public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => reader.GetDouble();
+
+        /// <inheritdoc />
+        public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options)
+        {
+            // NaN and infinity are not valid JSON numbers. Defer to the default writer rather than
+            // inventing a representation for them here.
+            if (!double.IsFinite(value))
+            {
+                writer.WriteNumberValue(value);
+                return;
+            }
+
+            var text = value.ToString("R", CultureInfo.InvariantCulture);
+            if (text.IndexOf('.') < 0 && text.IndexOf('E') < 0 && text.IndexOf('e') < 0)
+            {
+                text += ".0";
+            }
+
+            writer.WriteRawValue(text);
+        }
     }
 }
