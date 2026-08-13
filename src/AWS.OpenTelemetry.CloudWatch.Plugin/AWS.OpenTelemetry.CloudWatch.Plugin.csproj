@@ -13,19 +13,26 @@
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <OpenTelemetryVersion Condition="'$(OpenTelemetryVersion)' == ''">[1.15.3,2.0.0)</OpenTelemetryVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
-    <LangVersion>10.0</LangVersion>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <AdditionalFiles Include=".publicApi\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include=".publicApi\PublicAPI.Unshipped.txt" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 

@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <SignAssembly>true</SignAssembly>
@@ -9,15 +10,23 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);CS8002;SA0001;SA1204;SA1300;SA1402;SA1600</NoWarn>
+    <OpenTelemetryVersion Condition="'$(OpenTelemetryVersion)' == ''">1.16.0</OpenTelemetryVersion>
+    <OpenTelemetryAutoInstrumentationVersion Condition="'$(OpenTelemetryAutoInstrumentationVersion)' == ''">1.16.0</OpenTelemetryAutoInstrumentationVersion>
+    <IncludeAutoInstrumentationTests Condition="'$(IncludeAutoInstrumentationTests)' == ''">true</IncludeAutoInstrumentationTests>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation.Runtime.Managed" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation.Runtime.Managed"
+                      Version="$(OpenTelemetryAutoInstrumentationVersion)"
+                      Condition="'$(IncludeAutoInstrumentationTests)' == 'true'" />
+    <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="$(OpenTelemetryVersion)" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -31,8 +40,12 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(CloudWatchPluginPackageVersion)' == ''">
     <ProjectReference Include="..\..\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(CloudWatchPluginPackageVersion)' != ''">
+    <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="$(CloudWatchPluginPackageVersion)" />
   </ItemGroup>
 
 </Project>

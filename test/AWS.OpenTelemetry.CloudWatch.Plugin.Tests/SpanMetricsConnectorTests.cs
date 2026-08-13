@@ -140,6 +140,47 @@ public class SpanMetricsConnectorTests
         Assert.Equal("UNSET", tags["status.code"]);
     }
 
+    [Theory]
+    [InlineData(ActivityKind.Internal, "INTERNAL")]
+    [InlineData(ActivityKind.Server, "SERVER")]
+    [InlineData(ActivityKind.Client, "CLIENT")]
+    [InlineData(ActivityKind.Producer, "PRODUCER")]
+    [InlineData(ActivityKind.Consumer, "CONSUMER")]
+    public void SpanMetricsConnectorMapsEverySpanKind(ActivityKind kind, string expected)
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record("kind-" + expected, kind);
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(
+            pipeline.Metrics,
+            "traces.span.metrics.calls",
+            "kind-" + expected));
+
+        Assert.Equal(expected, tags["span.kind"]);
+    }
+
+    [Theory]
+    [InlineData(ActivityStatusCode.Unset, "UNSET")]
+    [InlineData(ActivityStatusCode.Ok, "OK")]
+    [InlineData(ActivityStatusCode.Error, "ERROR")]
+    public void SpanMetricsConnectorMapsEveryStatus(ActivityStatusCode status, string expected)
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "status-" + expected,
+            ActivityKind.Internal,
+            activity => activity.SetStatus(status));
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(
+            pipeline.Metrics,
+            "traces.span.metrics.calls",
+            "status-" + expected));
+
+        Assert.Equal(expected, tags["status.code"]);
+    }
+
     [Fact]
     public void SpanMetricsConnectorCanonicalAttributesTakePrecedence()
     {
@@ -182,6 +223,32 @@ public class SpanMetricsConnectorTests
         Assert.DoesNotContain("db.operation", tags.Keys);
         Assert.DoesNotContain("db.sql.table", tags.Keys);
         Assert.DoesNotContain("messaging.destination", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorCopiesRemainingCanonicalAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "canonical",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("error.type", "timeout");
+                activity.SetTag("rpc.service", "Greeter");
+                activity.SetTag("rpc.method", "SayHello");
+                activity.SetTag("messaging.system", "kafka");
+                activity.SetTag("messaging.operation.name", "publish");
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "canonical"));
+
+        Assert.Equal("timeout", tags["error.type"]);
+        Assert.Equal("Greeter", tags["rpc.service"]);
+        Assert.Equal("SayHello", tags["rpc.method"]);
+        Assert.Equal("kafka", tags["messaging.system"]);
+        Assert.Equal("publish", tags["messaging.operation.name"]);
     }
 
     [Fact]
@@ -230,18 +297,22 @@ public class SpanMetricsConnectorTests
     }
 
     [Theory]
-    [InlineData("messaging.destination.temporary")]
-    [InlineData("messaging.destination.anonymous")]
-    public void SpanMetricsConnectorSuppressesEphemeralMessagingDestinations(string suppressionKey)
+    [InlineData("messaging.destination.temporary", "messaging.destination.name")]
+    [InlineData("messaging.destination.anonymous", "messaging.destination.name")]
+    [InlineData("messaging.destination.temporary", "messaging.destination")]
+    [InlineData("messaging.destination.anonymous", "messaging.destination")]
+    public void SpanMetricsConnectorSuppressesEphemeralMessagingDestinations(
+        string suppressionKey,
+        string destinationKey)
     {
         using var pipeline = new TestPipeline(new AlwaysOnSampler());
         pipeline.Record(
-            "ephemeral-" + suppressionKey,
+            "ephemeral-" + suppressionKey + "-" + destinationKey,
             ActivityKind.Producer,
             activity =>
             {
                 activity.SetTag("messaging.system", "kafka");
-                activity.SetTag("messaging.destination.name", "orders");
+                activity.SetTag(destinationKey, "orders");
                 activity.SetTag(suppressionKey, true);
             });
         pipeline.Flush();
@@ -249,10 +320,10 @@ public class SpanMetricsConnectorTests
         var tags = GetTags(GetPoint(
             pipeline.Metrics,
             "traces.span.metrics.calls",
-            "ephemeral-" + suppressionKey));
+            "ephemeral-" + suppressionKey + "-" + destinationKey));
 
         Assert.Equal("kafka", tags["messaging.system"]);
-        Assert.DoesNotContain("messaging.destination.name", tags.Keys);
+        Assert.DoesNotContain(destinationKey, tags.Keys);
     }
 
     [Fact]
@@ -274,6 +345,43 @@ public class SpanMetricsConnectorTests
         var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "collection"));
 
         Assert.Equal("sql-table", tags["db.sql.table"]);
+    }
+
+    [Theory]
+    [InlineData("db.sql.table")]
+    [InlineData("db.mongodb.collection")]
+    [InlineData("db.cassandra.table")]
+    [InlineData("db.cosmosdb.container")]
+    public void SpanMetricsConnectorCopiesEachDbCollectionFallback(string collectionKey)
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "collection-" + collectionKey,
+            ActivityKind.Client,
+            activity => activity.SetTag(collectionKey, "users"));
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(
+            pipeline.Metrics,
+            "traces.span.metrics.calls",
+            "collection-" + collectionKey));
+
+        Assert.Equal("users", tags[collectionKey]);
+        Assert.DoesNotContain("db.collection.name", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorIgnoresMalformedCallbacks()
+    {
+        var processor = new SpanMetricsConnector();
+
+        var exception = Record.Exception(() =>
+        {
+            processor.OnStart(null!);
+            processor.OnEnd(null!);
+        });
+
+        Assert.Null(exception);
     }
 
     [Fact]

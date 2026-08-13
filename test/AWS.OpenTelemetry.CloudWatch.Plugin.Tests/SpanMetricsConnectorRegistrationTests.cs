@@ -153,6 +153,7 @@ public class SpanMetricsConnectorRegistrationTests
     }
 
     [Fact]
+    [Trait("Category", "AutoInstrumentation")]
     public void SpanMetricsConnectorUpstreamAutoInstrumentationPluginRecordsMetrics()
     {
         using var environment = new SamplerEnvironment("always_off", null);

@@ -1,0 +1,228 @@
+name: CloudWatch Plugin Tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cloudwatch-plugin-test.yml"
+      - "src/AWS.OpenTelemetry.CloudWatch.Plugin/**"
+      - "test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests/**"
+      - "test/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cloudwatch-plugin-test.yml"
+      - "src/AWS.OpenTelemetry.CloudWatch.Plugin/**"
+      - "test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests/**"
+      - "test/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE_VERSION: 1.0.0
+
+jobs:
+  package-compatibility:
+    name: NuGet ${{ matrix.dependency.name }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-2022
+        dependency:
+          - name: minimum
+            otel_version: 1.15.3
+            auto_version: 1.15.0
+          - name: latest-supported
+            otel_version: 1.*
+            auto_version: 1.*
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Pack CloudWatch plugin
+        shell: pwsh
+        run: |
+          dotnet pack src/AWS.OpenTelemetry.CloudWatch.Plugin `
+            --configuration Release `
+            --output "${{ runner.temp }}/cloudwatch-plugin-packages" `
+            -p:TreatWarningsAsErrors=true
+
+      - name: Test installed CloudWatch plugin package
+        shell: pwsh
+        run: |
+          dotnet test test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests `
+            --configuration Release `
+            -p:CloudWatchPluginPackageVersion=${{ env.PACKAGE_VERSION }} `
+            "-p:OpenTelemetryVersion=${{ matrix.dependency.otel_version }}" `
+            "-p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto_version }}" `
+            -p:RestoreAdditionalProjectSources="${{ runner.temp }}/cloudwatch-plugin-packages" `
+            -p:TreatWarningsAsErrors=true
+
+  upstream-auto-instrumentation:
+    name: Upstream auto ${{ matrix.auto_version }} on ${{ matrix.tfm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        auto_version:
+          - 1.15.0
+          - 1.16.0
+        tfm:
+          - net8.0
+          - net9.0
+          - net10.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Pack and publish smoke test
+        run: |
+          package_dir="${RUNNER_TEMP}/cloudwatch-plugin-packages"
+          dotnet pack src/AWS.OpenTelemetry.CloudWatch.Plugin \
+            --configuration Release \
+            --output "${package_dir}" \
+            -p:TreatWarningsAsErrors=true
+          dotnet publish test/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest \
+            --configuration Release \
+            --framework "${{ matrix.tfm }}" \
+            --output "${RUNNER_TEMP}/cloudwatch-plugin-smoke" \
+            -p:CloudWatchPluginPackageVersion="${PACKAGE_VERSION}" \
+            -p:RestoreAdditionalProjectSources="${package_dir}" \
+            -p:TreatWarningsAsErrors=true
+
+      - name: Download upstream auto-instrumentation
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${{ matrix.auto_version }}/opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip" \
+            --output "${RUNNER_TEMP}/otel-auto.zip"
+          unzip -q "${RUNNER_TEMP}/otel-auto.zip" -d "${RUNNER_TEMP}/otel-auto"
+
+      - name: Run smoke test with upstream auto-instrumentation
+        run: |
+          export OTEL_DOTNET_AUTO_HOME="${RUNNER_TEMP}/otel-auto"
+          export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
+          export OTEL_DOTNET_AUTO_LOG_DIRECTORY="${RUNNER_TEMP}/otel-auto-logs"
+          export OTEL_SERVICE_NAME="cloudwatch-plugin-smoke-test"
+          export OTEL_TRACES_EXPORTER="console"
+          export OTEL_METRICS_EXPORTER="console"
+          export OTEL_LOGS_EXPORTER="none"
+          export OTEL_TRACES_SAMPLER="always_off"
+          export OTEL_METRIC_EXPORT_INTERVAL="500"
+          export OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED="false"
+
+          output="$("${OTEL_DOTNET_AUTO_HOME}/instrument.sh" \
+            dotnet "${RUNNER_TEMP}/cloudwatch-plugin-smoke/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest.dll" 2>&1)"
+          echo "${output}"
+          grep -F "traces.span.metrics.calls" <<< "${output}"
+          grep -F "traces.span.metrics.duration" <<< "${output}"
+          grep -F "CloudWatch plugin smoke test completed." <<< "${output}"
+          if grep -F "Activity.TraceId:" <<< "${output}"; then
+            echo "A record-only span was incorrectly exported."
+            exit 1
+          fi
+
+  upstream-auto-instrumentation-netfx:
+    name: Upstream auto ${{ matrix.auto_version }} on net472
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        auto_version:
+          - 1.15.0
+          - 1.16.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack and publish smoke test
+        shell: pwsh
+        run: |
+          $packageDir = Join-Path $env:RUNNER_TEMP "cloudwatch-plugin-packages"
+          dotnet pack src/AWS.OpenTelemetry.CloudWatch.Plugin `
+            --configuration Release `
+            --output $packageDir `
+            -p:TreatWarningsAsErrors=true
+          dotnet publish test/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest `
+            --configuration Release `
+            --framework net472 `
+            --output (Join-Path $env:RUNNER_TEMP "cloudwatch-plugin-smoke") `
+            -p:CloudWatchPluginPackageVersion=${{ env.PACKAGE_VERSION }} `
+            -p:RestoreAdditionalProjectSources=$packageDir `
+            -p:TreatWarningsAsErrors=true
+
+      - name: Download upstream auto-instrumentation
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "otel-auto.zip"
+          $autoHome = Join-Path $env:RUNNER_TEMP "otel-auto"
+          Invoke-WebRequest `
+            -Uri "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${{ matrix.auto_version }}/opentelemetry-dotnet-instrumentation-windows.zip" `
+            -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $autoHome
+
+      - name: Run smoke test with upstream auto-instrumentation
+        shell: pwsh
+        run: |
+          $autoHome = Join-Path $env:RUNNER_TEMP "otel-auto"
+          $env:OTEL_DOTNET_AUTO_HOME = $autoHome
+          $env:OTEL_DOTNET_AUTO_LOG_DIRECTORY = Join-Path $env:RUNNER_TEMP "otel-auto-logs"
+          $env:COR_ENABLE_PROFILING = "1"
+          $env:COR_PROFILER = "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
+          $env:COR_PROFILER_PATH_64 = Join-Path $autoHome "win-x64/OpenTelemetry.AutoInstrumentation.Native.dll"
+          $env:COR_PROFILER_PATH_32 = Join-Path $autoHome "win-x86/OpenTelemetry.AutoInstrumentation.Native.dll"
+          $env:OTEL_DOTNET_AUTO_PLUGINS = "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
+          $env:OTEL_SERVICE_NAME = "cloudwatch-plugin-smoke-test"
+          $env:OTEL_TRACES_EXPORTER = "console"
+          $env:OTEL_METRICS_EXPORTER = "console"
+          $env:OTEL_LOGS_EXPORTER = "none"
+          $env:OTEL_TRACES_SAMPLER = "always_off"
+          $env:OTEL_METRIC_EXPORT_INTERVAL = "500"
+          $env:OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED = "false"
+
+          $application = Join-Path $env:RUNNER_TEMP "cloudwatch-plugin-smoke/AWS.OpenTelemetry.CloudWatch.Plugin.AutoInstrumentation.SmokeTest.exe"
+          $output = & $application 2>&1 | Out-String
+          Write-Output $output
+          if (-not $output.Contains("traces.span.metrics.calls")) {
+            throw "CloudWatch span metrics were not exported."
+          }
+          if (-not $output.Contains("traces.span.metrics.duration")) {
+            throw "CloudWatch span duration metrics were not exported."
+          }
+          if ($output.Contains("Activity.TraceId:")) {
+            throw "A record-only span was incorrectly exported."
+          }
+          if (-not $output.Contains("CloudWatch plugin smoke test completed.")) {
+            throw "Smoke test application did not complete."
+          }
