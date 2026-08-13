@@ -46,6 +46,7 @@ public sealed class CloudWatchPlugin
     /// <returns>The configured meter provider builder.</returns>
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
-        return builder.AddCloudWatchSpanMetrics();
+        builder.AddMeter(SpanMetricsConnector.ScopeName);
+        return builder;
     }
 }

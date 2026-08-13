@@ -11,40 +11,42 @@ dotnet add package AWS.OpenTelemetry.CloudWatch.Plugin
 ## Span metrics
 
 The span metrics connector emits `traces.span.metrics.calls` and
-`traces.span.metrics.duration` from recorded spans. Register it through the
-standard OpenTelemetry builder APIs:
+`traces.span.metrics.duration` from recorded spans. Wire the sampler and
+processor into the OpenTelemetry SDK directly:
 
 ```csharp
+using AWS.OpenTelemetry.CloudWatch.Plugin;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 using var meterProvider = Sdk.CreateMeterProviderBuilder()
-    .AddCloudWatchSpanMetrics()
+    .AddMeter(SpanMetricsConnector.ScopeName)
     .AddOtlpExporter()
     .Build();
 
 using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-    .AddCloudWatchSpanMetrics()
+    .SetSampler(new AlwaysRecordSampler())
+    .AddProcessor(new SpanMetricsConnector())
     .AddOtlpExporter()
     .Build();
 ```
 
-The tracer extension wraps the sampler selected by `OTEL_TRACES_SAMPLER` and
-`OTEL_TRACES_SAMPLER_ARG`. Drop decisions become record-only decisions so the
-connector observes every span without changing which spans are exported.
-
-Pass a sampler to preserve an application-defined sampling policy:
+Wrap an application-defined sampler to preserve its export decisions:
 
 ```csharp
 var sampler = new ParentBasedSampler(new TraceIdRatioBasedSampler(0.1));
 
-tracerBuilder.AddCloudWatchSpanMetrics(sampler);
-meterBuilder.AddCloudWatchSpanMetrics();
+tracerBuilder
+    .SetSampler(new AlwaysRecordSampler(sampler))
+    .AddProcessor(new SpanMetricsConnector());
+meterBuilder.AddMeter(SpanMetricsConnector.ScopeName);
 ```
 
-A later `SetSampler` call replaces the wrapper. Do not combine builder
-registration with the auto-instrumentation plugin.
+`AlwaysRecordSampler` converts drop decisions to record-only decisions so the
+connector observes every span without changing which spans are exported. A
+later `SetSampler` call replaces the wrapper. Do not combine manual registration
+with the auto-instrumentation plugin.
 
 ## Auto-instrumentation plugin
 

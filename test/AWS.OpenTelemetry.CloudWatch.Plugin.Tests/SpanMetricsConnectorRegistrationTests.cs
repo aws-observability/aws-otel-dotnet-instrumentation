@@ -19,12 +19,13 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddCloudWatchSpanMetrics()
+            .AddMeter(SpanMetricsConnector.ScopeName)
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .AddCloudWatchSpanMetrics()
+            .SetSampler(new AlwaysRecordSampler())
+            .AddProcessor(new SpanMetricsConnector())
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -49,12 +50,13 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddCloudWatchSpanMetrics()
+            .AddMeter(SpanMetricsConnector.ScopeName)
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
+            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
+            .AddProcessor(new SpanMetricsConnector())
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -78,7 +80,8 @@ public class SpanMetricsConnectorRegistrationTests
     public void SpanMetricsConnectorManualSamplerCanBeOverwrittenByLaterSetSampler()
     {
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
+            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
+            .AddProcessor(new SpanMetricsConnector())
             .SetSampler(new AlwaysOffSampler())
             .Build();
 
@@ -95,7 +98,8 @@ public class SpanMetricsConnectorRegistrationTests
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .AddCloudWatchSpanMetrics()
+            .SetSampler(new AlwaysRecordSampler())
+            .AddProcessor(new SpanMetricsConnector())
             .Build();
         using var source = new ActivitySource(sourceName);
 
