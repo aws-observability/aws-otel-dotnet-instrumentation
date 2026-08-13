@@ -2,13 +2,43 @@
 
 Amazon CloudWatch plugin for OpenTelemetry .NET.
 
-## Installation
+## OpenTelemetry .NET auto-instrumentation
+
+This package extends the upstream OpenTelemetry .NET Automatic Instrumentation
+distribution. It does not require the AWS Distro for OpenTelemetry.
+
+Use the package version built for the same OpenTelemetry version as the
+automatic instrumentation distribution. This release targets upstream
+OpenTelemetry .NET Automatic Instrumentation `1.16.0`.
+
+Install the package in the instrumented application:
 
 ```console
 dotnet add package AWS.OpenTelemetry.CloudWatch.Plugin
 ```
 
-## Span metrics
+Then add the plugin's assembly-qualified type to the upstream OTel
+auto-instrumentation configuration:
+
+```sh
+export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
+```
+
+Keep the application's existing upstream OTel auto-instrumentation settings,
+including `CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`,
+`CORECLR_PROFILER_PATH`, `DOTNET_ADDITIONAL_DEPS`, `DOTNET_SHARED_STORE`,
+`DOTNET_STARTUP_HOOKS`, and exporter configuration.
+
+For a deployment that cannot add a package reference, extract the
+framework-specific `AWS.OpenTelemetry.CloudWatch.Plugin.dll` from the NuGet
+package into the upstream distribution's managed assemblies directory under
+`OTEL_DOTNET_AUTO_HOME` (`net` for .NET or `netfx` for .NET Framework), then set
+`OTEL_DOTNET_AUTO_PLUGINS` as shown above.
+
+When combining this with another plugin, separate assembly-qualified names with
+`:`, and list this plugin after any plugin that sets a sampler.
+
+## Manual OpenTelemetry SDK registration
 
 The span metrics connector emits `traces.span.metrics.calls` and
 `traces.span.metrics.duration` from recorded spans. Wire the sampler and
@@ -47,22 +77,6 @@ meterBuilder.AddMeter(SpanMetricsConnector.ScopeName);
 connector observes every span without changing which spans are exported. A
 later `SetSampler` call replaces the wrapper. Do not combine manual registration
 with the auto-instrumentation plugin.
-
-## Auto-instrumentation plugin
-
-This package is distributed independently and is not bundled with the AWS
-Distro for OpenTelemetry .NET distribution. Install it separately and place
-`AWS.OpenTelemetry.CloudWatch.Plugin.dll` in the managed assemblies directory
-under `OTEL_DOTNET_AUTO_HOME` (`net` for .NET or `netfx` for .NET Framework).
-
-Add the assembly-qualified plugin name to `OTEL_DOTNET_AUTO_PLUGINS`:
-
-```sh
-export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
-```
-
-When combining it with another plugin, separate assembly-qualified names with
-`:`, and list this plugin after any plugin that sets a sampler.
 
 ## License
 

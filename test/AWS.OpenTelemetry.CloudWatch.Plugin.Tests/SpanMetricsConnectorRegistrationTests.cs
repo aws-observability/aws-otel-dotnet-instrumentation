@@ -13,6 +13,9 @@ namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
 [Collection(SpanMetricsConnectorCollection.Name)]
 public class SpanMetricsConnectorRegistrationTests
 {
+    private const string CloudWatchPluginName =
+        "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin";
+
     [Fact]
     public void SpanMetricsConnectorManualRegistrationRecordsMetrics()
     {
@@ -149,6 +152,49 @@ public class SpanMetricsConnectorRegistrationTests
                 "auto-plugin").GetSumLong());
     }
 
+    [Fact]
+    public void SpanMetricsConnectorUpstreamAutoInstrumentationPluginRecordsMetrics()
+    {
+        using var environment = new SamplerEnvironment("always_off", null);
+        var metrics = new List<Metric>();
+        var exportedActivities = new List<Activity>();
+        var sourceName = UniqueName();
+        var pluginManager = CreateUpstreamPluginManager();
+        var meterBuilder = Sdk.CreateMeterProviderBuilder().AddInMemoryExporter(metrics);
+        meterBuilder = InvokePluginManager(
+            pluginManager,
+            "AfterConfigureMeterProviderBuilder",
+            meterBuilder);
+        using var meterProvider = meterBuilder.Build();
+        var tracerBuilder = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .AddInMemoryExporter(exportedActivities);
+        tracerBuilder = InvokePluginManager(
+            pluginManager,
+            "AfterConfigureTracerProviderBuilder",
+            tracerBuilder);
+        using var tracerProvider = tracerBuilder.Build();
+        InvokePluginManagerAction(pluginManager, "InitializedProvider", tracerProvider);
+        using var source = new ActivitySource(sourceName);
+
+        using (var activity = source.StartActivity("upstream-auto-plugin"))
+        {
+            Assert.NotNull(activity);
+            Assert.False(activity.Recorded);
+        }
+
+        tracerProvider.ForceFlush();
+        meterProvider.ForceFlush();
+
+        Assert.Empty(exportedActivities);
+        Assert.Equal(
+            1,
+            SpanMetricsConnectorTests.GetPoint(
+                metrics,
+                "traces.span.metrics.calls",
+                "upstream-auto-plugin").GetSumLong());
+    }
+
     [Theory]
     [InlineData(null, null)]
     [InlineData("always_on", null)]
@@ -204,6 +250,41 @@ public class SpanMetricsConnectorRegistrationTests
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(property);
         return Assert.IsAssignableFrom<Sampler>(property.GetValue(provider));
+    }
+
+    private static object CreateUpstreamPluginManager()
+    {
+        var autoInstrumentationAssembly = Assembly.Load("OpenTelemetry.AutoInstrumentation");
+        var settingsType = autoInstrumentationAssembly.GetType(
+            "OpenTelemetry.AutoInstrumentation.Configurations.PluginsSettings");
+        Assert.NotNull(settingsType);
+        var settings = Activator.CreateInstance(settingsType, nonPublic: true);
+        Assert.NotNull(settings);
+        var pluginsProperty = settingsType.GetProperty("Plugins");
+        Assert.NotNull(pluginsProperty);
+        var plugins = Assert.IsAssignableFrom<IList<string>>(pluginsProperty.GetValue(settings));
+        plugins.Add(CloudWatchPluginName);
+
+        var pluginManagerType = autoInstrumentationAssembly.GetType(
+            "OpenTelemetry.AutoInstrumentation.Plugins.PluginManager");
+        Assert.NotNull(pluginManagerType);
+        var pluginManager = Activator.CreateInstance(pluginManagerType, settings);
+        Assert.NotNull(pluginManager);
+        return pluginManager;
+    }
+
+    private static T InvokePluginManager<T>(object pluginManager, string methodName, T argument)
+    {
+        var method = pluginManager.GetType().GetMethod(methodName, new[] { typeof(T) });
+        Assert.NotNull(method);
+        return Assert.IsAssignableFrom<T>(method.Invoke(pluginManager, new object[] { argument! }));
+    }
+
+    private static void InvokePluginManagerAction<T>(object pluginManager, string methodName, T argument)
+    {
+        var method = pluginManager.GetType().GetMethod(methodName, new[] { typeof(T) });
+        Assert.NotNull(method);
+        method.Invoke(pluginManager, new object[] { argument! });
     }
 
     private static string UniqueName()
