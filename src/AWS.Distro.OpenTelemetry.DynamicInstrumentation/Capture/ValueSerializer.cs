@@ -251,7 +251,22 @@ internal static class ValueSerializer
                 .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
                 .ToArray();
 
-            totalMemberCount = typeFields.Length + readableProperties.Length;
+            // DISTINCT NAMES: `fields` below is keyed by name, and GetFields does NOT apply hide-by-name, so a
+            // `public new string Name` returns TWO FieldInfos (a derived property shadowing a base field
+            // collides the same way). Counting both reported `size` greater than the members actually emitted
+            // for an object captured completely — a truncation signal for nothing dropped.
+            var capturableNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var field in typeFields)
+            {
+                capturableNames.Add(field.Name);
+            }
+
+            foreach (var prop in readableProperties)
+            {
+                capturableNames.Add(prop.Name);
+            }
+
+            totalMemberCount = capturableNames.Count;
 
             foreach (var field in typeFields)
             {

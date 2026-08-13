@@ -442,6 +442,33 @@ public class ValueSerializerTests
         result.Value!.Length.Should().Be(255);
     }
 
+    [Fact]
+    public void Serialize_ShadowedMember_DoesNotDoubleCountTowardTheTruncationSize()
+    {
+        // GetFields does not apply hide-by-name, so `new` shadowing returns two FieldInfos for one NAME while
+        // `fields` is keyed by name. Counting both reported a member as dropped when none distinct was.
+        var limits = DefaultLimits with { MaxFieldsPerObject = 1 };
+
+        var result = ValueSerializer.Serialize(new ShadowedDerived(), limits);
+
+        result.Fields.Should().HaveCount(1);
+        result.OriginalSize.Should().Be(
+            2,
+            "the shadowed name counts once: two distinct names (Name, Other), not three members");
+    }
+
+    private class ShadowedBase
+    {
+        public string Name = "base";
+    }
+
+    private class ShadowedDerived : ShadowedBase
+    {
+        public new string Name = "derived";
+
+        public string Other = "other";
+    }
+
     private class TestObj
     {
         public string Name { get; set; } = "";

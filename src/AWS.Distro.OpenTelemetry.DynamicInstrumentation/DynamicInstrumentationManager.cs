@@ -25,7 +25,14 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private readonly object configChangeLock = new();
 
     // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
-    private readonly HashSet<string> appliedInstrumentations = new();
+    // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity.
+    //
+    // WHY THE HASH AND NOT JUST THE KEY. An in-place edit of a probe (different captured arguments, a
+    // different MaxHits) arrives as the SAME key with a NEW LocationHash. With a key-only set that edit was
+    // invisible: RemoveStale did not consider the key stale, so nothing was forgotten, and this loop saw the
+    // key already present and skipped it. The edited configuration was never applied and never reported any
+    // status, while the previous incarnation's identity stayed the one the backend knew about.
+    private readonly Dictionary<string, string> appliedInstrumentations = new();
 
     private volatile bool initialized;
     private DynamicInstrumentationConfig? config;
@@ -233,10 +240,21 @@ public sealed class DynamicInstrumentationManager : IDisposable
         {
             var config = registered.Config;
             var key = config.InstrumentationKey;
-            if (!this.appliedInstrumentations.Add(key))
+            if (this.appliedInstrumentations.TryGetValue(key, out var appliedHash))
             {
-                continue; // Already applied on a previous poll.
+                if (string.Equals(appliedHash, config.LocationHash, StringComparison.Ordinal))
+                {
+                    continue; // Already applied on a previous poll, and unchanged.
+                }
+
+                // EDITED IN PLACE: same target, new configuration identity. Retire the previous incarnation's
+                // status state so the edited config is judged on its own — it must earn READY through this
+                // apply, and must not inherit the old identity's ERROR.
+                this.appliedInstrumentations.Remove(key);
+                this.statusReporter?.Forget(appliedHash);
             }
+
+            this.appliedInstrumentations[key] = config.LocationHash;
 
             IReadOnlyCollection<int> appliedArities = Array.Empty<int>();
             var result = this.profilerTranslator?.ApplyInstrumentation(config, out appliedArities)
@@ -244,6 +262,12 @@ public sealed class DynamicInstrumentationManager : IDisposable
             switch (result)
             {
                 case InstrumentationApplyResult.Applied:
+                    // The target is woven, so this config may now report READY. Marked here rather than
+                    // inferred from registration: every supported config is registered, including ones that did
+                    // not apply (TypeNotLoaded, permanent failures), and READY for those claimed a probe was
+                    // live when nothing had been instrumented.
+                    this.statusReporter?.MarkApplied(config);
+
                     // Index the woven arities so the capture hot path resolves this call by (type, arity),
                     // disambiguating co-located methods that differ in parameter count (#3). A same-arity
                     // collision (two configured methods on one type with the same parameter count) can't be

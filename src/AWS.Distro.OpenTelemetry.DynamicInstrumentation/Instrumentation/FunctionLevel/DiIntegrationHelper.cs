@@ -322,8 +322,25 @@ internal static class DiIntegrationHelper
             return null;
         }
 
-        return registry.TryResolveKeyByTypeAndArity(targetType, arity)
-            ?? MatchKeyByType(targetType, registry);
+        var byArity = registry.TryResolveKeyByTypeAndArity(targetType, arity);
+        if (byArity != null)
+        {
+            return byArity;
+        }
+
+        // NO TYPE-ONLY FALLBACK FOR A TYPE THE PROFILER HAS ALREADY WOVEN.
+        //
+        // The woven IL outlives its configuration — removal cannot un-weave a method — so a deleted method's
+        // callback keeps firing. If the arity index has no entry for this call on a woven type, the config for
+        // THIS method is gone, and the only correct answer is to capture nothing. Falling through to the
+        // type-only match would attribute the deleted method's arguments and return value to whichever probe
+        // still happens to be the type's single remaining config, under ITS LocationHash and capture policy —
+        // a plausible-looking snapshot on the wrong probe, with no error reported anywhere.
+        //
+        // The fallback still serves its documented purpose: a capture that fires between Register and the
+        // Apply-time IndexArities call, and registries populated without applying (unit tests). Both are
+        // cases where the type has never been woven.
+        return registry.HasArityIndex(targetType) ? null : MatchKeyByType(targetType, registry);
     }
 
     // True when the woven method's return is an awaitable the profiler will continue on (calling
