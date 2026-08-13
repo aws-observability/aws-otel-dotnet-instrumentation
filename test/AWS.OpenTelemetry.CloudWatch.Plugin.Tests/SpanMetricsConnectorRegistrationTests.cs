@@ -8,7 +8,7 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.Tests;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
 
 [Collection(SpanMetricsConnectorCollection.Name)]
 public class SpanMetricsConnectorRegistrationTests
@@ -19,13 +19,12 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddCloudWatchSpanMetrics()
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler())
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics()
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -50,13 +49,12 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddCloudWatchSpanMetrics()
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -80,8 +78,7 @@ public class SpanMetricsConnectorRegistrationTests
     public void SpanMetricsConnectorManualSamplerCanBeOverwrittenByLaterSetSampler()
     {
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
             .SetSampler(new AlwaysOffSampler())
             .Build();
 
@@ -98,8 +95,7 @@ public class SpanMetricsConnectorRegistrationTests
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler())
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics()
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -120,7 +116,7 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var exportedActivities = new List<Activity>();
         var sourceName = UniqueName();
-        var plugin = new SpanMetricsConnectorPlugin();
+        var plugin = new CloudWatchPlugin();
         var meterBuilder = plugin.AfterConfigureMeterProvider(
             Sdk.CreateMeterProviderBuilder().AddInMemoryExporter(metrics));
         using var meterProvider = meterBuilder.Build();
@@ -165,7 +161,7 @@ public class SpanMetricsConnectorRegistrationTests
         using var environment = new SamplerEnvironment(samplerName, samplerArgument);
         var rootSampler = CreateExpectedRootSampler(samplerName, samplerArgument);
         var builder = Sdk.CreateTracerProviderBuilder();
-        new SpanMetricsConnectorPlugin().AfterConfigureTracerProvider(builder);
+        new CloudWatchPlugin().AfterConfigureTracerProvider(builder);
         using var provider = builder.Build();
 
         var installed = GetInstalledSampler(provider);
@@ -177,7 +173,7 @@ public class SpanMetricsConnectorRegistrationTests
     [Fact]
     public void SpanMetricsConnectorAutoPluginReadsSamplerEnvironmentForEveryCall()
     {
-        var plugin = new SpanMetricsConnectorPlugin();
+        var plugin = new CloudWatchPlugin();
 
         using var alwaysOffEnvironment = new SamplerEnvironment("always_off", null);
         var alwaysOffBuilder = Sdk.CreateTracerProviderBuilder();

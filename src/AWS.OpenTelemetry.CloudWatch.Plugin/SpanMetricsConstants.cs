@@ -3,7 +3,7 @@
 
 using System.Reflection;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 
 internal static class SpanMetricsConstants
 {

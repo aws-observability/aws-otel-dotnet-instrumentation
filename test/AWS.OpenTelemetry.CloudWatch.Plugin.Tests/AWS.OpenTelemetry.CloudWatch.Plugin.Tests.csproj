@@ -31,7 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics\AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.csproj" />
+    <ProjectReference Include="..\..\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj" />
   </ItemGroup>
 
 </Project>

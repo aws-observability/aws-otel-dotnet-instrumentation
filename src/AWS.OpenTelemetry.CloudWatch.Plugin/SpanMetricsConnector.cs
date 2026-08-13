@@ -4,9 +4,9 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
-using static AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.SpanMetricsAttributeKeys;
+using static AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsAttributeKeys;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 
 /// <summary>
 /// Derives call count and duration metrics from every recorded span.

@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Version>1.0.0</Version>
-    <Description>OpenTelemetry .NET auto-instrumentation plugin that derives call count and duration metrics from spans.</Description>
+    <PackageId>AWS.OpenTelemetry.CloudWatch.Plugin</PackageId>
+    <Title>Amazon CloudWatch plugin for OpenTelemetry .NET</Title>
+    <Description>Amazon CloudWatch plugin for OpenTelemetry .NET.</Description>
+    <Authors>Amazon Web Services</Authors>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
@@ -30,15 +33,16 @@
     <IsPackable>true</IsPackable>
     <PackageProjectUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation/</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageReadmeFile>docs/readme.md</PackageReadmeFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageReleaseNotes>See release notes at https://github.com/aws-observability/aws-otel-dotnet-instrumentation/releases</PackageReleaseNotes>
-    <PackageTags>OpenTelemetry;OTEL;tracing;metrics;AWS</PackageTags>
+    <PackageReleaseNotes>See CHANGELOG.md in the project repository.</PackageReleaseNotes>
+    <PackageTags>OpenTelemetry;OTEL;CloudWatch;tracing;metrics;AWS</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/aws-observability/aws-otel-dotnet-instrumentation.git</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup Condition=" '$(_IsPacking)' == 'true' ">
-    <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="CHANGELOG.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

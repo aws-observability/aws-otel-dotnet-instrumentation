@@ -7,7 +7,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics.Tests;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
 
 [Collection(SpanMetricsConnectorCollection.Name)]
 public class SpanMetricsConnectorTests

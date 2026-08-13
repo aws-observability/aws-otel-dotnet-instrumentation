@@ -3,7 +3,7 @@
 
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 
 /// <summary>
 /// Converts drop decisions from another sampler to record-only decisions.

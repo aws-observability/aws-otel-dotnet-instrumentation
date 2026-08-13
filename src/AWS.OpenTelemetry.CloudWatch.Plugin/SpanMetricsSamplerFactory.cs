@@ -4,7 +4,7 @@
 using System.Globalization;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 
 internal static class SpanMetricsSamplerFactory
 {

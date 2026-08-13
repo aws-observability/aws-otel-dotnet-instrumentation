@@ -4,17 +4,17 @@
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.AutoInstrumentation.Plugins.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 
 /// <summary>
-/// Auto-instrumentation plugin that registers span metrics processing.
+/// CloudWatch auto-instrumentation plugin for OpenTelemetry .NET.
 /// </summary>
-public class SpanMetricsConnectorPlugin
+public sealed class CloudWatchPlugin
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SpanMetricsConnectorPlugin"/> class.
+    /// Initializes a new instance of the <see cref="CloudWatchPlugin"/> class.
     /// </summary>
-    public SpanMetricsConnectorPlugin()
+    public CloudWatchPlugin()
     {
     }
 
@@ -46,7 +46,6 @@ public class SpanMetricsConnectorPlugin
     /// <returns>The configured meter provider builder.</returns>
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
-        builder.AddMeter(SpanMetricsConnector.ScopeName);
-        return builder;
+        return builder.AddCloudWatchSpanMetrics();
     }
 }
