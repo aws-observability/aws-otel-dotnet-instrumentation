@@ -92,10 +92,11 @@ public class ServiceEventsGateTest
             var distroReading = Plugin.IsEnvFlagTrue(Plugin.ApplicationSignalsEnabledConfig);
             var serviceEventsReading = ServiceEventsConfig.FromEnvironment().ApplicationSignalsEnabled;
 
-            serviceEventsReading.Should().Be(
-                distroReading,
+            const string because =
                 "the distro and ServiceEvents both branch on this flag, and when they disagree the " +
-                "per-endpoint summary is suppressed by one side and never emitted by the other");
+                "per-endpoint summary is suppressed by one side and never emitted by the other";
+
+            serviceEventsReading.Should().Be(distroReading, because);
         }
         finally
         {
