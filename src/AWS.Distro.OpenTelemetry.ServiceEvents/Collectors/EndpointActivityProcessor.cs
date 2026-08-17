@@ -42,53 +42,87 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Wrapped whole, for the reason given on <see cref="OnEnd" />: this runs inside
+    /// <c>Activity.Start()</c> on the customer's request path.
+    /// </remarks>
     public override void OnStart(Activity activity)
     {
-        // Create the per-request call_path frame buffer on the server span so instrumented
-        // child spans can append to it (used by latency incidents; see CallPathCapture).
-        //
-        // Gated on there being an incident trigger, because it is the only thing that ever drains the
-        // buffer. Without one this allocated a queue and a custom property on every single server
-        // span and then threw them away — per-request hot-path cost for data nobody read.
-        if (this.incidentTrigger is not null && activity.Kind == ActivityKind.Server)
+        try
         {
-            CallPathCapture.Begin(activity);
+            // Create the per-request call_path frame buffer on the server span so instrumented
+            // child spans can append to it (used by latency incidents; see CallPathCapture).
+            //
+            // Gated on there being an incident trigger, because it is the only thing that ever drains the
+            // buffer. Without one this allocated a queue and a custom property on every single server
+            // span and then threw them away — per-request hot-path cost for data nobody read.
+            if (this.incidentTrigger is not null && activity.Kind == ActivityKind.Server)
+            {
+                CallPathCapture.Begin(activity);
+            }
+        }
+        catch
+        {
+            // Telemetry must never crash the host. Drop and continue.
         }
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The whole body is wrapped because there is no framework boundary between this method and the
+    /// customer's request. The call chain is
+    /// <c>ActivityListener.ActivityStopped</c> ← <c>Activity.Stop()</c> ←
+    /// ASP.NET Core's <c>HostingApplicationDiagnostics.StopActivity</c>, so anything thrown here
+    /// surfaces in the customer's request rather than being absorbed on the way out.
+    /// </para>
+    /// <para>
+    /// Deliberately a bare <c>catch</c> with no logging, matching <c>CollectorBase</c>'s
+    /// <c>RunCollectSafely</c>. The only logger factory reachable from this assembly is the one
+    /// that emits ServiceEvents' own signals, so logging a failure here would inject our internal
+    /// errors into the customer's telemetry stream. The cost is that a systematic failure is
+    /// silent — endpoint metrics would simply stop.
+    /// </para>
+    /// </remarks>
     public override void OnEnd(Activity activity)
     {
-        if (activity.Kind != ActivityKind.Server)
+        try
         {
-            return;
+            if (activity.Kind != ActivityKind.Server)
+            {
+                return;
+            }
+
+            if (activity.GetTagItem("http.request.method") is not string method || string.IsNullOrEmpty(method))
+            {
+                // Not an HTTP server span — nothing to record.
+                return;
+            }
+
+            var route = ResolveRoute(activity);
+
+            if (!this.config.ShouldTrackEndpoint(route, method))
+            {
+                return;
+            }
+
+            var statusCode = ReadStatusCode(activity);
+
+            // Activity.Duration is a TimeSpan; 1 tick = 100 ns.
+            var durationNs = activity.Duration.Ticks * 100L;
+
+            var (errorType, functionName) = ReadError(activity, statusCode);
+
+            this.recorder.RecordRequest(route, method, statusCode, durationNs, errorType, functionName);
+
+            if (this.incidentTrigger is not null)
+            {
+                this.FeedIncidentTrigger(activity, route, method, statusCode, durationNs);
+            }
         }
-
-        if (activity.GetTagItem("http.request.method") is not string method || string.IsNullOrEmpty(method))
+        catch
         {
-            // Not an HTTP server span — nothing to record.
-            return;
-        }
-
-        var route = ResolveRoute(activity);
-
-        if (!this.config.ShouldTrackEndpoint(route, method))
-        {
-            return;
-        }
-
-        var statusCode = ReadStatusCode(activity);
-
-        // Activity.Duration is a TimeSpan; 1 tick = 100 ns.
-        var durationNs = activity.Duration.Ticks * 100L;
-
-        var (errorType, functionName) = ReadError(activity, statusCode);
-
-        this.recorder.RecordRequest(route, method, statusCode, durationNs, errorType, functionName);
-
-        if (this.incidentTrigger is not null)
-        {
-            this.FeedIncidentTrigger(activity, route, method, statusCode, durationNs);
+            // Telemetry must never crash the host. Drop and continue.
         }
     }
 

@@ -367,6 +367,59 @@ public class EndpointActivityProcessorTests : IDisposable
         recorder.Exemplars.Should().BeEmpty("no snapshot was produced");
     }
 
+    /// <summary>
+    /// <c>OnEnd</c> runs inside <c>Activity.Stop()</c> on the customer's request path, with no
+    /// framework boundary in between, so a telemetry failure must not surface in their request.
+    /// </summary>
+    [Fact]
+    public void OnEnd_WhenTheRecorderThrows_DoesNotPropagateToTheCaller()
+    {
+        var processor = new EndpointActivityProcessor(new ThrowingRecorder(), new ServiceEventsConfig());
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "GET");
+        activity.SetTag("http.route", "/orders");
+        activity.SetTag("http.response.status_code", 200);
+        activity.Stop();
+
+        var onEnd = () => processor.OnEnd(activity);
+
+        onEnd.Should().NotThrow(
+            "a throw here would propagate through Activity.Stop() into ASP.NET Core's " +
+            "HostingApplicationDiagnostics and out into the customer's request");
+    }
+
+    [Fact]
+    public void OnEnd_WhenTheIncidentTriggerThrows_DoesNotPropagateToTheCaller()
+    {
+        var trigger = new FakeIncidentTrigger { ShouldThrow = true };
+        var processor = new EndpointActivityProcessor(new FakeRecorder(), new ServiceEventsConfig(), trigger);
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "POST");
+        activity.SetTag("http.route", "/checkout");
+        activity.SetTag("http.response.status_code", 500);
+        activity.Stop();
+
+        var onEnd = () => processor.OnEnd(activity);
+
+        onEnd.Should().NotThrow(
+            "the incident path is downstream of the endpoint recording and must not escape either");
+    }
+
+    [Fact]
+    public void OnStart_WhenTheActivityIsUnusable_DoesNotPropagateToTheCaller()
+    {
+        // OnStart is reached from Activity.Start(), equally inside the request path. A null
+        // activity stands in for any unexpected state that makes the body throw.
+        var processor = new EndpointActivityProcessor(
+            new FakeRecorder(), new ServiceEventsConfig(), new FakeIncidentTrigger());
+
+        var onStart = () => processor.OnStart(null!);
+
+        onStart.Should().NotThrow();
+    }
+
     /// <summary>Captures <c>RecordRequest</c> and <c>RecordIncidentExemplar</c> calls for assertion.</summary>
     private sealed class FakeRecorder : IEndpointRecorder
     {
@@ -381,12 +434,25 @@ public class EndpointActivityProcessorTests : IDisposable
             => this.Exemplars.Add((operation, snapshotId, triggerType, severity, timestamp));
     }
 
+    /// <summary>Stands in for a recorder that fails, to prove the processor's guard holds.</summary>
+    private sealed class ThrowingRecorder : IEndpointRecorder
+    {
+        public void RecordRequest(string route, string method, int statusCode, long durationNs, string? errorType = null, string? functionName = null)
+            => throw new InvalidOperationException("recorder failed");
+
+        public void RecordIncidentExemplar(string operation, string snapshotId, string triggerType, string severity, long timestamp)
+            => throw new InvalidOperationException("recorder failed");
+    }
+
     /// <summary>Captures <c>ProcessPotentialIncident</c> calls and returns a configurable result.</summary>
     private sealed class FakeIncidentTrigger : IIncidentTrigger
     {
         public List<(string Route, string Method, int StatusCode, double DurationMs, string? ExceptionType, string? ExceptionMessage, string? StackTrace, string? TraceId, string? SpanId, long Timestamp, System.Collections.Generic.IReadOnlyList<AWS.Distro.OpenTelemetry.ServiceEvents.Models.CallPathEntry>? SpanFrames)> Calls { get; } = new();
 
         public IncidentTriggerResult? ResultToReturn { get; set; }
+
+        /// <summary>Gets or sets a value indicating whether the trigger should throw when consulted.</summary>
+        public bool ShouldThrow { get; set; }
 
         public IncidentTriggerResult? ProcessPotentialIncident(
             string route,
@@ -402,6 +468,12 @@ public class EndpointActivityProcessorTests : IDisposable
             System.Collections.Generic.IReadOnlyList<AWS.Distro.OpenTelemetry.ServiceEvents.Models.CallPathEntry>? spanFrames = null)
         {
             this.Calls.Add((route, method, statusCode, durationMs, exceptionType, exceptionMessage, stackTrace, traceId, spanId, requestTimestampMs, spanFrames));
+
+            if (this.ShouldThrow)
+            {
+                throw new InvalidOperationException("incident trigger failed");
+            }
+
             return this.ResultToReturn;
         }
     }
