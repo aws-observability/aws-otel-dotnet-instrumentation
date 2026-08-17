@@ -37,7 +37,7 @@ public class SpanMetricsConnectorTests
     ];
 
     [Fact]
-    public void SpanMetricsConnectorDerivesBothMetricsWithoutMutatingExportedSpan()
+    public void SpanMetricsConnectorDerivesBothMetricsAndStampsExportedSpan()
     {
         using var pipeline = new TestPipeline(
             new AlwaysOnSampler(),
@@ -57,8 +57,10 @@ public class SpanMetricsConnectorTests
 
         var exported = Assert.Single(pipeline.ExportedActivities);
         Assert.Same(activity, exported);
-        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
-        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Equal(
+            SpanMetricsConstants.LibraryVersion,
+            exported.GetTagItem("aws.otel.extension.lib.version"));
 
         var callsMetric = GetMetric(pipeline.Metrics, "traces.span.metrics.calls");
         var durationMetric = GetMetric(pipeline.Metrics, "traces.span.metrics.duration");
@@ -117,24 +119,89 @@ public class SpanMetricsConnectorTests
         meterProvider.ForceFlush();
 
         var exported = Assert.Single(exportedActivities);
+        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Equal(
+            SpanMetricsConstants.LibraryVersion,
+            exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.Equal(1, GetPoint(metrics, "traces.span.metrics.calls", "ordered").GetSumLong());
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("otlp", true)]
+    [InlineData("OTLP", true)]
+    [InlineData("console, otlp", true)]
+    [InlineData("none", false)]
+    [InlineData("console", false)]
+    public void SpanMetricsConnectorStampsSpansOnlyForOtlpMetrics(
+        string? configuredExporters,
+        bool shouldStampSpan)
+    {
+        using var environment = new MetricsExporterEnvironment(configuredExporters);
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+
+        var activity = pipeline.Record("activation", ActivityKind.Internal);
+        pipeline.Flush();
+
+        Assert.Equal(
+            shouldStampSpan,
+            activity.GetTagItem("aws.otel.span.metrics.schema") is not null);
+        Assert.Equal(
+            shouldStampSpan,
+            activity.GetTagItem("aws.otel.extension.lib.version") is not null);
+        Assert.Equal(
+            1,
+            GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "activation").GetSumLong());
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorDoesNotStampWhenMetricsAreInactive()
+    {
+        var exportedActivities = new List<Activity>();
+        var sourceName = UniqueName();
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysOnSampler())
+            .AddInMemoryExporter(exportedActivities)
+            .AddProcessor(new SpanMetricsConnector())
+            .Build();
+        using var source = new ActivitySource(sourceName);
+
+        using (var activity = source.StartActivity("inactive"))
+        {
+            Assert.NotNull(activity);
+        }
+
+        tracerProvider.ForceFlush();
+
+        var exported = Assert.Single(exportedActivities);
         Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
         Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
-        Assert.Equal(1, GetPoint(metrics, "traces.span.metrics.calls", "ordered").GetSumLong());
     }
 
     [Fact]
     public void SpanMetricsConnectorAlwaysOffRecordsAllMetricsAndExportsNoSpans()
     {
         using var pipeline = new TestPipeline(new AlwaysOffSampler());
+        var activities = new List<Activity>();
 
         for (var i = 0; i < 5; i++)
         {
-            pipeline.Record("dropped", ActivityKind.Client);
+            activities.Add(pipeline.Record("dropped", ActivityKind.Client));
         }
 
         pipeline.Flush();
 
         Assert.Empty(pipeline.ExportedActivities);
+        Assert.All(
+            activities,
+            activity =>
+            {
+                Assert.Equal("v1", activity.GetTagItem("aws.otel.span.metrics.schema"));
+                Assert.Equal(
+                    SpanMetricsConstants.LibraryVersion,
+                    activity.GetTagItem("aws.otel.extension.lib.version"));
+            });
         Assert.Equal(5, GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "dropped").GetSumLong());
         var duration = GetPoint(pipeline.Metrics, "traces.span.metrics.duration", "dropped");
         Assert.Equal(5, duration.GetHistogramCount());
@@ -495,6 +562,10 @@ public class SpanMetricsConnectorTests
         using (var before = source.StartActivity("before-shutdown"))
         {
             Assert.NotNull(before);
+            Assert.Equal("v1", before.GetTagItem("aws.otel.span.metrics.schema"));
+            Assert.Equal(
+                SpanMetricsConstants.LibraryVersion,
+                before.GetTagItem("aws.otel.extension.lib.version"));
         }
 
         Assert.True(processor.ForceFlush());
@@ -504,6 +575,7 @@ public class SpanMetricsConnectorTests
         {
             Assert.NotNull(after);
             Assert.Null(after.GetTagItem("aws.otel.span.metrics.schema"));
+            Assert.Null(after.GetTagItem("aws.otel.extension.lib.version"));
         }
 
         meterProvider.ForceFlush();

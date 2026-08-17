@@ -19,6 +19,8 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     /// </summary>
     internal const string ScopeName = SpanMetricsConstants.ScopeName;
 
+    private const string MetricsExporterEnvironmentVariable = "OTEL_METRICS_EXPORTER";
+
     private static readonly Meter Meter = new(SpanMetricsConstants.ScopeName, SpanMetricsConstants.LibraryVersion);
     private static readonly Counter<long> Calls = Meter.CreateCounter<long>(SpanMetricsConstants.CallsName);
     private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>(
@@ -31,6 +33,7 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
             HistogramBucketBoundaries = SpanMetricsConstants.DurationBucketBoundaries,
         });
 
+    private readonly bool otlpMetricsExporterConfigured = IsOtlpMetricsExporterConfigured();
     private volatile bool enabled = true;
 
     /// <summary>
@@ -40,6 +43,27 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     {
         get => this.enabled;
         set => this.enabled = value;
+    }
+
+    /// <inheritdoc/>
+    public override void OnStart(Activity data)
+    {
+        if (!this.Enabled ||
+            !this.otlpMetricsExporterConfigured ||
+            (!Calls.Enabled && !Duration.Enabled))
+        {
+            return;
+        }
+
+        try
+        {
+            data.SetTag(SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion);
+            data.SetTag(SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion);
+        }
+        catch (Exception exception)
+        {
+            CloudWatchPluginEventSource.Log.SpanProcessingException(nameof(this.OnStart), exception);
+        }
     }
 
     /// <inheritdoc/>
@@ -74,6 +98,25 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         var result = this.OnForceFlush(timeoutMilliseconds);
         this.Enabled = false;
         return result;
+    }
+
+    private static bool IsOtlpMetricsExporterConfigured()
+    {
+        var configuredExporters = Environment.GetEnvironmentVariable(MetricsExporterEnvironmentVariable);
+        if (configuredExporters is null)
+        {
+            return true;
+        }
+
+        foreach (var exporter in configuredExporters.Split(','))
+        {
+            if (string.Equals(exporter.Trim(), "otlp", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void Copy(ref TagList tags, Activity activity, string key)

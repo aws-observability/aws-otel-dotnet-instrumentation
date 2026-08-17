@@ -87,6 +87,8 @@ The plugin emits:
 Both metrics include `service.name`, `span.name`, `span.kind`, `status.code`,
 schema version, and plugin version when available. They also include applicable
 HTTP, RPC, database, error, and messaging attributes from the source span.
+While OTLP span metrics are active, recorded spans also include the schema and
+plugin version attributes so the backend can avoid deriving duplicate metrics.
 
 Metric dimensions create a distinct CloudWatch time series for each unique
 combination of values. In particular, `span.name`, `http.route`, database

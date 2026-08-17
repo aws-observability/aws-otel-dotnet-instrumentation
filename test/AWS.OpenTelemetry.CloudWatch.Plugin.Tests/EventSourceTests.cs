@@ -23,9 +23,12 @@ public class EventSourceTests
         Assert.NotNull(manifest);
     }
 
-    [Fact]
-    public void SpanProcessingExceptionIsLoggedAtErrorLevel()
+    [Theory]
+    [InlineData("OnStart")]
+    [InlineData("OnEnd")]
+    public void SpanProcessingExceptionIsLoggedAtErrorLevel(string callback)
     {
+        using var environment = new MetricsExporterEnvironment("otlp");
         using var listener = new CloudWatchPluginEventListener();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddCloudWatchSpanMetrics()
@@ -33,13 +36,23 @@ public class EventSourceTests
             .Build();
         var processor = new SpanMetricsConnector();
 
-        var exception = Record.Exception(() => processor.OnEnd(null!));
+        var exception = Record.Exception(() =>
+        {
+            if (callback == "OnStart")
+            {
+                processor.OnStart(null!);
+            }
+            else
+            {
+                processor.OnEnd(null!);
+            }
+        });
 
         Assert.Null(exception);
         var eventData = Assert.Single(listener.Events);
         Assert.Equal(1, eventData.EventId);
         Assert.Equal(EventLevel.Error, eventData.Level);
-        Assert.Equal("OnEnd", eventData.Payload![0]);
+        Assert.Equal(callback, eventData.Payload![0]);
         Assert.Contains(nameof(NullReferenceException), Assert.IsType<string>(eventData.Payload[1]));
     }
 
