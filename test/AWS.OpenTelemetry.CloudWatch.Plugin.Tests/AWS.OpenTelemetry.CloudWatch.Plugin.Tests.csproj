@@ -10,7 +10,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);CS8002;SA0001;SA1204;SA1300;SA1402;SA1600</NoWarn>
-    <OpenTelemetryVersion Condition="'$(OpenTelemetryVersion)' == ''">1.16.0</OpenTelemetryVersion>
+    <OpenTelemetryVersion Condition="'$(OpenTelemetryVersion)' == ''">1.17.0</OpenTelemetryVersion>
     <OpenTelemetryAutoInstrumentationVersion Condition="'$(OpenTelemetryAutoInstrumentationVersion)' == ''">1.16.0</OpenTelemetryAutoInstrumentationVersion>
     <IncludeAutoInstrumentationTests Condition="'$(IncludeAutoInstrumentationTests)' == ''">true</IncludeAutoInstrumentationTests>
   </PropertyGroup>

@@ -3,7 +3,6 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Diagnostics.Tracing;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -12,7 +11,7 @@ using OpenTelemetry.Trace;
 
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
 
-[Collection(SpanMetricsConnectorCollection.Name)]
+[Collection(SpanMetricsTestsCollection.Name)]
 public class SpanMetricsConnectorTests
 {
     private static readonly double[] ExpectedBoundaries =
@@ -60,14 +59,24 @@ public class SpanMetricsConnectorTests
         Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
         Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
 
+        var callsMetric = GetMetric(pipeline.Metrics, "traces.span.metrics.calls");
+        var durationMetric = GetMetric(pipeline.Metrics, "traces.span.metrics.duration");
         var calls = GetPoint(pipeline.Metrics, "traces.span.metrics.calls", activity.DisplayName);
         var duration = GetPoint(pipeline.Metrics, "traces.span.metrics.duration", activity.DisplayName);
         var callTags = GetTags(calls);
         var durationTags = GetTags(duration);
 
+        Assert.Equal(SpanMetricsConnector.ScopeName, callsMetric.MeterName);
+        Assert.Equal(SpanMetricsConstants.LibraryVersion, callsMetric.MeterVersion);
+        Assert.Equal(SpanMetricsConnector.ScopeName, durationMetric.MeterName);
+        Assert.Equal(SpanMetricsConstants.LibraryVersion, durationMetric.MeterVersion);
+        Assert.Equal(SpanMetricsConstants.DurationUnit, durationMetric.Unit);
         Assert.Equal(1, calls.GetSumLong());
         Assert.Equal(1, duration.GetHistogramCount());
         Assert.Equal(activity.Duration.TotalSeconds, duration.GetHistogramSum(), precision: 8);
+        Assert.True(duration.TryGetHistogramMinMaxValues(out var minimum, out var maximum));
+        Assert.Equal(activity.Duration.TotalSeconds, minimum, precision: 8);
+        Assert.Equal(activity.Duration.TotalSeconds, maximum, precision: 8);
         Assert.Equal("orders-service", callTags["service.name"]);
         Assert.Equal("SERVER", callTags["span.kind"]);
         Assert.Equal("ERROR", callTags["status.code"]);
@@ -126,7 +135,12 @@ public class SpanMetricsConnectorTests
 
         Assert.Empty(pipeline.ExportedActivities);
         Assert.Equal(5, GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "dropped").GetSumLong());
-        Assert.Equal(5, GetPoint(pipeline.Metrics, "traces.span.metrics.duration", "dropped").GetHistogramCount());
+        var duration = GetPoint(pipeline.Metrics, "traces.span.metrics.duration", "dropped");
+        Assert.Equal(5, duration.GetHistogramCount());
+        Assert.True(duration.GetHistogramSum() > 0);
+        Assert.True(duration.TryGetHistogramMinMaxValues(out var minimum, out var maximum));
+        Assert.True(minimum > 0);
+        Assert.True(maximum > 0);
     }
 
     [Fact]
@@ -140,9 +154,13 @@ public class SpanMetricsConnectorTests
 
         var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "defaults"));
 
+        Assert.Equal(5, tags.Count);
         Assert.DoesNotContain("service.name", tags.Keys);
+        Assert.Equal("defaults", tags["span.name"]);
         Assert.Equal("INTERNAL", tags["span.kind"]);
         Assert.Equal("UNSET", tags["status.code"]);
+        Assert.Equal("v1", tags["aws.otel.span.metrics.schema"]);
+        Assert.Equal(SpanMetricsConstants.LibraryVersion, tags["aws.otel.extension.lib.version"]);
     }
 
     [Theory]
@@ -380,29 +398,47 @@ public class SpanMetricsConnectorTests
     {
         var processor = new SpanMetricsConnector();
 
-        var exception = Record.Exception(() => processor.OnEnd(null!));
+        var exception = Record.Exception(() =>
+        {
+            processor.OnStart(null!);
+            processor.OnEnd(null!);
+        });
 
         Assert.Null(exception);
     }
 
     [Fact]
-    public void SpanMetricsConnectorReportsMalformedCallbacks()
+    public void SpanMetricsConnectorRecordsWhenOnlyCallsIsEnabled()
     {
-        using var listener = new CloudWatchPluginEventListener();
-        using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddCloudWatchSpanMetrics()
-            .AddInMemoryExporter(new List<Metric>())
+        var measurements = new List<long>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == SpanMetricsConnector.ScopeName &&
+                instrument.Name == "traces.span.metrics.calls")
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>(
+            (instrument, measurement, tags, state) => measurements.Add(measurement));
+        meterListener.Start();
+
+        var sourceName = UniqueName();
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysOnSampler())
+            .AddProcessor(new SpanMetricsConnector())
             .Build();
-        var processor = new SpanMetricsConnector();
+        using var source = new ActivitySource(sourceName);
 
-        var exception = Record.Exception(() => processor.OnEnd(null!));
+        using (var activity = source.StartActivity("calls-only"))
+        {
+            Assert.NotNull(activity);
+        }
 
-        Assert.Null(exception);
-        var eventData = Assert.Single(listener.Events);
-        Assert.Equal(1, eventData.EventId);
-        Assert.Equal(EventLevel.Error, eventData.Level);
-        Assert.Equal("OnEnd", eventData.Payload![0]);
-        Assert.Contains(nameof(NullReferenceException), Assert.IsType<string>(eventData.Payload[1]));
+        Assert.Single(measurements);
+        Assert.Equal(1, measurements[0]);
     }
 
     [Fact]
@@ -507,6 +543,11 @@ public class SpanMetricsConnectorTests
         return tags;
     }
 
+    private static Metric GetMetric(IEnumerable<Metric> metrics, string metricName)
+    {
+        return Assert.Single(metrics, metric => metric.Name == metricName);
+    }
+
     private static bool HasPoint(IEnumerable<Metric> metrics, string metricName, string spanName)
     {
         foreach (var metric in metrics.Where(metric => metric.Name == metricName))
@@ -550,24 +591,6 @@ public class SpanMetricsConnectorTests
         {
             Assert.True(actual.TryGetValue(tag.Key, out var actualValue));
             Assert.Equal(tag.Value, actualValue);
-        }
-    }
-
-    private sealed class CloudWatchPluginEventListener : EventListener
-    {
-        public List<EventWrittenEventArgs> Events { get; } = new();
-
-        protected override void OnEventSourceCreated(EventSource eventSource)
-        {
-            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatch-Plugin")
-            {
-                this.EnableEvents(eventSource, EventLevel.Error);
-            }
-        }
-
-        protected override void OnEventWritten(EventWrittenEventArgs eventData)
-        {
-            this.Events.Add(eventData);
         }
     }
 

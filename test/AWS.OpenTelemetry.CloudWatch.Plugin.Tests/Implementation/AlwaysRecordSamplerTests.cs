@@ -8,13 +8,26 @@ using OpenTelemetry.Trace;
 
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
 
-[Collection(SpanMetricsConnectorCollection.Name)]
+[Collection(SpanMetricsTestsCollection.Name)]
 public class AlwaysRecordSamplerTests
 {
     [Fact]
     public void SpanMetricsAlwaysRecordSamplerRejectsNullRootSampler()
     {
         Assert.Throws<ArgumentNullException>(() => new AlwaysRecordSampler(null!));
+    }
+
+    [Fact]
+    public void SpanMetricsAlwaysRecordSamplerConvertsDropWithoutAttributes()
+    {
+        var sampler = new AlwaysRecordSampler(
+            new FixedSampler(new SamplingResult(SamplingDecision.Drop)));
+
+        var result = sampler.ShouldSample(CreateParameters());
+
+        Assert.Equal(SamplingDecision.RecordOnly, result.Decision);
+        Assert.Empty(result.Attributes);
+        Assert.Null(result.TraceStateString);
     }
 
     [Fact]
@@ -73,12 +86,13 @@ public class AlwaysRecordSamplerTests
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerPreservesInitialActivityTags()
+    public void SpanMetricsAlwaysRecordSamplerPreservesInitialAndSamplerTags()
     {
         var rootResult = new SamplingResult(
             SamplingDecision.Drop,
             new Dictionary<string, object>
             {
+                ["shared"] = "sampler",
                 ["sampler-only"] = "yes",
             },
             "vendor=value");
@@ -90,6 +104,7 @@ public class AlwaysRecordSamplerTests
         using var source = new ActivitySource(sourceName);
         var initialTags = new ActivityTagsCollection
         {
+            { "shared", "activity" },
             { "activity-only", "yes" },
         };
 
@@ -101,6 +116,7 @@ public class AlwaysRecordSamplerTests
 
         Assert.NotNull(activity);
         Assert.False(activity.Recorded);
+        Assert.Equal("activity", activity.GetTagItem("shared"));
         Assert.Equal("yes", activity.GetTagItem("activity-only"));
         Assert.Equal("yes", activity.GetTagItem("sampler-only"));
         Assert.Equal("vendor=value", activity.TraceStateString);

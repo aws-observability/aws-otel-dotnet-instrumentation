@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Runtime.CompilerServices;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 
 namespace OpenTelemetry.Trace;
@@ -10,6 +11,9 @@ namespace OpenTelemetry.Trace;
 /// </summary>
 public static class CloudWatchSpanMetricsTracerProviderBuilderExtensions
 {
+    private static readonly ConditionalWeakTable<TracerProviderBuilder, object> Registrations = new();
+    private static readonly object RegistrationLock = new();
+
     /// <summary>
     /// Registers CloudWatch span metrics using the OpenTelemetry SDK default sampling policy.
     /// </summary>
@@ -44,8 +48,16 @@ public static class CloudWatchSpanMetricsTracerProviderBuilderExtensions
             throw new ArgumentNullException(nameof(rootSampler));
         }
 
-        return builder
-            .SetSampler(new AlwaysRecordSampler(rootSampler))
-            .AddProcessor(new SpanMetricsConnector());
+        lock (RegistrationLock)
+        {
+            builder.SetSampler(new AlwaysRecordSampler(rootSampler));
+            if (!Registrations.TryGetValue(builder, out _))
+            {
+                builder.AddProcessor(new SpanMetricsConnector());
+                Registrations.Add(builder, new object());
+            }
+        }
+
+        return builder;
     }
 }
