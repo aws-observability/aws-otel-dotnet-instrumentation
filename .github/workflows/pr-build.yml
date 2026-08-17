@@ -181,18 +181,25 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
 
   cloudwatch-plugin-tests:
-    name: CloudWatch plugin (${{ matrix.dependency.name }})
-    runs-on: ubuntu-latest
+    name: CloudWatch | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }} | ${{ matrix.platform.tfm }} | ${{ matrix.platform.os }}
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       fail-fast: false
       matrix:
         dependency:
-          - name: minimum
-            otel: 1.15.3
+          - otel: 1.15.3
             auto: 1.15.0
-          - name: current
-            otel: 1.17.0
+          - otel: 1.17.0
             auto: 1.16.0
+        platform:
+          - os: ubuntu-latest
+            tfm: net8.0
+          - os: ubuntu-latest
+            tfm: net9.0
+          - os: ubuntu-latest
+            tfm: net10.0
+          - os: windows-2022
+            tfm: net472
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
@@ -208,6 +215,7 @@ jobs:
         run: >
           dotnet test test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests
           --configuration Release
+          --framework ${{ matrix.platform.tfm }}
           -p:OpenTelemetryVersion=${{ matrix.dependency.otel }}
           -p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto }}
           -p:TreatWarningsAsErrors=true
