@@ -42,28 +42,9 @@ public sealed class SpanMetricsConnector : BaseProcessor<Activity>
     }
 
     /// <inheritdoc/>
-    public override void OnStart(Activity data)
-    {
-        if (!this.Enabled)
-        {
-            return;
-        }
-
-        try
-        {
-            data.SetTag(SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion);
-            data.SetTag(SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion);
-        }
-        catch (Exception)
-        {
-            // Telemetry processing must not affect the instrumented application.
-        }
-    }
-
-    /// <inheritdoc/>
     public override void OnEnd(Activity data)
     {
-        if (!this.Enabled)
+        if (!this.Enabled || (!Calls.Enabled && !Duration.Enabled))
         {
             return;
         }
@@ -74,9 +55,9 @@ public sealed class SpanMetricsConnector : BaseProcessor<Activity>
             Calls.Add(1, tags);
             Duration.Record(data.Duration.TotalSeconds, tags);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // Telemetry processing must not affect the instrumented application.
+            CloudWatchPluginEventSource.Log.SpanProcessingException(nameof(this.OnEnd), exception);
         }
     }
 
@@ -94,17 +75,89 @@ public sealed class SpanMetricsConnector : BaseProcessor<Activity>
         return result;
     }
 
-    private static void Copy(ref TagList tags, Activity activity, params string[] keys)
+    private static void Copy(ref TagList tags, Activity activity, string key)
     {
-        foreach (var key in keys)
+        var value = activity.GetTagItem(key);
+        if (value is not null)
         {
-            var value = activity.GetTagItem(key);
-            if (value is not null)
-            {
-                tags.Add(key, value);
-                return;
-            }
+            tags.Add(key, value);
         }
+    }
+
+    private static void Copy(ref TagList tags, Activity activity, string primaryKey, string fallbackKey)
+    {
+        var value = activity.GetTagItem(primaryKey);
+        if (value is not null)
+        {
+            tags.Add(primaryKey, value);
+            return;
+        }
+
+        Copy(ref tags, activity, fallbackKey);
+    }
+
+    private static void Copy(
+        ref TagList tags,
+        Activity activity,
+        string primaryKey,
+        string firstFallbackKey,
+        string secondFallbackKey,
+        string thirdFallbackKey,
+        string fourthFallbackKey)
+    {
+        var value = activity.GetTagItem(primaryKey);
+        if (value is not null)
+        {
+            tags.Add(primaryKey, value);
+            return;
+        }
+
+        value = activity.GetTagItem(firstFallbackKey);
+        if (value is not null)
+        {
+            tags.Add(firstFallbackKey, value);
+            return;
+        }
+
+        value = activity.GetTagItem(secondFallbackKey);
+        if (value is not null)
+        {
+            tags.Add(secondFallbackKey, value);
+            return;
+        }
+
+        value = activity.GetTagItem(thirdFallbackKey);
+        if (value is not null)
+        {
+            tags.Add(thirdFallbackKey, value);
+            return;
+        }
+
+        Copy(ref tags, activity, fourthFallbackKey);
+    }
+
+    private static string GetSpanKind(ActivityKind kind)
+    {
+        return kind switch
+        {
+            ActivityKind.Internal => "INTERNAL",
+            ActivityKind.Server => "SERVER",
+            ActivityKind.Client => "CLIENT",
+            ActivityKind.Producer => "PRODUCER",
+            ActivityKind.Consumer => "CONSUMER",
+            _ => kind.ToString().ToUpperInvariant(),
+        };
+    }
+
+    private static string GetStatusCode(ActivityStatusCode status)
+    {
+        return status switch
+        {
+            ActivityStatusCode.Unset => "UNSET",
+            ActivityStatusCode.Ok => "OK",
+            ActivityStatusCode.Error => "ERROR",
+            _ => status.ToString().ToUpperInvariant(),
+        };
     }
 
     private TagList BuildMetricAttributes(Activity activity)
@@ -112,8 +165,8 @@ public sealed class SpanMetricsConnector : BaseProcessor<Activity>
         var tags = new TagList
         {
             { SpanMetricsConstants.SpanName, activity.DisplayName },
-            { SpanMetricsConstants.SpanKind, activity.Kind.ToString().ToUpperInvariant() },
-            { SpanMetricsConstants.StatusCode, activity.Status.ToString().ToUpperInvariant() },
+            { SpanMetricsConstants.SpanKind, GetSpanKind(activity.Kind) },
+            { SpanMetricsConstants.StatusCode, GetStatusCode(activity.Status) },
             { SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion },
             { SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion },
         };

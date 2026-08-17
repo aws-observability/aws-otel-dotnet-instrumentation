@@ -54,26 +54,9 @@ public sealed class AlwaysRecordSampler : Sampler
             return result;
         }
 
-        var mergedAttributes = new Dictionary<string, object>();
-        if (samplingParameters.Tags is not null)
-        {
-            foreach (var attribute in samplingParameters.Tags)
-            {
-                mergedAttributes[attribute.Key] = attribute.Value!;
-            }
-        }
-
-        if (result.Attributes is not null)
-        {
-            foreach (var attribute in result.Attributes)
-            {
-                mergedAttributes[attribute.Key] = attribute.Value;
-            }
-        }
-
         return new SamplingResult(
             SamplingDecision.RecordOnly,
-            mergedAttributes.ToArray(),
+            result.Attributes,
             result.TraceStateString);
     }
 }

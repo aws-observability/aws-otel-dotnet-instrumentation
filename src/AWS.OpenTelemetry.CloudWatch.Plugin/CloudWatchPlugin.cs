@@ -25,18 +25,7 @@ public sealed class CloudWatchPlugin
     /// <returns>The configured tracer provider builder.</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        var rootSampler = SpanMetricsSamplerFactory.Create();
-        builder.SetSampler(new AlwaysRecordSampler(rootSampler));
-        return builder;
-    }
-
-    /// <summary>
-    /// Adds the span metrics processor after the tracer provider is built.
-    /// </summary>
-    /// <param name="tracerProvider">The tracer provider.</param>
-    public void TracerProviderInitialized(TracerProvider tracerProvider)
-    {
-        tracerProvider.AddProcessor(new SpanMetricsConnector());
+        return builder.AddCloudWatchSpanMetrics(SpanMetricsSamplerFactory.Create());
     }
 
     /// <summary>
@@ -46,7 +35,6 @@ public sealed class CloudWatchPlugin
     /// <returns>The configured meter provider builder.</returns>
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
-        builder.AddMeter(SpanMetricsConnector.ScopeName);
-        return builder;
+        return builder.AddCloudWatchSpanMetrics();
     }
 }

@@ -22,13 +22,12 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddCloudWatchSpanMetrics()
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler())
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics()
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -45,6 +44,12 @@ public class SpanMetricsConnectorRegistrationTests
                 metrics,
                 "traces.span.metrics.calls",
                 "registered-once").GetSumLong());
+        Assert.Equal(
+            1,
+            SpanMetricsConnectorTests.GetPoint(
+                metrics,
+                "traces.span.metrics.duration",
+                "registered-once").GetHistogramCount());
     }
 
     [Fact]
@@ -53,13 +58,12 @@ public class SpanMetricsConnectorRegistrationTests
         var metrics = new List<Metric>();
         var sourceName = UniqueName();
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddCloudWatchSpanMetrics()
             .AddInMemoryExporter(metrics)
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -83,8 +87,7 @@ public class SpanMetricsConnectorRegistrationTests
     public void SpanMetricsConnectorManualSamplerCanBeOverwrittenByLaterSetSampler()
     {
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-            .SetSampler(new AlwaysRecordSampler(new AlwaysOffSampler()))
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics(new AlwaysOffSampler())
             .SetSampler(new AlwaysOffSampler())
             .Build();
 
@@ -101,8 +104,7 @@ public class SpanMetricsConnectorRegistrationTests
             .Build();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler())
-            .AddProcessor(new SpanMetricsConnector())
+            .AddCloudWatchSpanMetrics()
             .Build();
         using var source = new ActivitySource(sourceName);
 
@@ -132,7 +134,6 @@ public class SpanMetricsConnectorRegistrationTests
             .AddInMemoryExporter(exportedActivities);
         plugin.AfterConfigureTracerProvider(tracerBuilder);
         using var tracerProvider = tracerBuilder.Build();
-        plugin.TracerProviderInitialized(tracerProvider);
         using var source = new ActivitySource(sourceName);
 
         using (var activity = source.StartActivity("auto-plugin"))
@@ -150,6 +151,12 @@ public class SpanMetricsConnectorRegistrationTests
                 metrics,
                 "traces.span.metrics.calls",
                 "auto-plugin").GetSumLong());
+        Assert.Equal(
+            1,
+            SpanMetricsConnectorTests.GetPoint(
+                metrics,
+                "traces.span.metrics.duration",
+                "auto-plugin").GetHistogramCount());
     }
 
     [Fact]
@@ -242,6 +249,24 @@ public class SpanMetricsConnectorRegistrationTests
         Assert.Equal(
             "AlwaysRecordSampler{AlwaysOnSampler}",
             GetInstalledSampler(alwaysOnProvider).Description);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorBuilderExtensionsRejectNullArguments()
+    {
+        TracerProviderBuilder nullTracerBuilder = null!;
+        MeterProviderBuilder nullMeterBuilder = null!;
+
+        Assert.Throws<ArgumentNullException>(() => nullTracerBuilder.AddCloudWatchSpanMetrics());
+        Assert.Throws<ArgumentNullException>(
+            () => Sdk.CreateTracerProviderBuilder().AddCloudWatchSpanMetrics(null!));
+        Assert.Throws<ArgumentNullException>(() => nullMeterBuilder.AddCloudWatchSpanMetrics());
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPluginDoesNotExposePostBuildRegistrationHook()
+    {
+        Assert.Null(typeof(CloudWatchPlugin).GetMethod("TracerProviderInitialized"));
     }
 
     private static Sampler GetInstalledSampler(TracerProvider provider)

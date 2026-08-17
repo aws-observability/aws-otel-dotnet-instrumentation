@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using OpenTelemetry;
 using OpenTelemetry.Trace;
 
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
@@ -16,7 +17,7 @@ public class AlwaysRecordSamplerTests
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerConvertsDropAndMergesAttributes()
+    public void SpanMetricsAlwaysRecordSamplerConvertsDropAndPreservesSamplerResult()
     {
         var rootResult = new SamplingResult(
             SamplingDecision.Drop,
@@ -42,7 +43,7 @@ public class AlwaysRecordSamplerTests
         Assert.Equal("vendor=value", result.TraceStateString);
         Assert.Equal("sampler", attributes["shared"]);
         Assert.Equal("yes", attributes["sampler-only"]);
-        Assert.Equal("yes", attributes["activity-only"]);
+        Assert.DoesNotContain("activity-only", attributes.Keys);
     }
 
     [Theory]
@@ -68,6 +69,40 @@ public class AlwaysRecordSamplerTests
         var actual = sampler.ShouldSample(CreateParameters());
 
         Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void SpanMetricsAlwaysRecordSamplerPreservesInitialActivityTags()
+    {
+        var rootResult = new SamplingResult(
+            SamplingDecision.Drop,
+            new Dictionary<string, object>
+            {
+                ["sampler-only"] = "yes",
+            },
+            "vendor=value");
+        var sourceName = "always-record-sampler-" + Guid.NewGuid().ToString("N");
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysRecordSampler(new FixedSampler(rootResult)))
+            .Build();
+        using var source = new ActivitySource(sourceName);
+        var initialTags = new ActivityTagsCollection
+        {
+            { "activity-only", "yes" },
+        };
+
+        using var activity = source.StartActivity(
+            "operation",
+            ActivityKind.Client,
+            default(ActivityContext),
+            initialTags);
+
+        Assert.NotNull(activity);
+        Assert.False(activity.Recorded);
+        Assert.Equal("yes", activity.GetTagItem("activity-only"));
+        Assert.Equal("yes", activity.GetTagItem("sampler-only"));
+        Assert.Equal("vendor=value", activity.TraceStateString);
     }
 
     private static SamplingParameters CreateParameters(IEnumerable<KeyValuePair<string, object?>>? tags = null)

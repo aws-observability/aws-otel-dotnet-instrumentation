@@ -9,11 +9,14 @@ AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureMeterProvider(OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureTracerProvider(OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.CloudWatchPlugin() -> void
-AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.TracerProviderInitialized(OpenTelemetry.Trace.TracerProvider! tracerProvider) -> void
 AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector
 AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.SpanMetricsConnector() -> void
 AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.Enabled.get -> bool
 AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.Enabled.set -> void
 const AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.ScopeName = "cloudwatch.plugin.otel.span_metrics" -> string!
 override AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.OnEnd(System.Diagnostics.Activity! data) -> void
-override AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.OnStart(System.Diagnostics.Activity! data) -> void
+OpenTelemetry.Metrics.MeterProviderBuilderExtensions
+static OpenTelemetry.Metrics.MeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
+OpenTelemetry.Trace.TracerProviderBuilderExtensions
+static OpenTelemetry.Trace.TracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
+static OpenTelemetry.Trace.TracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder, OpenTelemetry.Trace.Sampler! rootSampler) -> OpenTelemetry.Trace.TracerProviderBuilder!

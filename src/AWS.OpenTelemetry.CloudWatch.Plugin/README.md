@@ -47,7 +47,8 @@ package into the upstream distribution's managed assemblies directory under
 `OTEL_DOTNET_AUTO_PLUGINS` as shown above.
 
 When combining this with another plugin, separate assembly-qualified names with
-`:`, and list this plugin after any plugin that sets a sampler.
+`:`. Standard upstream sampler configuration through `OTEL_TRACES_SAMPLER` and
+`OTEL_TRACES_SAMPLER_ARG` is supported.
 
 ## Manual OpenTelemetry SDK registration
 
@@ -63,20 +64,35 @@ using OpenTelemetry.Trace;
 var sampler = new ParentBasedSampler(new TraceIdRatioBasedSampler(0.1));
 
 tracerBuilder
-    .SetSampler(new AlwaysRecordSampler(sampler))
-    .AddProcessor(new SpanMetricsConnector());
+    .AddCloudWatchSpanMetrics(sampler);
 
-meterBuilder.AddMeter(SpanMetricsConnector.ScopeName);
+meterBuilder.AddCloudWatchSpanMetrics();
 ```
 
-`SpanMetricsConnector` creates the .NET `Meter` and its instruments.
-`AddMeter` subscribes the application's existing `MeterProvider` to that meter;
-it does not create another provider.
+The tracer extension wraps the supplied sampler so the connector observes every
+span without changing which spans are exported. The meter extension subscribes
+the application's existing `MeterProvider`; it does not create another
+provider. Use the parameterless tracer extension to use the OpenTelemetry SDK
+default sampler.
 
-`AlwaysRecordSampler` converts drop decisions to record-only decisions so the
-connector observes every span without changing which spans are exported. A
-later `SetSampler` call replaces the wrapper. Do not combine manual registration
-with the auto-instrumentation plugin.
+Do not combine manual registration with the auto-instrumentation plugin.
+
+## Metrics
+
+The plugin emits:
+
+- `traces.span.metrics.calls`, a counter of completed spans.
+- `traces.span.metrics.duration`, a histogram of span duration in seconds.
+
+Both metrics include `service.name`, `span.name`, `span.kind`, `status.code`,
+schema version, and plugin version when available. They also include applicable
+HTTP, RPC, database, error, and messaging attributes from the source span.
+
+Metric dimensions create a distinct CloudWatch time series for each unique
+combination of values. In particular, `span.name`, `http.route`, database
+collection or table names, and messaging destinations can have high
+cardinality. Keep those values bounded to control CloudWatch metric volume and
+cost.
 
 ## License
 

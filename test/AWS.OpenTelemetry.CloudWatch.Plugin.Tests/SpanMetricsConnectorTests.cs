@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Diagnostics.Tracing;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -34,7 +36,7 @@ public class SpanMetricsConnectorTests
     ];
 
     [Fact]
-    public void SpanMetricsConnectorDerivesBothMetricsAndStampsExportedSpan()
+    public void SpanMetricsConnectorDerivesBothMetricsWithoutMutatingExportedSpan()
     {
         using var pipeline = new TestPipeline(
             new AlwaysOnSampler(),
@@ -54,8 +56,8 @@ public class SpanMetricsConnectorTests
 
         var exported = Assert.Single(pipeline.ExportedActivities);
         Assert.Same(activity, exported);
-        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
-        Assert.False(string.IsNullOrEmpty(exported.GetTagItem("aws.otel.extension.lib.version") as string));
+        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
 
         var calls = GetPoint(pipeline.Metrics, "traces.span.metrics.calls", activity.DisplayName);
         var duration = GetPoint(pipeline.Metrics, "traces.span.metrics.duration", activity.DisplayName);
@@ -72,6 +74,7 @@ public class SpanMetricsConnectorTests
         Assert.Equal(500, callTags["http.response.status_code"]);
         Assert.Equal("/orders/{id}", callTags["http.route"]);
         Assert.Equal("v1", callTags["aws.otel.span.metrics.schema"]);
+        Assert.False(string.IsNullOrEmpty(callTags["aws.otel.extension.lib.version"] as string));
         AssertTagSetsEqual(callTags, durationTags);
         Assert.Equal(ExpectedBoundaries, GetHistogramBoundaries(duration));
     }
@@ -103,7 +106,8 @@ public class SpanMetricsConnectorTests
         meterProvider.ForceFlush();
 
         var exported = Assert.Single(exportedActivities);
-        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
         Assert.Equal(1, GetPoint(metrics, "traces.span.metrics.calls", "ordered").GetSumLong());
     }
 
@@ -375,13 +379,62 @@ public class SpanMetricsConnectorTests
     {
         var processor = new SpanMetricsConnector();
 
-        var exception = Record.Exception(() =>
-        {
-            processor.OnStart(null!);
-            processor.OnEnd(null!);
-        });
+        var exception = Record.Exception(() => processor.OnEnd(null!));
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorReportsMalformedCallbacks()
+    {
+        using var listener = new CloudWatchPluginEventListener();
+        using var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .AddCloudWatchSpanMetrics()
+            .AddInMemoryExporter(new List<Metric>())
+            .Build();
+        var processor = new SpanMetricsConnector();
+
+        var exception = Record.Exception(() => processor.OnEnd(null!));
+
+        Assert.Null(exception);
+        var eventData = Assert.Single(listener.Events);
+        Assert.Equal(1, eventData.EventId);
+        Assert.Equal(EventLevel.Error, eventData.Level);
+        Assert.Equal("OnEnd", eventData.Payload![0]);
+        Assert.Contains(nameof(NullReferenceException), Assert.IsType<string>(eventData.Payload[1]));
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorRecordsWhenOnlyDurationIsEnabled()
+    {
+        var measurements = new List<double>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == SpanMetricsConnector.ScopeName &&
+                instrument.Name == "traces.span.metrics.duration")
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<double>(
+            (instrument, measurement, tags, state) => measurements.Add(measurement));
+        meterListener.Start();
+
+        var sourceName = UniqueName();
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysOnSampler())
+            .AddProcessor(new SpanMetricsConnector())
+            .Build();
+        using var source = new ActivitySource(sourceName);
+
+        using (var activity = source.StartActivity("duration-only"))
+        {
+            Assert.NotNull(activity);
+        }
+
+        Assert.Single(measurements);
     }
 
     [Fact]
@@ -496,6 +549,24 @@ public class SpanMetricsConnectorTests
         {
             Assert.True(actual.TryGetValue(tag.Key, out var actualValue));
             Assert.Equal(tag.Value, actualValue);
+        }
+    }
+
+    private sealed class CloudWatchPluginEventListener : EventListener
+    {
+        public List<EventWrittenEventArgs> Events { get; } = new();
+
+        protected override void OnEventSourceCreated(EventSource eventSource)
+        {
+            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatch-Plugin")
+            {
+                this.EnableEvents(eventSource, EventLevel.Error);
+            }
+        }
+
+        protected override void OnEventWritten(EventWrittenEventArgs eventData)
+        {
+            this.Events.Add(eventData);
         }
     }
 
