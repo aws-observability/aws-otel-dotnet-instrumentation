@@ -8,7 +8,7 @@ using OpenTelemetry.Trace;
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation.Sampling;
 
 [Collection(SpanMetricsTestsCollection.Name)]
-public class EnvironmentSamplerFactoryTests
+public class SamplerFactoryTests
 {
     [Theory]
     [InlineData(null, null)]
@@ -24,7 +24,7 @@ public class EnvironmentSamplerFactoryTests
         using var environment = new SamplerEnvironment(samplerName, samplerArgument);
         var expected = CreateExpectedSampler(samplerName, samplerArgument);
 
-        var actual = EnvironmentSamplerFactory.Create();
+        var actual = SamplerFactory.Create();
 
         Assert.Equal(expected.Description, actual.Description);
     }
@@ -33,10 +33,10 @@ public class EnvironmentSamplerFactoryTests
     public void CreateReadsEnvironmentForEveryCall()
     {
         using var alwaysOffEnvironment = new SamplerEnvironment("always_off", null);
-        var alwaysOffSampler = EnvironmentSamplerFactory.Create();
+        var alwaysOffSampler = SamplerFactory.Create();
 
         using var alwaysOnEnvironment = new SamplerEnvironment("always_on", null);
-        var alwaysOnSampler = EnvironmentSamplerFactory.Create();
+        var alwaysOnSampler = SamplerFactory.Create();
 
         Assert.Equal("AlwaysOffSampler", alwaysOffSampler.Description);
         Assert.Equal("AlwaysOnSampler", alwaysOnSampler.Description);

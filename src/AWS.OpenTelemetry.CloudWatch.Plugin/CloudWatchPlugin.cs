@@ -26,7 +26,7 @@ public sealed class CloudWatchPlugin
     /// <returns>The configured tracer provider builder.</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        return builder.AddCloudWatchSpanMetrics(EnvironmentSamplerFactory.Create());
+        return builder.AddCloudWatchSpanMetrics(SamplerFactory.Create());
     }
 
     /// <summary>
