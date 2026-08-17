@@ -2,23 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation.Sampling;
 
 [Collection(SpanMetricsTestsCollection.Name)]
 public class AlwaysRecordSamplerTests
 {
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerRejectsNullRootSampler()
+    public void AlwaysRecordSamplerRejectsNullRootSampler()
     {
         Assert.Throws<ArgumentNullException>(() => new AlwaysRecordSampler(null!));
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerConvertsDropWithoutAttributes()
+    public void AlwaysRecordSamplerConvertsDropWithoutAttributes()
     {
         var sampler = new AlwaysRecordSampler(
             new FixedSampler(new SamplingResult(SamplingDecision.Drop)));
@@ -31,7 +31,7 @@ public class AlwaysRecordSamplerTests
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerConvertsDropAndPreservesSamplerResult()
+    public void AlwaysRecordSamplerConvertsDropAndPreservesSamplerResult()
     {
         var rootResult = new SamplingResult(
             SamplingDecision.Drop,
@@ -63,7 +63,7 @@ public class AlwaysRecordSamplerTests
     [Theory]
     [InlineData(SamplingDecision.RecordOnly)]
     [InlineData(SamplingDecision.RecordAndSample)]
-    public void SpanMetricsAlwaysRecordSamplerPreservesNonDropResults(SamplingDecision decision)
+    public void AlwaysRecordSamplerPreservesNonDropResults(SamplingDecision decision)
     {
         var expected = new SamplingResult(decision, "vendor=value");
         var sampler = new AlwaysRecordSampler(new FixedSampler(expected));
@@ -74,7 +74,7 @@ public class AlwaysRecordSamplerTests
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerCanBeDisabled()
+    public void AlwaysRecordSamplerCanBeDisabled()
     {
         var expected = new SamplingResult(SamplingDecision.Drop);
         var sampler = new AlwaysRecordSampler(new FixedSampler(expected));
@@ -86,7 +86,7 @@ public class AlwaysRecordSamplerTests
     }
 
     [Fact]
-    public void SpanMetricsAlwaysRecordSamplerPreservesInitialAndSamplerTags()
+    public void AlwaysRecordSamplerPreservesInitialAndSamplerTags()
     {
         var rootResult = new SamplingResult(
             SamplingDecision.Drop,

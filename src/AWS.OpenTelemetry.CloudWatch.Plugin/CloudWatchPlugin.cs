@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -26,7 +26,7 @@ public sealed class CloudWatchPlugin
     /// <returns>The configured tracer provider builder.</returns>
     public TracerProviderBuilder AfterConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        return builder.AddCloudWatchSpanMetrics(SpanMetricsSamplerFactory.Create());
+        return builder.AddCloudWatchSpanMetrics(EnvironmentSamplerFactory.Create());
     }
 
     /// <summary>

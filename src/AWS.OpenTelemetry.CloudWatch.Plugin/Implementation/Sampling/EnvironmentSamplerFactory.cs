@@ -4,9 +4,9 @@
 using System.Globalization;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 
-internal static class SpanMetricsSamplerFactory
+internal static class EnvironmentSamplerFactory
 {
     private const string TracesSamplerEnvironmentVariable = "OTEL_TRACES_SAMPLER";
     private const string TracesSamplerArgumentEnvironmentVariable = "OTEL_TRACES_SAMPLER_ARG";

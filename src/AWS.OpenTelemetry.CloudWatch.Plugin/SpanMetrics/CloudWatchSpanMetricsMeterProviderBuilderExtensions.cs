@@ -22,6 +22,6 @@ public static class CloudWatchSpanMetricsMeterProviderBuilderExtensions
         }
 
         return builder.AddMeter(
-            AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetricsConnector.ScopeName);
+            AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.Implementation.SpanMetricsConnector.ScopeName);
     }
 }

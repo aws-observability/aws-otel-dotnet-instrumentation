@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
+using AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.Implementation;
 
 namespace OpenTelemetry.Trace;
 

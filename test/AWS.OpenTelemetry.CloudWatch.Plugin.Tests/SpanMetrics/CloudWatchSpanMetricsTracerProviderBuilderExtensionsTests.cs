@@ -3,12 +3,12 @@
 
 using System.Diagnostics;
 using System.Reflection;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Tests.SpanMetrics.Implementation;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.SpanMetrics;
 
 [Collection(SpanMetricsTestsCollection.Name)]
 public class CloudWatchSpanMetricsTracerProviderBuilderExtensionsTests

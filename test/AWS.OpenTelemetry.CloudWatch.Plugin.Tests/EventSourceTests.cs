@@ -3,7 +3,7 @@
 
 using System.Diagnostics.Tracing;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.Implementation;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 

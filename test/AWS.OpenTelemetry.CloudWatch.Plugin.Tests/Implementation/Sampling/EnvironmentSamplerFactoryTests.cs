@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Globalization;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation.Sampling;
 
 [Collection(SpanMetricsTestsCollection.Name)]
-public class SpanMetricsSamplerFactoryTests
+public class EnvironmentSamplerFactoryTests
 {
     [Theory]
     [InlineData(null, null)]
@@ -24,7 +24,7 @@ public class SpanMetricsSamplerFactoryTests
         using var environment = new SamplerEnvironment(samplerName, samplerArgument);
         var expected = CreateExpectedSampler(samplerName, samplerArgument);
 
-        var actual = SpanMetricsSamplerFactory.Create();
+        var actual = EnvironmentSamplerFactory.Create();
 
         Assert.Equal(expected.Description, actual.Description);
     }
@@ -33,10 +33,10 @@ public class SpanMetricsSamplerFactoryTests
     public void CreateReadsEnvironmentForEveryCall()
     {
         using var alwaysOffEnvironment = new SamplerEnvironment("always_off", null);
-        var alwaysOffSampler = SpanMetricsSamplerFactory.Create();
+        var alwaysOffSampler = EnvironmentSamplerFactory.Create();
 
         using var alwaysOnEnvironment = new SamplerEnvironment("always_on", null);
-        var alwaysOnSampler = SpanMetricsSamplerFactory.Create();
+        var alwaysOnSampler = EnvironmentSamplerFactory.Create();
 
         Assert.Equal("AlwaysOffSampler", alwaysOffSampler.Description);
         Assert.Equal("AlwaysOnSampler", alwaysOnSampler.Description);
