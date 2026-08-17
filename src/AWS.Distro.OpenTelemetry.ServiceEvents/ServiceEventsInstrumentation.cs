@@ -22,8 +22,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents;
 /// the OTLP emitter, and dynamic-config callbacks.
 /// </summary>
 /// <remarks>
-/// Mirrors the Python SDK's <c>ServiceEventsInstrumentation</c> class
-/// (<c>aws-opentelemetry-distro/.../telemend/telemend_instrumentation.py</c>).
+/// Mirrors the Python distro's <c>ServiceEventsInstrumentation</c> class
+/// (<c>aws-opentelemetry-distro/.../serviceevents/serviceevents_instrumentation.py</c>).
 /// One instance per process, created by the AWS distro's plugin during its
 /// <c>Initializing()</c> hook (ServiceEvents is hosted by that plugin rather than
 /// registered as a separate <c>OTEL_DOTNET_AUTO_PLUGINS</c> entry).

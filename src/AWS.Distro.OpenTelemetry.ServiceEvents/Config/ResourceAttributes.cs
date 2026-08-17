@@ -12,8 +12,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// <para>
 /// Contains a curated set of cloud, host, container, and Kubernetes
 /// attributes that provide platform context in ServiceEvents telemetry output.
-/// Mirrors the Python SDK's <c>ResourceAttributes</c> dataclass
-/// (<c>aws-opentelemetry-distro/.../telemend/models/resource_attributes.py</c>).
+/// Mirrors the Python distro's <c>ResourceAttributes</c> dataclass
+/// (<c>aws-opentelemetry-distro/.../serviceevents/models/resource_attributes.py</c>).
 /// </para>
 /// <para>
 /// Serialization uses OTel semantic convention dot-notation keys

@@ -15,8 +15,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Integration;
 /// <remarks>
 /// <c>LogGroup</c> and <c>LogStream</c> were parsed from the environment but never used: no exporter
 /// set <c>x-aws-log-group</c> or <c>x-aws-log-stream</c>, and <c>LogStream</c> had no fallback, so
-/// records reached a collector with no routing metadata while Java
-/// (<c>TelemendInstrumentation</c>) and JS (<c>otlp-emitter</c>) both attach them on every request.
+/// records reached a collector with no routing metadata while the Java distro
+/// (<c>ServiceEventsInstrumentation</c>) and the JS distro
+/// (<c>src/serviceevents/exporter/otlp-emitter.ts</c>) both attach them on every request.
 /// These tests drive the real pipeline against a loopback listener and inspect the received headers,
 /// rather than asserting on config values that may go nowhere — which is exactly how the gap hid.
 /// </remarks>
@@ -47,7 +48,7 @@ public class LogHeaderTests
             ["OTEL_SERVICE_NAME"] = "log-header-fallback",
 
             // Neither log var set: the group takes its default and the stream takes the service
-            // name, matching Java's OTEL_AWS_TELEMEND_LOG_STREAM fallback.
+            // name, the same fallback the Java distro applies.
         });
 
         headers.Should().NotBeNull("the exporter should have sent at least one request");

@@ -15,8 +15,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Output format follows
-/// <see href="../../../docs/SERVICE_EVENTS_LOCAL_FILE_FORMAT.md">SERVICE_EVENTS_LOCAL_FILE_FORMAT.md</see>:
+/// Each line is one JSON object shaped as
 /// <c>{eventName, timeUnixNano, traceId?, spanId?, flags?, attributes, body, resource}</c>.
 /// </para>
 /// <para>

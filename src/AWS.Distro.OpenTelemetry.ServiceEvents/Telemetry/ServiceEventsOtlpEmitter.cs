@@ -17,12 +17,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the wire-format contract — the spec attribute and body
-/// mappings live here. Each <c>Emit*</c> method maps an in-memory model
-/// from <c>Models/</c> into the exact attribute / body shape defined in
-/// <see href="../../../SERVICE_EVENTS_OTLP_SIGNALS_SPEC.md">SERVICE_EVENTS_OTLP_SIGNALS_SPEC.md</see>,
-/// cross-referenced in
-/// <see href="../../../docs/design-docs/TELEMEND_DOTNET_PHASE1_DESIGN.md">Phase 1 design doc §6</see>.
+/// This is the wire-format contract. Each <c>Emit*</c> method maps an in-memory
+/// model from <c>Models/</c> into the exact attribute and body shape ServiceEvents
+/// puts on the wire, so a change in here is a change to the published signal format.
 /// </para>
 /// <para>
 /// One injected logger and one meter:

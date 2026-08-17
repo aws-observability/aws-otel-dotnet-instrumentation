@@ -4,10 +4,10 @@
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 
 /// <summary>
-/// SEH-histogram derived duration metrics. Serialized to the spec's
-/// <c>duration</c> body field with <b>CamelCase</b> keys (per
-/// <see href="../../SERVICE_EVENTS_OTLP_SIGNALS_SPEC.md">spec §3 / §4</see>):
-/// <c>{Values, Counts, Max, Min, Count, Sum}</c>.
+/// SEH-histogram derived duration metrics. Serialized to the <c>duration</c> body field with
+/// <b>CamelCase</b> keys — <c>{Values, Counts, Max, Min, Count, Sum}</c>. That casing is what the
+/// ServiceEvents wire format requires for this field specifically, so it must not be normalized to
+/// match the camelCase used elsewhere in the payload.
 /// </summary>
 /// <param name="Values">Histogram bucket midpoints in microseconds.</param>
 /// <param name="Counts">Per-bucket sample counts.</param>

@@ -10,10 +10,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 /// window.
 /// </summary>
 /// <remarks>
-/// Field shape mirrors the Python SDK's <c>EndpointMetricEvent</c>
-/// (<c>aws-opentelemetry-distro/.../telemend/models/endpoint_telemetry.py</c>).
-/// Wire-format mapping is in
-/// <see href="../../docs/design-docs/TELEMEND_DOTNET_PHASE1_DESIGN.md">Phase 1 design doc §6.1</see>.
+/// Field shape mirrors the Python distro's <c>EndpointMetricEvent</c>
+/// (<c>aws-opentelemetry-distro/.../serviceevents/models/endpoint_telemetry.py</c>).
+/// The mapping from this model onto the wire lives in <c>ServiceEventsOtlpEmitter</c>.
 /// </remarks>
 public sealed record EndpointMetricEvent
 {

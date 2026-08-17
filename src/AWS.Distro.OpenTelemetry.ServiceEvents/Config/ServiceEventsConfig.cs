@@ -11,9 +11,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors the Python SDK's <c>ServiceEventsConfig</c> dataclass field-for-field
-/// (<c>aws-opentelemetry-distro/.../telemend/config.py</c>). All defaults
-/// match the env-vars spec defaults.
+/// Mirrors the Python distro's <c>ServiceEventsConfig</c> dataclass field-for-field
+/// (<c>aws-opentelemetry-distro/.../serviceevents/config.py</c>).
 /// </para>
 /// <para>
 /// Construction:
@@ -186,9 +185,10 @@ public sealed record ServiceEventsConfig
     /// <summary>
     /// Gets the CloudWatch log stream, sent as the <c>x-aws-log-stream</c> header.
     /// <see cref="FromEnvironment" /> falls back to <see cref="ServiceName" /> when the env var is
-    /// unset, matching where Java applies the same fallback (<c>TelemendConfig</c>, not its
-    /// exporter). Directly constructed instances keep the empty default, in which case the header is
-    /// omitted rather than sent empty.
+    /// unset. The Java distro resolves its log stream to the same value and in the same place —
+    /// while building config, not in the exporter — though it takes it from an internal default
+    /// rather than a customer-facing env var. Directly constructed instances keep the empty
+    /// default, in which case the header is omitted rather than sent empty.
     /// </summary>
     public string LogStream { get; init; } = string.Empty;
 
@@ -200,8 +200,9 @@ public sealed record ServiceEventsConfig
     public bool FunctionInstrumentEnabled { get; init; } = true;
 
     /// <summary>
-    /// Gets .NET-specific: root namespace filter for FunctionCall instrumentation.
-    /// Mirrors <c>OTEL_AWS_SERVICE_EVENTS_JAVA_SERVICE_CODE_NAMESPACE</c>.
+    /// Gets the root namespace filter for FunctionCall instrumentation, read from
+    /// <c>OTEL_AWS_SERVICE_EVENTS_DOTNET_SERVICE_CODE_NAMESPACE</c>. The env override is .NET-only:
+    /// the Java distro carries the same concept as an internal field with no env var of its own.
     /// </summary>
     public string DotnetServiceCodeNamespace { get; init; } = string.Empty;
 
@@ -239,8 +240,8 @@ public sealed record ServiceEventsConfig
     {
         var defaults = new ServiceEventsConfig();
 
-        // Resolved once because the log stream falls back to it, matching Java's
-        // getStringEnv("OTEL_AWS_TELEMEND_LOG_STREAM", parsedServiceName).
+        // Resolved once because the log stream falls back to it — the same fallback the Java
+        // distro applies while building its own config.
         var serviceName = GetServiceName(defaults.ServiceName);
 
         return new ServiceEventsConfig

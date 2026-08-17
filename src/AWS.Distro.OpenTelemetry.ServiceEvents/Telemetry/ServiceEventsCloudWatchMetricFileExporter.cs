@@ -18,9 +18,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// <remarks>
 /// <para>
 /// Output is native OTLP/JSON — the same shape the OTLP HTTP metrics exporter
-/// sends on the wire — per
-/// <see href="../../../docs/SERVICE_EVENTS_LOCAL_FILE_FORMAT.md">SERVICE_EVENTS_LOCAL_FILE_FORMAT.md</see>
-/// and <see href="../../../SERVICE_EVENTS_OTLP_SIGNALS_SPEC.md">SERVICE_EVENTS_OTLP_SIGNALS_SPEC.md</see> §7.
+/// sends on the wire.
 /// There is <b>no</b> EMF <c>_aws</c> envelope and no metric-name capitalization —
 /// the metric name stays lowercase (<c>count</c>) and the CloudWatch namespace is
 /// assigned by the OTLP endpoint, not the SDK.

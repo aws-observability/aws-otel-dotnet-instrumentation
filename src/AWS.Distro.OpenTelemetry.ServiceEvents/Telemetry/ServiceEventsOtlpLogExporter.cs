@@ -119,8 +119,9 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
             using var request = new HttpRequestMessage(HttpMethod.Post, this.endpoint) { Content = content };
 
             // Log group/stream routing metadata, read by the collector or the CloudWatch agent's
-            // OTLP logs pipeline to decide where records land. Sent unconditionally, matching Java
-            // (TelemendInstrumentation) and JS (otlp-emitter); a collector that does not care simply
+            // OTLP logs pipeline to decide where records land. Sent unconditionally, matching the
+            // Java distro (ServiceEventsInstrumentation) and the JS distro
+            // (src/serviceevents/exporter/otlp-emitter.ts); a collector that does not care simply
             // ignores them.
             if (!string.IsNullOrEmpty(this.logGroup))
             {
