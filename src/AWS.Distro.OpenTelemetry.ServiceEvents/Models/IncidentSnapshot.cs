@@ -1,0 +1,59 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
+
+/// <summary>
+/// In-memory snapshot of an IncidentSnapshot record before it's serialized.
+/// </summary>
+/// <remarks>
+/// Field shape mirrors the Python distro's <c>IncidentSnapshot</c>
+/// (<c>aws-opentelemetry-distro/.../serviceevents/models/incident_telemetry.py</c>).
+/// The mapping from this model onto the wire lives in <c>ServiceEventsOtlpEmitter</c>.
+/// </remarks>
+public sealed record IncidentSnapshot
+{
+    /// <summary>Gets the unique identifier, e.g. <c>"snap_abc123"</c>.</summary>
+    public required string SnapshotId { get; init; }
+
+    /// <summary>Gets the epoch milliseconds when the snapshot was captured.</summary>
+    public required long Timestamp { get; init; }
+
+    // No Severity here on purpose. Spec §5 defines no severity attribute on IncidentSnapshot, so it
+    // must not be emitted; severity instead travels to the wire on the EndpointSummary's
+    // IncidentExemplar (see IncidentTriggerResult). Carrying it here as well made it a required
+    // field that every construction had to supply and nothing ever read.
+
+    /// <summary>Gets the trigger: one of <c>"exception"</c> or <c>"latency"</c> (spec §5).</summary>
+    public required string TriggerType { get; init; }
+
+    /// <summary>Gets the HTTP operation, e.g. <c>"POST /api/users"</c>.</summary>
+    public required string Operation { get; init; }
+
+    /// <summary>Gets the HTTP method portion of <see cref="Operation"/>.</summary>
+    public required string Method { get; init; }
+
+    /// <summary>Gets the route portion of <see cref="Operation"/>.</summary>
+    public required string Route { get; init; }
+
+    /// <summary>Gets the HTTP response status code.</summary>
+    public int StatusCode { get; init; }
+
+    /// <summary>Gets the request duration in milliseconds.</summary>
+    public double DurationMs { get; init; }
+
+    /// <summary>Gets a value indicating whether the snapshot was captured without full timing data.</summary>
+    public bool IsPartial { get; init; }
+
+    /// <summary>Gets the trace correlation id: 32-char hex (no <c>0x</c> prefix). Null = not propagated.</summary>
+    public string? TraceId { get; init; }
+
+    /// <summary>Gets the span correlation id: 16-char hex (no <c>0x</c> prefix).</summary>
+    public string? SpanId { get; init; }
+
+    /// <summary>Gets the captured exception(s) with stack trace and call path.</summary>
+    public IReadOnlyList<ExceptionInfo> ExceptionInfo { get; init; } = Array.Empty<ExceptionInfo>();
+
+    /// <summary>Gets the request context — payload fields gated by capture flag.</summary>
+    public RequestContext? RequestContext { get; init; }
+}

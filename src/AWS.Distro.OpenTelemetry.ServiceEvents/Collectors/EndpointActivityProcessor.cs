@@ -137,6 +137,11 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     /// </para>
     /// <list type="number">
     /// <item><description>
+    /// ServiceEvents' own private capture (<see cref="ExceptionCapture" />), populated from
+    /// <c>EnrichWithException</c>. The richest source — type, message and full trace — and the only
+    /// one that yields a message or stack without mutating the customer's span.
+    /// </description></item>
+    /// <item><description>
     /// The span's <c>exception</c> event, which carries type, message and stack. It exists only when
     /// something enabled <c>RecordException</c> — the customer's own configuration, or another
     /// instrumentation. ServiceEvents deliberately does not enable it (see
@@ -152,13 +157,19 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     /// </description></item>
     /// </list>
     /// <para>
-    /// Nothing here reads a message or stack from <c>error.type</c> because it has none; incident
-    /// snapshots that need them will have to capture the exception through a private channel rather
-    /// than by mutating the customer's span.
+    /// <c>error.type</c> yields a type only, never a message or stack, so it is the last resort: it
+    /// keeps the <c>exception</c> metric dimension correct even when nothing captured the exception
+    /// object itself.
     /// </para>
     /// </remarks>
     private static (string? Type, string? Message, string? StackTrace) ReadExceptionDetails(Activity activity)
     {
+        var (capturedType, capturedMessage, capturedStack) = ExceptionCapture.TryRead(activity);
+        if (!string.IsNullOrEmpty(capturedType))
+        {
+            return (capturedType, capturedMessage, capturedStack);
+        }
+
         foreach (var evt in activity.Events)
         {
             if (!string.Equals(evt.Name, "exception", StringComparison.Ordinal))
@@ -299,6 +310,14 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             return (null, null);
         }
 
+        // Same precedence as ReadExceptionDetails, so the metric dimension and the incident snapshot
+        // cannot disagree about which exception failed the request.
+        var (capturedType, _, _) = ExceptionCapture.TryRead(activity);
+        if (!string.IsNullOrEmpty(capturedType))
+        {
+            return (capturedType, "unknown");
+        }
+
         foreach (var evt in activity.Events)
         {
             if (!string.Equals(evt.Name, "exception", StringComparison.Ordinal))
@@ -335,7 +354,19 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     {
         var (exceptionType, exceptionMessage, stackTrace) = ReadExceptionDetails(activity);
         var durationMs = durationNs / 1_000_000.0;
-        var requestTimestampMs = new DateTimeOffset(activity.StartTimeUtc).ToUnixTimeMilliseconds();
+
+        // SpecifyKind rather than passing StartTimeUtc straight to the DateTimeOffset ctor. The field
+        // is UTC by contract, but an Activity that was never started carries default(DateTime) —
+        // MinValue with Kind=Unspecified — and for a non-UTC kind that ctor interprets the value as
+        // *local* time. Two consequences: the timestamp silently shifts by the machine's UTC offset,
+        // and east of UTC it throws outright, because MinValue minus a positive offset leaves the
+        // representable range. Pinning the kind to what the field already means avoids both.
+        //
+        // Defensive, and not covered by a test: SetStartTime rejects any kind other than UTC, so the
+        // non-UTC state is not reachable through Activity's public API — only through an Activity that
+        // never started and still holds default(DateTime). OnEnd's guard is the backstop if it happens.
+        var startUtc = DateTime.SpecifyKind(activity.StartTimeUtc, DateTimeKind.Utc);
+        var requestTimestampMs = new DateTimeOffset(startUtc).ToUnixTimeMilliseconds();
 
         // Only surface trace context when the span was actually sampled — i.e. the W3C
         // "sampled" flag is set (exposed in .NET as Activity.Recorded). An unsampled span

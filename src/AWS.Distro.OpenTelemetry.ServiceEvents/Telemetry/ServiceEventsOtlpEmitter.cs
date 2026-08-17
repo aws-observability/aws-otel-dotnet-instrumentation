@@ -108,6 +108,56 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
         EmitLog(this.generalLogger, attrs, body);
     }
 
+    /// <summary>Emit an <see cref="IncidentSnapshot"/> as an OTLP log record (with trace context).</summary>
+    /// <param name="snapshot">The snapshot to emit.</param>
+    public void EmitIncidentSnapshot(IncidentSnapshot snapshot)
+    {
+        var attrs = new List<KeyValuePair<string, object?>>
+        {
+            new("event.name", IncidentSnapshotEventName),
+            new("aws.service_events.snapshot_id", snapshot.SnapshotId),
+            new("aws.service_events.trigger_type", snapshot.TriggerType),
+            new("aws.service_events.operation", snapshot.Operation),
+            new("aws.service_events.duration_ms", snapshot.DurationMs),
+            new("aws.service_events.is_partial", snapshot.IsPartial),
+            new("http.request.method", snapshot.Method),
+            new("url.route", snapshot.Route),
+            new("http.response.status_code", snapshot.StatusCode),
+            new("aws.service_events.request.type", "http"),
+        };
+        this.AppendVcsAndDeploymentAttributes(attrs);
+
+        var body = new Dictionary<string, object?>();
+        if (snapshot.ExceptionInfo.Count > 0)
+        {
+            body["exception_info"] = snapshot.ExceptionInfo.Select(ExceptionInfoToWireDictionary).ToArray();
+        }
+
+        if (snapshot.RequestContext is not null)
+        {
+            body["request_context"] = RequestContextToWireDictionary(snapshot.RequestContext);
+        }
+
+        // Trace context: parse hex and stash on a synthetic Activity so
+        // the OpenTelemetry log bridge picks it up automatically. Falls
+        // back to no trace context when parsing fails or fields are unset.
+        Activity? activity = null;
+        if (TryBuildTraceActivity(snapshot.TraceId, snapshot.SpanId, out var built))
+        {
+            activity = built;
+        }
+
+        try
+        {
+            EmitLog(this.generalLogger, attrs, body.Count > 0 ? body : null, activity);
+        }
+        finally
+        {
+            activity?.Stop();
+            activity?.Dispose();
+        }
+    }
+
     /// <summary>Emit a <see cref="DeploymentEvent"/> as an OTLP log record (no body).</summary>
     public void EmitDeploymentEvent(DeploymentEvent evt)
     {
@@ -287,6 +337,91 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
             {
                 Activity.Current = prevActivity;
             }
+        }
+    }
+
+    private static IDictionary<string, object?> ExceptionInfoToWireDictionary(ExceptionInfo info) =>
+        new Dictionary<string, object?>
+        {
+            ["exception_type"] = info.ExceptionType,
+            ["exception_message"] = info.ExceptionMessage,
+            ["stack_trace"] = info.StackTrace,
+            ["call_path"] = info.CallPath.Select(CallPathEntryToWireDictionary).ToArray(),
+        };
+
+    private static IDictionary<string, object?> CallPathEntryToWireDictionary(CallPathEntry entry)
+    {
+        var d = new Dictionary<string, object?>
+        {
+            ["function_name"] = entry.FunctionName,
+            ["caller_function_name"] = entry.CallerFunctionName,
+            ["error"] = entry.Error,
+        };
+
+        if (entry.DurationNs > 0)
+        {
+            d["duration_ns"] = entry.DurationNs;
+        }
+
+        if (entry.IsAsync)
+        {
+            d["is_async"] = true;
+        }
+
+        return d;
+    }
+
+    private static IDictionary<string, object?> RequestContextToWireDictionary(RequestContext ctx)
+    {
+        // Payload fields (request_body, query_params, path_params, request_headers)
+        // are no longer emitted per spec §5 — payload capture was removed. Only the
+        // non-payload context fields remain.
+        return new Dictionary<string, object?>
+        {
+            ["type"] = ctx.Type,
+            ["timestamp"] = ctx.Timestamp,
+            ["status_code"] = ctx.StatusCode,
+        };
+    }
+
+    /// <summary>
+    /// Build a synthetic <see cref="Activity"/> carrying the supplied trace
+    /// + span IDs so the OpenTelemetry logger bridge can pull them onto the
+    /// emitted log record. Returns null when the IDs are missing or invalid.
+    /// </summary>
+    private static bool TryBuildTraceActivity(string? traceIdHex, string? spanIdHex, out Activity? activity)
+    {
+        activity = null;
+        if (string.IsNullOrEmpty(traceIdHex) || traceIdHex.Length != 32 ||
+            string.IsNullOrEmpty(spanIdHex) || spanIdHex.Length != 16)
+        {
+            return false;
+        }
+
+        try
+        {
+            var traceId = ActivityTraceId.CreateFromString(traceIdHex);
+            var spanId = ActivitySpanId.CreateFromString(spanIdHex);
+
+            // Use a plain Activity rather than ActivitySource.CreateActivity — the latter
+            // returns null unless a matching ActivityListener is registered (nothing listens
+            // to the "serviceevents" source), which would silently drop trace context.
+            // Setting the W3C parent makes the started activity adopt the trace id, which the
+            // OpenTelemetry log bridge then copies onto the LogRecord.
+            //
+            // Limitation: the LogRecord's SpanId is this activity's own span (a child of the
+            // original), since the .NET ILogger bridge can't stamp an arbitrary SpanId. The
+            // trace id — the backend join key per spec §5 — is preserved exactly.
+            var built = new Activity("service_events.snapshot");
+            built.SetIdFormat(ActivityIdFormat.W3C);
+            built.SetParentId(traceId, spanId, ActivityTraceFlags.Recorded);
+            built.Start();
+            activity = built;
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

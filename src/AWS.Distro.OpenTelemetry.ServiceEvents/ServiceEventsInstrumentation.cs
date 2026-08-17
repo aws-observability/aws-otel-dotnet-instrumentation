@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
@@ -48,6 +49,8 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     private ServiceEventsOtlpEmitter? emitter;
     private DeploymentEventEmitter? deploymentEventEmitter;
     private EndpointMetricCollector? endpointCollector;
+    private IncidentSnapshotCollector? incidentSnapshotCollector;
+    private FunctionCallSampler? functionCallSampler;
     private bool initialized;
 
     private ServiceEventsInstrumentation(ServiceEventsConfig config, ILoggerFactory hostLoggerFactory)
@@ -74,6 +77,12 @@ public sealed class ServiceEventsInstrumentation : IDisposable
 
     /// <summary>Gets the endpoint metric collector (null until initialization completes). Visible for tests + tracer wiring.</summary>
     internal EndpointMetricCollector? EndpointCollector => this.endpointCollector;
+
+    /// <summary>Gets the incident snapshot collector (null until initialization completes). Visible for tracer wiring + tests.</summary>
+    internal IncidentSnapshotCollector? IncidentCollector => this.incidentSnapshotCollector;
+
+    /// <summary>Gets the FunctionCall sampler (null when function instrumentation is disabled). Visible for tests.</summary>
+    internal FunctionCallSampler? FunctionSampler => this.functionCallSampler;
 
     /// <summary>
     /// Gets the singleton instance, creating it on first call.
@@ -159,6 +168,26 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             suppressEndpointSummary: this.config.ApplicationSignalsEnabled);
         this.endpointCollector.Start();
 
+        // M5: create the FunctionCall sampler when function instrumentation is enabled
+        // AND an allowlist is set (the spec gate — empty allowlist instruments nothing).
+        // The FunctionCallProcessor is registered on the TracerProvider in
+        // RegisterTracerProcessors; the sampler is shared with the incident collector so
+        // the incident path can drive adaptive hot-marking.
+        if (this.config.FunctionInstrumentEnabled && this.config.PackagesToInstrument.Count > 0)
+        {
+            this.functionCallSampler = new FunctionCallSampler(this.config);
+        }
+
+        // M4: start the incident snapshot collector and register it for dynamic (WATCHER)
+        // config updates. It's fed by the EndpointActivityProcessor's incident trigger
+        // seam (see RegisterTracerProcessors).
+        this.incidentSnapshotCollector = new IncidentSnapshotCollector(
+            flushIntervalMs: this.config.IncidentSnapshotFlushInterval,
+            emitter: this.emitter!,
+            config: this.config);
+        this.incidentSnapshotCollector.Start();
+        this.watcherSyncer.SetIncidentSnapshotSink(this.incidentSnapshotCollector);
+
         this.initialized = true;
         this.logger.LogInformation(
             "ServiceEvents initialized (service={ServiceName}, environment={Environment}, output_file={OutputFile})",
@@ -185,9 +214,36 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     {
         if (this.endpointCollector is not null)
         {
-            builder.AddProcessor(new EndpointActivityProcessor(this.endpointCollector, this.config));
+            // Passing the incident collector as the trigger is what makes call-path capture happen at
+            // all: CallPathCapture.Begin is gated on a trigger being present, since the trigger is
+            // the only thing that drains the buffer.
+            builder.AddProcessor(new EndpointActivityProcessor(
+                this.endpointCollector,
+                this.config,
+                this.incidentSnapshotCollector));
+        }
+
+        // M5: FunctionCall. Present only when function instrumentation is enabled with a
+        // non-empty allowlist (the sampler is created under that gate in Initialize).
+        if (this.functionCallSampler is not null)
+        {
+            builder.AddProcessor(new FunctionCallProcessor(this.emitter!, this.config, this.functionCallSampler));
         }
     }
+
+    /// <summary>
+    /// Record the exception that failed a request, privately, for IncidentSnapshot to report.
+    /// </summary>
+    /// <remarks>
+    /// The plugin-facing entry point for <c>EnrichWithException</c>. The capture mechanism itself
+    /// stays internal to this assembly; this exposes it the same way
+    /// <see cref="RegisterTracerProcessors" /> exposes processor registration. Deliberately does not
+    /// touch the customer's span — see <c>ExceptionCapture</c> for why that matters.
+    /// </remarks>
+    /// <param name="activity">The request's activity.</param>
+    /// <param name="exception">The exception being reported.</param>
+    public void CaptureException(Activity activity, Exception exception)
+        => ExceptionCapture.Stash(activity, exception);
 
     /// <summary>Reset the singleton. Visible to tests only.</summary>
     internal static void ResetForTests()
@@ -331,10 +387,31 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         // sequentially and the process-exit window they share is not — overrunning it gets the
         // process killed mid-flush, losing exactly the telemetry the final drain exists to save.
         // The exporter flushes that follow (logger factory, meter provider) get whatever is left.
+        //
+        // What the steps below would ask for unclamped already exceeds this: 500 ms of timer drain
+        // for each collector, 250 ms for the endpoint collector's in-flight writes, and 250 ms for
+        // the deployment emitter. That overshoot is intentional — Clamp hands each wait the lesser of
+        // its request and what remains, so the total stays inside the window while any single step
+        // may still use most of it when the others finish early.
+        //
+        // Every call below must therefore use the Dispose(budget) overload. The parameterless
+        // IDisposable.Dispose() on these types starts a *fresh* budget, which is correct for
+        // standalone use but here would give each step its own full window and let the total grow
+        // with the number of steps. CollectorBaseTests pins the shared-budget bound.
         var budget = ShutdownBudget.FromNow(ShutdownBudget.Default);
 
-        // Dispose the collector first — its final Collect() flushes through the emitter,
-        // so the emitter/providers must still be alive at this point.
+        // Dispose the collectors first — their final Collect() flushes through the emitter,
+        // so the emitter/providers must still be alive at this point. The incident collector goes
+        // before the endpoint collector because the endpoint window carries exemplars that reference
+        // snapshots, so the snapshots should already be on their way out.
+        try
+        {
+            this.incidentSnapshotCollector?.Dispose(budget);
+        }
+        catch
+        { /* swallow */
+        }
+
         try
         {
             this.endpointCollector?.Dispose(budget);
@@ -368,6 +445,8 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         }
 
         this.endpointCollector = null;
+        this.incidentSnapshotCollector = null;
+        this.functionCallSampler = null;
         this.deploymentEventEmitter = null;
         this.generalLoggerFactory = null;
         this.meterProvider = null;

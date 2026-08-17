@@ -411,6 +411,14 @@ public sealed record ServiceEventsConfig
     /// </summary>
     /// <param name="operation">Operation string, e.g. <c>"GET /users/{id}"</c>.</param>
     /// <returns>The threshold in milliseconds.</returns>
+    /// <remarks>
+    /// Re-parses <see cref="LatencyThresholds" /> on each call. Deliberate: the expensive part was
+    /// compiling a regex per pattern per call, and <see cref="GlobMatches" /> now caches those, so
+    /// what remains is splitting a short configured string. Memoizing the parse on the instance would
+    /// mean caching derived state on a record, where a <c>with</c> expression copies the cache while
+    /// replacing the source list — a stale-cache trap worse than the work it saves. If this ever
+    /// shows up in a profile, the fix belongs in the caller, which can parse once at construction.
+    /// </remarks>
     public double GetLatencyThresholdMs(string operation)
     {
         foreach (var (pattern, thresholdMs) in this.GetLatencyThresholdPatterns())
