@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -46,6 +47,40 @@ public sealed record ServiceEventsConfig
     /// </para>
     /// </summary>
     internal const string SdkVersion = "0.1.0";
+
+    /// <summary>
+    /// Upper bound on a single glob match. The patterns themselves are operator-supplied, but the
+    /// string matched against them is request-derived, so a pathological pattern plus a long route
+    /// is a real if unlikely way to stall a request thread. The Java distro has no equivalent
+    /// because <c>java.util.regex.Pattern</c> cannot express a match timeout; .NET can, so this
+    /// does. 100 ms is already far beyond what a per-request check should ever cost — it is a
+    /// backstop, not a tuning knob.
+    /// </summary>
+    private static readonly TimeSpan GlobMatchTimeout = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// Glob pattern to compiled regex, one entry per distinct pattern for the life of the process.
+    /// <para>
+    /// This buys what the Java distro gets by pre-compiling into <c>List&lt;Pattern&gt;</c> in its
+    /// <c>EndpointFilter</c> constructor. That exact shape is not available here: the pattern lists
+    /// are <c>init</c> properties, assigned after the constructor body has already run, so there is
+    /// nothing to compile at construction time. Keying a static cache on the pattern string gets
+    /// the same compile-once behaviour, and unlike a precompiled instance field it survives
+    /// <c>with</c> copies — the record copy constructor would carry a stale field across while the
+    /// pattern property changed underneath it.
+    /// </para>
+    /// <para>
+    /// Growth is bounded by the number of distinct configured patterns rather than by traffic: the
+    /// regex is derived from the pattern, and only the string matched against it comes from the
+    /// request.
+    /// </para>
+    /// <para>
+    /// A <c>null</c> value marks a pattern that would not compile, so it is skipped from then on
+    /// instead of being retried per request. The Java distro behaves the same way, rejecting bad
+    /// globs when it builds the filter and carrying on with the remaining entries.
+    /// </para>
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Regex?> GlobCache = new();
 
     /// <summary>
     /// Gets the explicit master kill switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>:
@@ -639,12 +674,49 @@ public sealed record ServiceEventsConfig
     }
 
     /// <summary>
-    /// fnmatch-style glob match for endpoint patterns.
+    /// fnmatch-style glob match for endpoint patterns, against a regex compiled once per distinct
+    /// pattern. See <see cref="GlobCache" /> for why the compilation is cached statically rather
+    /// than pre-computed per config instance.
     /// </summary>
+    /// <remarks>
+    /// Called once per configured pattern per request from <see cref="ShouldTrackEndpoint" />,
+    /// <see cref="GetLatencyThresholdMs" /> and the function-name filters, so it is on the
+    /// <c>OnEnd</c> hot path. The previous implementation rebuilt the pattern string and used the
+    /// static <c>Regex.IsMatch</c> overload, whose cache holds 15 entries behind a lock — past that
+    /// every pattern was recompiled on every request, and the lock itself became contended.
+    /// </remarks>
     private static bool GlobMatches(string pattern, string input)
     {
-        // Translate fnmatch glob to regex: * → .*, ? → ., escape regex metas.
-        var regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
-        return Regex.IsMatch(input, regexPattern);
+        var regex = GlobCache.GetOrAdd(pattern, static p =>
+        {
+            // Translate fnmatch glob to regex: * → .*, ? → ., escape regex metas.
+            var regexPattern = "^" + Regex.Escape(p).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+
+            try
+            {
+                return new Regex(regexPattern, RegexOptions.None, GlobMatchTimeout);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        });
+
+        if (regex is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return regex.IsMatch(input);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Treated as "did not match". For an exclude pattern that leaves the endpoint tracked;
+            // for an include pattern it leaves the endpoint untracked. Neither outcome touches the
+            // request, which is the property worth protecting here.
+            return false;
+        }
     }
 }

@@ -428,6 +428,49 @@ public class ServiceEventsConfigTests
         cfg.ShouldTrackEndpoint("/health", "GET").Should().BeFalse();
     }
 
+    /// <summary>
+    /// A glob that expands to nested <c>.*</c> groups backtracks catastrophically against a long
+    /// non-matching input. The pattern is operator-supplied, but the string matched against it is
+    /// the request route, so without a bound this is a way to stall a request thread from outside.
+    /// The match timeout turns it into a fast "no match".
+    /// </summary>
+    [Fact]
+    public void ShouldTrackEndpoint_PathologicalPatternAgainstLongRoute_ReturnsQuicklyInsteadOfStalling()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            EndpointIncludePatterns = new[] { "GET /*a*a*a*a*a*a*a*a*a*a*a*a*b" },
+        };
+
+        // 'a' repeated, with no 'b' anywhere, is the worst case for that pattern.
+        var route = "/" + new string('a', 2_000);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var tracked = cfg.ShouldTrackEndpoint(route, "GET");
+        sw.Stop();
+
+        tracked.Should().BeFalse("a timed-out match is reported as no match");
+        sw.Elapsed.Should().BeLessThan(
+            TimeSpan.FromSeconds(5),
+            "the 100 ms match timeout must bound this; without it the match runs effectively forever");
+    }
+
+    [Fact]
+    public void ShouldTrackEndpoint_RepeatedCallsReuseTheCompiledPattern()
+    {
+        var cfg = new ServiceEventsConfig
+        {
+            EndpointExcludePatterns = new[] { "GET /health*" },
+        };
+
+        // Same pattern, many inputs: exercises the cached-regex path rather than recompiling.
+        for (var i = 0; i < 50; i++)
+        {
+            cfg.ShouldTrackEndpoint($"/health/{i}", "GET").Should().BeFalse();
+            cfg.ShouldTrackEndpoint($"/api/{i}", "GET").Should().BeTrue();
+        }
+    }
+
     [Fact]
     public void ShouldTrackEndpoint_ExcludePatterns_RemovesMatching()
     {
