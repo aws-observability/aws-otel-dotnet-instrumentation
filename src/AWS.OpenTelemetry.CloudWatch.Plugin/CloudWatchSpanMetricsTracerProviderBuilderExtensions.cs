@@ -8,7 +8,7 @@ namespace OpenTelemetry.Trace;
 /// <summary>
 /// Extension methods for registering CloudWatch span metrics.
 /// </summary>
-public static class TracerProviderBuilderExtensions
+public static class CloudWatchSpanMetricsTracerProviderBuilderExtensions
 {
     /// <summary>
     /// Registers CloudWatch span metrics using the OpenTelemetry SDK default sampling policy.
