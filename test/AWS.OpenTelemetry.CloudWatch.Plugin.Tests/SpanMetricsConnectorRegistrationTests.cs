@@ -4,6 +4,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;

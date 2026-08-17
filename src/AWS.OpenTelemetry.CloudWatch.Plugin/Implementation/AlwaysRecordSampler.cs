@@ -3,7 +3,7 @@
 
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 
 /// <summary>
 /// Converts drop decisions from another sampler to record-only decisions.
@@ -11,7 +11,7 @@ namespace AWS.OpenTelemetry.CloudWatch.Plugin;
 /// <remarks>
 /// This allows processors to observe every span without increasing the number of exported spans.
 /// </remarks>
-public sealed class AlwaysRecordSampler : Sampler
+internal sealed class AlwaysRecordSampler : Sampler
 {
     private readonly Sampler rootSampler;
     private volatile bool enabled = true;
@@ -20,7 +20,7 @@ public sealed class AlwaysRecordSampler : Sampler
     /// Initializes a new instance of the <see cref="AlwaysRecordSampler"/> class
     /// using the OpenTelemetry SDK default sampling policy.
     /// </summary>
-    public AlwaysRecordSampler()
+    internal AlwaysRecordSampler()
         : this(new ParentBasedSampler(new AlwaysOnSampler()))
     {
     }
@@ -30,7 +30,7 @@ public sealed class AlwaysRecordSampler : Sampler
     /// </summary>
     /// <param name="rootSampler">The application sampler whose export decisions are preserved.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="rootSampler"/> is null.</exception>
-    public AlwaysRecordSampler(Sampler rootSampler)
+    internal AlwaysRecordSampler(Sampler rootSampler)
     {
         this.rootSampler = rootSampler ?? throw new ArgumentNullException(nameof(rootSampler));
         this.Description = "AlwaysRecordSampler{" + rootSampler.Description + "}";
@@ -39,7 +39,7 @@ public sealed class AlwaysRecordSampler : Sampler
     /// <summary>
     /// Gets or sets a value indicating whether drop decisions are converted to record-only decisions.
     /// </summary>
-    public bool Enabled
+    internal bool Enabled
     {
         get => this.enabled;
         set => this.enabled = value;

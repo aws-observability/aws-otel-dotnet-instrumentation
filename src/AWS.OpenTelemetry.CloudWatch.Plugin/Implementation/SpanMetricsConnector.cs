@@ -4,19 +4,19 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
-using static AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsAttributeKeys;
+using static AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetricsAttributeKeys;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 
 /// <summary>
 /// Derives call count and duration metrics from every recorded span.
 /// </summary>
-public sealed class SpanMetricsConnector : BaseProcessor<Activity>
+internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
 {
     /// <summary>
     /// The meter name that must be registered with the application's meter provider.
     /// </summary>
-    public const string ScopeName = SpanMetricsConstants.ScopeName;
+    internal const string ScopeName = SpanMetricsConstants.ScopeName;
 
     private static readonly Meter Meter = new(SpanMetricsConstants.ScopeName, SpanMetricsConstants.LibraryVersion);
     private static readonly Counter<long> Calls = Meter.CreateCounter<long>(SpanMetricsConstants.CallsName);
@@ -35,7 +35,7 @@ public sealed class SpanMetricsConnector : BaseProcessor<Activity>
     /// <summary>
     /// Gets or sets a value indicating whether this processor records span metrics.
     /// </summary>
-    public bool Enabled
+    internal bool Enabled
     {
         get => this.enabled;
         set => this.enabled = value;

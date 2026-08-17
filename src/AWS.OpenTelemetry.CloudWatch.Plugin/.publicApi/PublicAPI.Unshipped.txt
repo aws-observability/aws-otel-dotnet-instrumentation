@@ -1,20 +1,8 @@
 #nullable enable
-AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler
-AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler.AlwaysRecordSampler() -> void
-AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler.AlwaysRecordSampler(OpenTelemetry.Trace.Sampler! rootSampler) -> void
-AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler.Enabled.get -> bool
-AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler.Enabled.set -> void
-override AWS.OpenTelemetry.CloudWatch.Plugin.AlwaysRecordSampler.ShouldSample(in OpenTelemetry.Trace.SamplingParameters samplingParameters) -> OpenTelemetry.Trace.SamplingResult
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureMeterProvider(OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureTracerProvider(OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
 AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.CloudWatchPlugin() -> void
-AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector
-AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.SpanMetricsConnector() -> void
-AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.Enabled.get -> bool
-AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.Enabled.set -> void
-const AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.ScopeName = "cloudwatch.plugin.otel.span_metrics" -> string!
-override AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetricsConnector.OnEnd(System.Diagnostics.Activity! data) -> void
 OpenTelemetry.Metrics.MeterProviderBuilderExtensions
 static OpenTelemetry.Metrics.MeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
 OpenTelemetry.Trace.TracerProviderBuilderExtensions

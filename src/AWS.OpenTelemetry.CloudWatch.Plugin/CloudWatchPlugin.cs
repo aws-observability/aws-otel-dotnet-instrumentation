@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 

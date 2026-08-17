@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation;
 
 [Collection(SpanMetricsConnectorCollection.Name)]
 public class AlwaysRecordSamplerTests

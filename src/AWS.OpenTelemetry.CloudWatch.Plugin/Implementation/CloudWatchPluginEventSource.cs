@@ -3,7 +3,7 @@
 
 using System.Diagnostics.Tracing;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin;
+namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 
 [EventSource(Name = "OpenTelemetry-AWS-CloudWatch-Plugin")]
 internal sealed class CloudWatchPluginEventSource : EventSource
