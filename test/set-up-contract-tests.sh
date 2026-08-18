@@ -6,7 +6,7 @@
 set -e
 
 # Check script is running in contract-tests
-current_path=`pwd`
+current_path=$(pwd)
 current_dir="${current_path##*/}"
 if [ "$current_dir" != "test" ]; then
   echo "Please run from test dir"
@@ -36,17 +36,33 @@ fi
 
 # Create application images
 cd ../../..
+included_application="${CONTRACT_TEST_APPLICATION_INCLUDE:-}"
+excluded_application="${CONTRACT_TEST_APPLICATION_EXCLUDE:-}"
+applications_built=0
 for dir in contract-tests/images/applications/*
 do
-  application="${dir##*/}"
-  application=$(echo "$application" | tr '[:upper:]' '[:lower:]')
+  application_directory="${dir##*/}"
+  if [ -n "$included_application" ] && [ "$application_directory" != "$included_application" ]; then
+    continue
+  fi
+  if [ -n "$excluded_application" ] && [ "$application_directory" = "$excluded_application" ]; then
+    continue
+  fi
+
+  application=$(echo "$application_directory" | tr '[:upper:]' '[:lower:]')
   echo "application: ${application}"
-  docker build . -t aws-application-signals-tests-${application}-app -f ${dir}/Dockerfile
+  docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile"
   if [ $? = 1 ]; then
     echo "Docker build for ${application} application failed"
     exit 1
   fi
+  applications_built=$((applications_built + 1))
 done
+
+if [ "$applications_built" -eq 0 ]; then
+  echo "No contract-test application images matched the configured filters"
+  exit 1
+fi
 
 # Build and install mock-collector
 cd contract-tests/images/mock-collector
