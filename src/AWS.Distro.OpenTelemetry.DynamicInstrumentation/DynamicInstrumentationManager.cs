@@ -108,8 +108,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 // Output subsystems must be live before the poller starts: the first OnConfigurationsChanged
                 // reports READY/ERROR via statusReporter, and woven captures begin enqueuing immediately, so
                 // the collector must already be draining. The emitter routes snapshots to the configured OTLP
-                // logs endpoint (no exporter is attached when LogsEndpoint is null — captures are dropped, not
-                // buffered) and is enriched from the registry.
+                // logs endpoint and is enriched from the registry.
                 this.snapshotEmitter = DISnapshotOtlpEmitter.Create(config.LogsEndpoint, this.registry);
                 this.snapshotCollector = new DISnapshotCollector(this.snapshotEmitter, this.cts.Token);
                 this.snapshotCollector.Start();

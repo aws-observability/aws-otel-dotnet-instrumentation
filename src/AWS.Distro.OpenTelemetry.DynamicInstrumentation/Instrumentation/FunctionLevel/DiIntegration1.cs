@@ -12,7 +12,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.Functi
 /// MUST be public: the native profiler bakes this type as a generic type argument into the
 /// TARGET (customer) assembly's rewritten IL (e.g. CallTargetInvoker.LogException&lt;DiIntegrationN, TTarget&gt;).
 /// An internal type is inaccessible from the customer assembly and throws MethodAccessException at
-/// the first woven call. Verified via the real-profiler E2E (poc/DeployedAppDemo/run-e2e-linux.sh).
+/// the first woven call. Verified against the real profiler in a Linux container.
 /// The callback methods stay internal — the profiler binds them reflectively (NonPublic).
 /// </remarks>
 public static class DiIntegration1

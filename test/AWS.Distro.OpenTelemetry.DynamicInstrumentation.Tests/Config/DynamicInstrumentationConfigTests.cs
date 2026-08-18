@@ -31,7 +31,10 @@ public class DynamicInstrumentationConfigTests : IDisposable
         config.ApiUrl.Should().Be("http://localhost:2000");
         config.ProbePollIntervalSeconds.Should().Be(600);
         config.BreakpointPollIntervalSeconds.Should().Be(60);
-        config.LogsEndpoint.Should().BeEmpty();
+        config.LogsEndpoint.Should().Be(
+            "http://localhost:4316/v1/logs",
+            "snapshots must have somewhere to go by default, matching the Java/Python/JS agents; with no "
+            + "default a probe reported ACTIVE while every snapshot was silently dropped");
         config.ServiceName.Should().StartWith("unknown_service:");
         config.Environment.Should().BeEmpty();
     }
@@ -52,6 +55,39 @@ public class DynamicInstrumentationConfigTests : IDisposable
         config.ProbePollIntervalSeconds.Should().Be(300);
         config.BreakpointPollIntervalSeconds.Should().Be(30);
         config.LogsEndpoint.Should().Be("http://collector:4317/v1/logs");
+    }
+
+    // Matches Python (endpoint.strip() or _DEFAULT_LOGS_ENDPOINT) and JS (raw.trim() || DEFAULT): a variable
+    // exported with a blank value must not disable snapshot export, because that failure is silent — probes
+    // still report ACTIVE and the snapshots simply vanish.
+    //
+    // NOTE ON THE "" CASE: measured, Environment.SetEnvironmentVariable(name, "") DELETES the variable rather
+    // than storing an empty value, so that row exercises the unset path, not a genuinely empty one. A shell's
+    // `export VAR=""` does produce an empty value, and IsNullOrWhiteSpace covers it, but that state cannot be
+    // created from inside the process. The "   " row is what actually exercises the blank branch.
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FromEnvironment_TreatsABlankLogsEndpointAsUnset(string configured)
+    {
+        SetEnv("OTEL_AWS_OTLP_LOGS_ENDPOINT", configured);
+
+        DynamicInstrumentationConfig.FromEnvironment().LogsEndpoint
+            .Should().Be("http://localhost:4316/v1/logs");
+    }
+
+    [Fact]
+    public void FromEnvironment_TrimsTheConfiguredLogsEndpoint()
+    {
+        // A trailing newline is what a Docker env file or a `read`-into-variable most often leaves behind.
+        // This is normalization for parity with Python and JS, NOT crash avoidance: measured, the Uri
+        // constructor accepts surrounding whitespace and normalizes it away, so an untrimmed value would still
+        // have exported correctly. What it would have corrupted is the stored config value itself, which is
+        // what diagnostics and any future equality check on the endpoint read.
+        SetEnv("OTEL_AWS_OTLP_LOGS_ENDPOINT", "  http://collector:4318/v1/logs\n");
+
+        DynamicInstrumentationConfig.FromEnvironment().LogsEndpoint
+            .Should().Be("http://collector:4318/v1/logs");
     }
 
     [Fact]

@@ -48,14 +48,37 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 // Must precede AddOtlpExporter: processors run in registration order.
                 options.AddProcessor(new SnapshotTraceContextProcessor());
 
-                // No endpoint => no exporter => snapshots are dropped (not buffered). Documented operator
-                // trap; see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
+                // No endpoint => no exporter => snapshots are dropped (not buffered). NOT reachable from
+                // DynamicInstrumentationConfig.FromEnvironment, which now defaults the endpoint rather than
+                // leaving it unset; kept for callers that construct a config directly (tests, and any future
+                // in-process host) so a null endpoint degrades to "capture, don't export" instead of throwing
+                // inside the Uri constructor.
                 if (!string.IsNullOrEmpty(logsEndpoint))
                 {
                     options.AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = new Uri(logsEndpoint);
-                        otlp.Protocol = ResolveProtocol();
+
+                        // PINNED, and deliberately NOT read from OTEL_EXPORTER_OTLP_PROTOCOL or
+                        // OTEL_EXPORTER_OTLP_LOGS_PROTOCOL.
+                        //
+                        // The other DI SDKs pin the transport by CHOOSING THE HTTP EXPORTER TYPE, so none of
+                        // them exposes a protocol knob for snapshots: Java builds
+                        // OtlpHttpLogRecordExporter.builder().setEndpoint(...) in
+                        // DynamicInstrumentationManager, Python imports OTLPLogExporter from
+                        // opentelemetry.exporter.otlp.proto.http._log_exporter in _snapshot_otlp_emitter.py,
+                        // and JS imports it from @opentelemetry/exporter-logs-otlp-http. Reading the variable
+                        // here would make .NET the only SDK where a generic distro-wide setting — set for
+                        // traces and metrics — silently redirects snapshots onto a transport the snapshot
+                        // consumer does not accept.
+                        //
+                        // Setting it explicitly is required regardless, because unlike those three we get the
+                        // protocol from an options object rather than from the exporter type, and the SDK's own
+                        // default is OTLP/gRPC. Measured with no protocol set, exporting to
+                        // http://127.0.0.1:PORT/v1/logs put "PRI * HTTP/2.0" (the HTTP/2 preface for gRPC) on
+                        // the wire against the HTTP endpoint the docs tell operators to configure, and every
+                        // snapshot was silently lost.
+                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
 
                         // Bound each export so a wedged endpoint can't block the drain thread and grow the
                         // queue unboundedly. 10s matches the OTLP/HTTP spec default.
@@ -86,26 +109,6 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
     public void Dispose()
     {
         this.loggerFactory.Dispose();
-    }
-
-    /// <summary>
-    /// Resolves the OTLP protocol from OTEL_EXPORTER_OTLP_PROTOCOL, defaulting to HTTP/protobuf as Plugin.cs
-    /// does. The OTel SDK default is gRPC.
-    /// </summary>
-    internal static OtlpExportProtocol ResolveProtocol()
-    {
-        var protocol = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL");
-
-        return protocol switch
-        {
-#if NET8_0_OR_GREATER
-            // Grpc is [Obsolete] on .NET Framework targets; guarded to match Plugin.cs.
-            "grpc" => OtlpExportProtocol.Grpc,
-#endif
-
-            // Unset or unrecognized falls back to the default, as Plugin.cs does.
-            _ => OtlpExportProtocol.HttpProtobuf,
-        };
     }
 
     private static string FormatBody(SnapshotLogState state)

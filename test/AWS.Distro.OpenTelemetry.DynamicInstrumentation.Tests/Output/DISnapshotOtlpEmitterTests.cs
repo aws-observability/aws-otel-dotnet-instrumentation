@@ -5,7 +5,6 @@ using System.Diagnostics;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Output;
@@ -259,27 +258,6 @@ public class DISnapshotOtlpEmitterExportTests
         body.Should().Contain("not_captured_reason");
         // A collection with partial elements must NOT also emit not_captured_reason (exactly-one-of).
         body.Should().NotContain("COLLECTION_SIZE");
-    }
-
-    [Theory]
-    [InlineData(null, OtlpExportProtocol.HttpProtobuf)]           // unset → documented default, not the SDK's gRPC
-    [InlineData("http/protobuf", OtlpExportProtocol.HttpProtobuf)]
-    [InlineData("grpc", OtlpExportProtocol.Grpc)]
-    [InlineData("nonsense", OtlpExportProtocol.HttpProtobuf)]     // unrecognized → default, matching Plugin.cs
-    public void ResolveProtocol_HonorsEnvVar_DefaultingToHttpProtobuf(string? envValue, OtlpExportProtocol expected)
-    {
-        // The OTel SDK default is gRPC; this distro and its docs use http/protobuf.
-        var original = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL");
-        try
-        {
-            Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL", envValue);
-
-            DISnapshotOtlpEmitter.ResolveProtocol().Should().Be(expected);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL", original);
-        }
     }
 
     [Fact]
