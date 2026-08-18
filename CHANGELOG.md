@@ -21,7 +21,7 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   instrumentation stays off until `OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE` names at least
   one package
   ([#443](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/443),
-  [#PRB](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/PRB))
+  [#447](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/447))
 - Attribute presigned S3 URLs as `AWS::S3` dependencies in Application Signals, opt-in via
   `OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED`
   ([#440](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/440))
