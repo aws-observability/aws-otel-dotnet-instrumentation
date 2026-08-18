@@ -19,3 +19,16 @@ rm -rf ./OpenTelemetryDistribution
 mkdir -p ./dist
 cp -r ../OpenTelemetryDistribution ./dist
 check_if_step_failed_and_exit "There was an error moving OpenTelemetryDistribution to the sample app , exiting"
+
+rm -rf ./dist/nuget
+mkdir -p ./dist/nuget
+
+dotnet pack ../src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj \
+  --configuration Release \
+  --output ./dist/nuget
+check_if_step_failed_and_exit "There was an error packing the CloudWatch plugin, exiting"
+
+dotnet pack ../src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj \
+  --configuration Release \
+  --output ./dist/nuget
+check_if_step_failed_and_exit "There was an error packing the AWS instrumentation, exiting"
