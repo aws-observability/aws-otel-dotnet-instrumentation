@@ -6,7 +6,7 @@ namespace OpenTelemetry.Metrics;
 /// <summary>
 /// Extension methods for registering CloudWatch span metrics.
 /// </summary>
-public static class CloudWatchSpanMetricsMeterProviderBuilderExtensions
+public static class SpanMetricsMeterProviderBuilderExtensions
 {
     /// <summary>
     /// Subscribes the meter provider to the CloudWatch span metrics instruments.

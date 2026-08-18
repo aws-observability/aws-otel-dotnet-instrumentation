@@ -10,7 +10,7 @@ namespace OpenTelemetry.Trace;
 /// <summary>
 /// Extension methods for registering CloudWatch span metrics.
 /// </summary>
-public static class CloudWatchSpanMetricsTracerProviderBuilderExtensions
+public static class SpanMetricsTracerProviderBuilderExtensions
 {
     private static readonly ConditionalWeakTable<TracerProviderBuilder, object> Registrations = new();
     private static readonly object RegistrationLock = new();
