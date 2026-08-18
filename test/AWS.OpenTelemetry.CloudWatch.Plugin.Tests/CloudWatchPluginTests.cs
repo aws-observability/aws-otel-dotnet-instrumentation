@@ -20,6 +20,8 @@ public class CloudWatchPluginTests
     public void AutoPluginRecordsMetricsWithoutExportingAlwaysOffSpans()
     {
         using var environment = new SamplerEnvironment("always_off", null);
+        using var pluginsEnvironment = new PluginsEnvironment(
+            "Example.Plugin, Example:" + CloudWatchPluginName);
         var metrics = new List<Metric>();
         var exportedActivities = new List<Activity>();
         var sourceName = UniqueName();
@@ -55,6 +57,55 @@ public class CloudWatchPluginTests
                 metrics,
                 "traces.span.metrics.duration",
                 "auto-plugin").GetHistogramCount());
+    }
+
+    [Fact]
+    public void AutoPluginDisablesSpanMetricsWhenCloudWatchIsNotLast()
+    {
+        using var samplerEnvironment = new SamplerEnvironment("always_off", null);
+        using var pluginsEnvironment = new PluginsEnvironment(
+            CloudWatchPluginName + ":Example.Plugin, Example");
+        using var errorOutput = new StringWriter();
+        var originalError = Console.Error;
+        CloudWatchPlugin plugin;
+        try
+        {
+            Console.SetError(errorOutput);
+            plugin = new CloudWatchPlugin();
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        var metrics = new List<Metric>();
+        var exportedActivities = new List<Activity>();
+        var sourceName = UniqueName();
+        var meterBuilder = plugin.AfterConfigureMeterProvider(
+            Sdk.CreateMeterProviderBuilder().AddInMemoryExporter(metrics));
+        using var meterProvider = meterBuilder.Build();
+        var tracerBuilder = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .AddInMemoryExporter(exportedActivities);
+        plugin.AfterConfigureTracerProvider(tracerBuilder);
+        using var tracerProvider = tracerBuilder.Build();
+        using var source = new ActivitySource(sourceName);
+
+        using (var activity = source.StartActivity("disabled-plugin"))
+        {
+            Assert.NotNull(activity);
+            Assert.False(activity.IsAllDataRequested);
+        }
+
+        tracerProvider.ForceFlush();
+        meterProvider.ForceFlush();
+
+        Assert.Empty(exportedActivities);
+        Assert.Empty(metrics);
+        Assert.Contains(
+            "CloudWatchPlugin must be the last entry in OTEL_DOTNET_AUTO_PLUGINS",
+            errorOutput.ToString());
+        Assert.Contains("Example.Plugin", errorOutput.ToString());
     }
 
     [Fact]
@@ -105,6 +156,15 @@ public class CloudWatchPluginTests
     public void PluginDoesNotExposePostBuildRegistrationHook()
     {
         Assert.Null(typeof(CloudWatchPlugin).GetMethod("TracerProviderInitialized"));
+    }
+
+    [Fact]
+    public void PluginHooksRejectNullBuilders()
+    {
+        var plugin = new CloudWatchPlugin();
+
+        Assert.Throws<ArgumentNullException>(() => plugin.AfterConfigureTracerProvider(null!));
+        Assert.Throws<ArgumentNullException>(() => plugin.AfterConfigureMeterProvider(null!));
     }
 
     private static object CreateUpstreamPluginManager()

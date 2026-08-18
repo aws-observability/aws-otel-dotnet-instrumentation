@@ -36,4 +36,13 @@ internal sealed class CloudWatchPluginEventSource : EventSource
     {
         this.WriteEvent(2, samplerName);
     }
+
+    [Event(
+        3,
+        Message = "CloudWatchPlugin must be the last auto-instrumentation plugin. The last effective plugin is '{0}'. CloudWatch span metrics were disabled.",
+        Level = EventLevel.Error)]
+    public void PluginDisabledByOrdering(string lastPlugin)
+    {
+        this.WriteEvent(3, lastPlugin);
+    }
 }
