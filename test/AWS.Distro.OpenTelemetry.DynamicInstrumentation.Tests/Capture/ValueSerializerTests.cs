@@ -250,6 +250,22 @@ public class ValueSerializerTests
 
         result.Fields.Should().HaveCount(1);
         result.NotCapturedReason.Should().Be(NotCapturedReason.FieldCount);
+
+        // TestObj has exactly two readable members.
+        result.OriginalSize.Should().Be(2, "a field-count-capped object must report its true member count");
+    }
+
+    [Fact]
+    public void Serialize_ObjectWithinFieldCap_HasNoOriginalSize()
+    {
+        // An object that fits carries no size.
+        var obj = new TestObj { Name = "Alice", Age = 30 };
+
+        var result = ValueSerializer.Serialize(obj, DefaultLimits with { MaxFieldsPerObject = 10 });
+
+        result.Fields.Should().HaveCount(2);
+        result.NotCapturedReason.Should().Be(NotCapturedReason.None);
+        result.OriginalSize.Should().BeNull("an object that fits the cap is not truncated");
     }
 
     [Fact]
@@ -424,6 +440,33 @@ public class ValueSerializerTests
 
         result.Truncated.Should().BeFalse();
         result.Value!.Length.Should().Be(255);
+    }
+
+    [Fact]
+    public void Serialize_ShadowedMember_DoesNotDoubleCountTowardTheTruncationSize()
+    {
+        // GetFields does not apply hide-by-name, so `new` shadowing returns two FieldInfos for one NAME while
+        // `fields` is keyed by name. Counting both reported a member as dropped when none distinct was.
+        var limits = DefaultLimits with { MaxFieldsPerObject = 1 };
+
+        var result = ValueSerializer.Serialize(new ShadowedDerived(), limits);
+
+        result.Fields.Should().HaveCount(1);
+        result.OriginalSize.Should().Be(
+            2,
+            "the shadowed name counts once: two distinct names (Name, Other), not three members");
+    }
+
+    private class ShadowedBase
+    {
+        public string Name = "base";
+    }
+
+    private class ShadowedDerived : ShadowedBase
+    {
+        public new string Name = "derived";
+
+        public string Other = "other";
     }
 
     private class TestObj

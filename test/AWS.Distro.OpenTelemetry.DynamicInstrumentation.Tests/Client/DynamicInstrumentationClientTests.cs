@@ -69,8 +69,8 @@ public class DynamicInstrumentationClientTests
     [Fact]
     public async Task FetchConfigurations_ParsesNumericSyncedAt_FromLiveBackend()
     {
-        // Verified against the live backend (application-signals.us-east-1.api.aws): it emits
-        // SyncedAt as a JSON NUMBER in exponent form, NOT the ISO string the spec documents.
+        // The live backend emits SyncedAt as a JSON NUMBER in exponent form, NOT the ISO string the
+        // spec documents.
         // Modeling SyncedAt as string? made System.Text.Json throw here, so every poll returned
         // Failed and the client silently never synced. This pins the real wire shape.
         var responseJson = """{ "Changed": true, "SyncInterval": 300, "SyncedAt": 1.7839751E9, "LatestConfigurations": [] }""";

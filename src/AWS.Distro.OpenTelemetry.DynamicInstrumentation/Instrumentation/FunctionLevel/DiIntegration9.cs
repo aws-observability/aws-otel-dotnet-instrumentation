@@ -8,7 +8,14 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.Functi
 /// <summary>
 /// CallTarget integration for methods with 9 parameter(s).
 /// </summary>
-internal static class DiIntegration9
+/// <remarks>
+/// MUST be public: the native profiler bakes this type as a generic type argument into the
+/// TARGET (customer) assembly's rewritten IL (e.g. CallTargetInvoker.LogException&lt;DiIntegrationN, TTarget&gt;).
+/// An internal type is inaccessible from the customer assembly and throws MethodAccessException at
+/// the first woven call. Verified against the real profiler in a Linux container.
+/// The callback methods stay internal — the profiler binds them reflectively (NonPublic).
+/// </remarks>
+public static class DiIntegration9
 {
     internal static CallTargetState OnMethodBegin<TTarget, TArg1, TArg2, TArg3, TArg4, TArg5, TArg6, TArg7, TArg8, TArg9>(TTarget instance, TArg1 arg1, TArg2 arg2, TArg3 arg3, TArg4 arg4, TArg5 arg5, TArg6 arg6, TArg7 arg7, TArg8 arg8, TArg9 arg9)
     {
