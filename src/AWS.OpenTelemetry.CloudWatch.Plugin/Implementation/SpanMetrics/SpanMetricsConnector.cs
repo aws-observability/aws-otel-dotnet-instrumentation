@@ -76,6 +76,9 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
                 callsEnabled,
                 durationEnabled,
                 this.otlpMetricsExporterConfigured);
+
+            // Preserve the start-time decision so OnEnd cannot emit metrics for a span
+            // that was deliberately left unstamped.
             data.SetCustomProperty(RecordingStatePropertyName, recordingState);
 
             if (recordingState.Stamped)
@@ -311,6 +314,7 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         }
     }
 
+    // Captures which span metrics were active when the span started.
     private sealed class RecordingState
     {
         public RecordingState(bool callsEnabled, bool durationEnabled, bool stamped)
@@ -320,10 +324,13 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
             this.Stamped = stamped;
         }
 
+        // Controls whether OnEnd increments the calls counter.
         public bool CallsEnabled { get; }
 
+        // Controls whether OnEnd records the duration histogram.
         public bool DurationEnabled { get; }
 
+        // Indicates that deduplication tags were added to the exported span.
         public bool Stamped { get; }
     }
 }
