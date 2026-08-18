@@ -2,6 +2,11 @@
 
 Amazon CloudWatch plugin for OpenTelemetry .NET.
 
+> [!IMPORTANT]
+> `CloudWatchPlugin` must be the last plugin listed in
+> `OTEL_DOTNET_AUTO_PLUGINS`. A plugin listed after it can replace the required
+> sampler and cause span metrics to be undercounted.
+
 ## OpenTelemetry .NET auto-instrumentation
 
 This package extends the upstream OpenTelemetry .NET Automatic Instrumentation
@@ -47,13 +52,10 @@ package into the upstream distribution's managed assemblies directory under
 `OTEL_DOTNET_AUTO_PLUGINS` as shown above.
 
 When combining this with another plugin, separate assembly-qualified names with
-`:` and list `CloudWatchPlugin` last. The upstream plugin API does not expose or
-allow decorating the resolved sampler, so the plugin cannot validate this
-ordering and does not support composition with another plugin that configures
-sampling. Standard upstream sampler configuration through `OTEL_TRACES_SAMPLER`
-and `OTEL_TRACES_SAMPLER_ARG` is supported. Unsupported
-`OTEL_TRACES_SAMPLER` values are rejected rather than replaced with a different
-sampling policy.
+`:`, keeping `CloudWatchPlugin` last. Standard upstream sampler configuration
+through `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` is supported.
+Unsupported `OTEL_TRACES_SAMPLER` values are rejected rather than replaced with
+a different sampling policy.
 
 ## Manual OpenTelemetry SDK registration
 
