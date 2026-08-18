@@ -7,7 +7,7 @@ from amazon.cloudwatch_plugin_otel.span_metrics.contract_test_base import (
 )
 
 
-class SpanMetricsManualGlobalInstrumentationTest(SpanMetricsContractTestBase):
+class SpanMetricsManualInstrumentationGlobalTest(SpanMetricsContractTestBase):
     __test__ = True
 
     def get_mode(self) -> InstrumentationMode:
