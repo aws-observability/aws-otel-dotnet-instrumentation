@@ -6,6 +6,7 @@ using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
 using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation;
@@ -24,7 +25,14 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private readonly object configChangeLock = new();
 
     // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
-    private readonly HashSet<string> appliedInstrumentations = new();
+    // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity.
+    //
+    // WHY THE HASH AND NOT JUST THE KEY. An in-place edit of a probe (different captured arguments, a
+    // different MaxHits) arrives as the SAME key with a NEW LocationHash. With a key-only set that edit was
+    // invisible: RemoveStale did not consider the key stale, so nothing was forgotten, and this loop saw the
+    // key already present and skipped it. The edited configuration was never applied and never reported any
+    // status, while the previous incarnation's identity stayed the one the backend knew about.
+    private readonly Dictionary<string, string> appliedInstrumentations = new();
 
     private volatile bool initialized;
     private DynamicInstrumentationConfig? config;
@@ -38,7 +46,11 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private InstrumentationRegistry? registry;
     private ProfilerTranslator? profilerTranslator;
 
-    // Output subsystems (snapshot drain + status reporting) land in PR3.
+    // Output subsystems: drain the capture queue to OTLP, and report per-config status to the backend.
+    private DISnapshotOtlpEmitter? snapshotEmitter;
+    private DISnapshotCollector? snapshotCollector;
+    private StatusReporter? statusReporter;
+
     private DynamicInstrumentationManager()
     {
     }
@@ -93,7 +105,16 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 this.profilerTranslator = new ProfilerTranslator();
                 DiIntegrationHelper.Configure(this.registry);
 
-                // Output subsystems (drain + status reporting) land in PR3.
+                // Output subsystems must be live before the poller starts: the first OnConfigurationsChanged
+                // reports READY/ERROR via statusReporter, and woven captures begin enqueuing immediately, so
+                // the collector must already be draining. The emitter routes snapshots to the configured OTLP
+                // logs endpoint and is enriched from the registry.
+                this.snapshotEmitter = DISnapshotOtlpEmitter.Create(config.LogsEndpoint, this.registry);
+                this.snapshotCollector = new DISnapshotCollector(this.snapshotEmitter, this.cts.Token);
+                this.snapshotCollector.Start();
+
+                this.statusReporter = new StatusReporter(this.client, this.registry, this.cts.Token);
+                this.statusReporter.Start();
 
                 // Poller started last so its OnConfigurationsChanged dependencies are all live.
                 this.poller = new ConfigurationPoller(
@@ -179,7 +200,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 // Report refused method-level targets (ctor/static-init); skip line-level silently to avoid status spam.
                 if (config.IsMethodLevel)
                 {
-                    // TODO(PR3): this.statusReporter.ReportError(config, "UNSUPPORTED_TARGET");
+                    this.statusReporter?.ReportError(config, "UNSUPPORTED_TARGET");
                 }
 
                 continue;
@@ -199,9 +220,15 @@ public sealed class DynamicInstrumentationManager : IDisposable
         // CallTargetState.GetDefault() and OnMethodEnd finds no paired entry, enqueuing nothing. The method
         // keeps the (cheap) woven prologue/epilogue that immediately short-circuits; no snapshot is ever
         // produced for a removed config. Forgetting applied-state here also lets a later re-add re-apply it.
-        foreach (var removedKey in reg.RemoveStale(activeKeys))
+        foreach (var removedConfig in reg.RemoveStale(activeKeys))
         {
-            this.appliedInstrumentations.Remove(removedKey);
+            this.appliedInstrumentations.Remove(removedConfig.InstrumentationKey);
+
+            // Clear the status-dedup state for this config so a later re-add reports READY again (matches
+            // the Java/JS reference SDKs, which forget on removal). Keyed by LocationHash — the config's
+            // identity — not by InstrumentationKey, so an in-place config change (new LocationHash on the
+            // same method) is treated as a fresh config for status purposes.
+            this.statusReporter?.Forget(removedConfig.LocationHash);
         }
 
         // If any target can't be applied yet, signal the poller not to latch so the next poll retries.
@@ -212,10 +239,21 @@ public sealed class DynamicInstrumentationManager : IDisposable
         {
             var config = registered.Config;
             var key = config.InstrumentationKey;
-            if (!this.appliedInstrumentations.Add(key))
+            if (this.appliedInstrumentations.TryGetValue(key, out var appliedHash))
             {
-                continue; // Already applied on a previous poll.
+                if (string.Equals(appliedHash, config.LocationHash, StringComparison.Ordinal))
+                {
+                    continue; // Already applied on a previous poll, and unchanged.
+                }
+
+                // EDITED IN PLACE: same target, new configuration identity. Retire the previous incarnation's
+                // status state so the edited config is judged on its own — it must earn READY through this
+                // apply, and must not inherit the old identity's ERROR.
+                this.appliedInstrumentations.Remove(key);
+                this.statusReporter?.Forget(appliedHash);
             }
+
+            this.appliedInstrumentations[key] = config.LocationHash;
 
             IReadOnlyCollection<int> appliedArities = Array.Empty<int>();
             var result = this.profilerTranslator?.ApplyInstrumentation(config, out appliedArities)
@@ -223,21 +261,29 @@ public sealed class DynamicInstrumentationManager : IDisposable
             switch (result)
             {
                 case InstrumentationApplyResult.Applied:
+                    // The target is woven, so this config may now report READY. Marked here rather than
+                    // inferred from registration: every supported config is registered, including ones that did
+                    // not apply (TypeNotLoaded, permanent failures), and READY for those claimed a probe was
+                    // live when nothing had been instrumented.
+                    this.statusReporter?.MarkApplied(config);
+
                     // Index the woven arities so the capture hot path resolves this call by (type, arity),
-                    // disambiguating co-located methods that differ in parameter count (#3).
-                    if (reg.IndexArities(config.TypeName, key, appliedArities))
+                    // disambiguating co-located methods that differ in parameter count (#3). A same-arity
+                    // collision (two configured methods on one type with the same parameter count) can't be
+                    // told apart by args.Length, so captures may be misattributed — report OVERLOADED_METHODS
+                    // on EVERY config in the ambiguous bucket (both the incoming one and its already-applied
+                    // peer), so the operator sees the full ambiguous set, not just the side that applied last.
+                    foreach (var collidingKey in reg.IndexArities(config.TypeName, key, appliedArities))
                     {
-                        // Same-arity collision: another configured method on this type has the same
-                        // parameter count, so args.Length can't tell them apart — captures may be
-                        // attributed to the wrong probe. Documented #3 residual.
-                        // Note: this only fires for the SECOND (colliding) config to apply — the first
-                        // applied cleanly before its peer existed, so it's never flagged even though it's
-                        // equally ambiguous. TODO(PR3): report ERROR for BOTH keys sharing the bucket
-                        // (this.statusReporter.ReportError on each), not just this incoming one, or the
-                        // operator sees only half the ambiguous pair.
+                        var collidingConfig = reg.Get(collidingKey)?.Config;
+                        if (collidingConfig != null)
+                        {
+                            this.statusReporter?.ReportError(collidingConfig, "OVERLOADED_METHODS");
+                        }
                     }
 
-                    // TODO(PR3): this.statusReporter.ReportReadyForNew();
+                    // READY is reported once after the apply loop (ReportReadyForNew scans the whole
+                    // registry and self-dedups), not per-config here.
                     break;
 
                 case InstrumentationApplyResult.TypeNotLoaded:
@@ -255,13 +301,19 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 default:
                     // Permanent instrumentation failure (MethodNotFound / NoSupportedArity / RuntimeError):
                     // keep the key in appliedInstrumentations so we report it EXACTLY ONCE, not every poll.
-                    // result.IsReportableFailure() is true here and result.MapErrorCause() gives the backend
-                    // ErrorCause. This is an instrumentation-level ERROR (the target couldn't be woven) — a
-                    // capture-level partial (NotCapturedReason) is emitted inside a snapshot instead, never here.
-                    // TODO(PR3): if (result.IsReportableFailure()) this.statusReporter.ReportError(config, result.MapErrorCause()!);
+                    // This is an instrumentation-level ERROR (the target couldn't be woven) — a capture-level
+                    // partial (NotCapturedReason) is emitted inside a snapshot instead, never here.
+                    if (result.IsReportableFailure())
+                    {
+                        this.statusReporter?.ReportError(config, result.MapErrorCause()!);
+                    }
+
                     break;
             }
         }
+
+        // Report READY for any newly-applied configs that haven't been hit yet (self-dedups per key).
+        this.statusReporter?.ReportReadyForNew();
 
         // Latch only when nothing is pending a retry.
         return !retryNeeded;
@@ -269,11 +321,21 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
     private void Cleanup()
     {
+        // Stop the poller first (no new configs), then the output subsystems. The collector thread and the
+        // reporter timer observe the already-cancelled token (Shutdown cancels cts before Cleanup); disposing
+        // the collector/reporter releases their handles and the emitter disposes its LoggerFactory, flushing
+        // any buffered snapshots on the way out.
         this.poller?.Dispose();
+        this.snapshotCollector?.Dispose();
+        this.statusReporter?.Dispose();
+        this.snapshotEmitter?.Dispose();
         this.httpClient?.Dispose();
         this.cts?.Dispose();
 
         this.poller = null;
+        this.snapshotCollector = null;
+        this.statusReporter = null;
+        this.snapshotEmitter = null;
         this.client = null;
         this.httpClient = null;
 
