@@ -14,49 +14,38 @@ namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 internal sealed class AlwaysRecordSampler : Sampler
 {
     private readonly Sampler rootSampler;
-    private volatile bool enabled = true;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AlwaysRecordSampler"/> class
-    /// using the OpenTelemetry SDK default sampling policy.
-    /// </summary>
-    internal AlwaysRecordSampler()
-        : this(new ParentBasedSampler(new AlwaysOnSampler()))
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AlwaysRecordSampler"/> class.
-    /// </summary>
-    /// <param name="rootSampler">The application sampler whose export decisions are preserved.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="rootSampler"/> is null.</exception>
-    internal AlwaysRecordSampler(Sampler rootSampler)
+    private AlwaysRecordSampler(Sampler rootSampler)
     {
         this.rootSampler = rootSampler ?? throw new ArgumentNullException(nameof(rootSampler));
         this.Description = "AlwaysRecordSampler{" + rootSampler.Description + "}";
-    }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether drop decisions are converted to record-only decisions.
-    /// </summary>
-    internal bool Enabled
-    {
-        get => this.enabled;
-        set => this.enabled = value;
     }
 
     /// <inheritdoc/>
     public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
     {
         var result = this.rootSampler.ShouldSample(samplingParameters);
-        if (!this.Enabled || result.Decision != SamplingDecision.Drop)
+        if (result.Decision == SamplingDecision.Drop)
         {
-            return result;
+            result = WrapResultWithRecordOnlyResult(result);
         }
 
-        return new SamplingResult(
-            SamplingDecision.RecordOnly,
-            result.Attributes,
-            result.TraceStateString);
+        return result;
+    }
+
+    /// <summary>
+    /// Creates an <see cref="AlwaysRecordSampler"/> that preserves the supplied sampler's export decisions.
+    /// </summary>
+    /// <param name="rootSampler">The application sampler whose export decisions are preserved.</param>
+    /// <returns>A sampler that converts drop decisions to record-only decisions.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="rootSampler"/> is null.</exception>
+    internal static AlwaysRecordSampler Create(Sampler rootSampler)
+    {
+        return new AlwaysRecordSampler(rootSampler);
+    }
+
+    private static SamplingResult WrapResultWithRecordOnlyResult(SamplingResult result)
+    {
+        return new SamplingResult(SamplingDecision.RecordOnly, result.Attributes, result.TraceStateString);
     }
 }

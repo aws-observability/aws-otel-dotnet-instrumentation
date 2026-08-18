@@ -14,13 +14,13 @@ public class AlwaysRecordSamplerTests
     [Fact]
     public void AlwaysRecordSamplerRejectsNullRootSampler()
     {
-        Assert.Throws<ArgumentNullException>(() => new AlwaysRecordSampler(null!));
+        Assert.Throws<ArgumentNullException>(() => AlwaysRecordSampler.Create(null!));
     }
 
     [Fact]
     public void AlwaysRecordSamplerConvertsDropWithoutAttributes()
     {
-        var sampler = new AlwaysRecordSampler(
+        var sampler = AlwaysRecordSampler.Create(
             new FixedSampler(new SamplingResult(SamplingDecision.Drop)));
 
         var result = sampler.ShouldSample(CreateParameters());
@@ -41,7 +41,7 @@ public class AlwaysRecordSamplerTests
                 ["sampler-only"] = "yes",
             },
             "vendor=value");
-        var sampler = new AlwaysRecordSampler(new FixedSampler(rootResult));
+        var sampler = AlwaysRecordSampler.Create(new FixedSampler(rootResult));
         var parameters = CreateParameters(
             new Dictionary<string, object?>
             {
@@ -66,19 +66,7 @@ public class AlwaysRecordSamplerTests
     public void AlwaysRecordSamplerPreservesNonDropResults(SamplingDecision decision)
     {
         var expected = new SamplingResult(decision, "vendor=value");
-        var sampler = new AlwaysRecordSampler(new FixedSampler(expected));
-
-        var actual = sampler.ShouldSample(CreateParameters());
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Fact]
-    public void AlwaysRecordSamplerCanBeDisabled()
-    {
-        var expected = new SamplingResult(SamplingDecision.Drop);
-        var sampler = new AlwaysRecordSampler(new FixedSampler(expected));
-        sampler.Enabled = false;
+        var sampler = AlwaysRecordSampler.Create(new FixedSampler(expected));
 
         var actual = sampler.ShouldSample(CreateParameters());
 
@@ -99,7 +87,7 @@ public class AlwaysRecordSamplerTests
         var sourceName = "always-record-sampler-" + Guid.NewGuid().ToString("N");
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
             .AddSource(sourceName)
-            .SetSampler(new AlwaysRecordSampler(new FixedSampler(rootResult)))
+            .SetSampler(AlwaysRecordSampler.Create(new FixedSampler(rootResult)))
             .Build();
         using var source = new ActivitySource(sourceName);
         var initialTags = new ActivityTagsCollection

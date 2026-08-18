@@ -51,7 +51,7 @@ public static class CloudWatchSpanMetricsTracerProviderBuilderExtensions
 
         lock (RegistrationLock)
         {
-            builder.SetSampler(new AlwaysRecordSampler(rootSampler));
+            builder.SetSampler(AlwaysRecordSampler.Create(rootSampler));
             if (!Registrations.TryGetValue(builder, out _))
             {
                 builder.AddProcessor(new SpanMetricsConnector());

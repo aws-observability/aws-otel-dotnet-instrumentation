@@ -126,6 +126,45 @@ public class SpanMetricsConnectorTests
         Assert.Equal(1, GetPoint(metrics, "traces.span.metrics.calls", "ordered").GetSumLong());
     }
 
+    [Fact]
+    public void SpanMetricsConnectorStampsSpanStartedBeforeMeterProviderActivation()
+    {
+        using var environment = new MetricsExporterEnvironment("otlp");
+        var exportedActivities = new List<Activity>();
+        var metrics = new List<Metric>();
+        var sourceName = UniqueName();
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysOnSampler())
+            .AddInMemoryExporter(exportedActivities)
+            .AddProcessor(new SpanMetricsConnector())
+            .Build();
+        using var source = new ActivitySource(sourceName);
+        var activity = Assert.IsType<Activity>(source.StartActivity("provider-ordering"));
+
+        Assert.Equal("v1", activity.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Equal(
+            SpanMetricsConstants.LibraryVersion,
+            activity.GetTagItem("aws.otel.extension.lib.version"));
+
+        using var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddInMemoryExporter(metrics)
+            .Build();
+        activity.Dispose();
+        tracerProvider.ForceFlush();
+        meterProvider.ForceFlush();
+
+        var exported = Assert.Single(exportedActivities);
+        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Equal(
+            SpanMetricsConstants.LibraryVersion,
+            exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.Equal(
+            1,
+            GetPoint(metrics, "traces.span.metrics.calls", "provider-ordering").GetSumLong());
+    }
+
     [Theory]
     [InlineData(null, true)]
     [InlineData("otlp", true)]
@@ -155,8 +194,9 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
-    public void SpanMetricsConnectorDoesNotStampWhenMetricsAreInactive()
+    public void SpanMetricsConnectorStampsWhenMetricsAreInactiveButOtlpIsConfigured()
     {
+        using var environment = new MetricsExporterEnvironment("otlp");
         var exportedActivities = new List<Activity>();
         var sourceName = UniqueName();
         using var tracerProvider = Sdk.CreateTracerProviderBuilder()
@@ -175,8 +215,10 @@ public class SpanMetricsConnectorTests
         tracerProvider.ForceFlush();
 
         var exported = Assert.Single(exportedActivities);
-        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
-        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Equal(
+            SpanMetricsConstants.LibraryVersion,
+            exported.GetTagItem("aws.otel.extension.lib.version"));
     }
 
     [Fact]
@@ -685,7 +727,7 @@ public class SpanMetricsConnectorTests
 
             var tracerBuilder = Sdk.CreateTracerProviderBuilder()
                 .AddSource(sourceName)
-                .SetSampler(new AlwaysRecordSampler(rootSampler))
+                .SetSampler(AlwaysRecordSampler.Create(rootSampler))
                 .AddInMemoryExporter(this.ExportedActivities)
                 .AddProcessor(new SpanMetricsConnector());
             if (resourceBuilder is not null)

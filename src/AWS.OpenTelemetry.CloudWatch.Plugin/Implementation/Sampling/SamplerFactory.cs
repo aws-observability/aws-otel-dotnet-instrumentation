@@ -13,6 +13,8 @@ internal static class SamplerFactory
 
     public static Sampler Create()
     {
+        // OTel parses sampler configuration internally and exposes no supported way for a plugin
+        // to read the configured sampler, so recreate it here before wrapping it.
         var samplerName = Environment.GetEnvironmentVariable(TracesSamplerEnvironmentVariable);
         var samplerArgument = Environment.GetEnvironmentVariable(TracesSamplerArgumentEnvironmentVariable);
 

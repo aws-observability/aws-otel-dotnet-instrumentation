@@ -48,15 +48,15 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     /// <inheritdoc/>
     public override void OnStart(Activity data)
     {
-        if (!this.Enabled ||
-            !this.otlpMetricsExporterConfigured ||
-            (!Calls.Enabled && !Duration.Enabled))
+        if (!this.Enabled || !this.otlpMetricsExporterConfigured)
         {
             return;
         }
 
         try
         {
+            // Tracer providers can start before the meter provider enables these instruments.
+            // Stamp independently so OnEnd cannot emit a metric for an unstamped span.
             data.SetTag(SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion);
             data.SetTag(SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion);
         }
