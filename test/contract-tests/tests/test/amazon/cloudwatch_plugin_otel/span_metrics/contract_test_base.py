@@ -173,7 +173,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
         test_method = getattr(self, self._testMethodName)
         return getattr(test_method, "sampler", "always_on")
 
-    def test_derives_metrics_for_real_instrumentation(self) -> None:
+    def test_derives_metrics_for_auto_instrumented_and_explicit_spans(self) -> None:
         self._assert_mode_configuration()
         self.assertEqual(200, self.send_request("GET", "exercise").status_code)
         self.assertEqual(500, self.send_request("GET", "error").status_code)
@@ -293,14 +293,18 @@ class SpanMetricsContractTestBase(ContractTestBase):
         self.assertIn("OTEL_DOTNET_AUTO_HOME=\n", logs)
 
     def _assert_exported_span_contract(self, spans: List[ResourceScopeSpan]) -> None:
+        exercise_span = self._find_span(
+            spans,
+            Span.SPAN_KIND_SERVER,
+            {"http.route": "/exercise"},
+        )
         error_span = self._find_span(
             spans,
             Span.SPAN_KIND_SERVER,
             {"http.route": "/error", "error.type": "System.InvalidOperationException"},
         )
-        expected_spans = [
-            self._find_span(spans, Span.SPAN_KIND_SERVER, {"http.route": "/exercise"}),
-            error_span,
+        exercise_spans = [
+            exercise_span,
             self._find_span(spans, Span.SPAN_KIND_INTERNAL, {}, name="internal-work"),
             self._find_span(
                 spans,
@@ -366,7 +370,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
             ),
         ]
 
-        expected_spans.append(
+        exercise_spans.append(
             self._find_span_with_attribute_variants(
                 spans,
                 Span.SPAN_KIND_CLIENT,
@@ -377,7 +381,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 name="main",
             )
         )
-        expected_spans.append(
+        exercise_spans.append(
             self._find_span_with_attribute_variants(
                 spans,
                 Span.SPAN_KIND_CLIENT,
@@ -388,7 +392,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 name="GET",
             )
         )
-        expected_spans.append(
+        exercise_spans.append(
             self._find_span_with_attribute_variants(
                 spans,
                 Span.SPAN_KIND_CLIENT,
@@ -401,7 +405,26 @@ class SpanMetricsContractTestBase(ContractTestBase):
         )
 
         self.assertEqual(Status.STATUS_CODE_ERROR, error_span.status.code)
-        for span in expected_spans:
+        exercise_trace_ids = {
+            resource_scope_span.span.trace_id
+            for resource_scope_span in spans
+            if self._attributes(resource_scope_span.span.attributes).get("http.route")
+            == "/exercise"
+        }
+        self.assertEqual(1, len(exercise_trace_ids))
+        exercise_trace_id = next(iter(exercise_trace_ids))
+        self.assertGreaterEqual(
+            sum(
+                1
+                for resource_scope_span in spans
+                if resource_scope_span.span.trace_id == exercise_trace_id
+            ),
+            12,
+        )
+        for span in exercise_spans:
+            self.assertEqual(exercise_trace_id, span.trace_id)
+
+        for span in [*exercise_spans, error_span]:
             attributes = self._attributes(span.attributes)
             self.assertEqual("v1", attributes["aws.otel.span.metrics.schema"])
             self.assertEqual(
