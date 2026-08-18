@@ -28,17 +28,17 @@ public sealed record ResourceAttributes
     /// </summary>
     private static readonly (string OtelKey, Func<ResourceAttributes, string?> Getter)[] OtelKeyMap = new (string, Func<ResourceAttributes, string?>)[]
     {
-        ("cloud.provider", a => a.CloudProvider),
-        ("cloud.platform", a => a.CloudPlatform),
-        ("cloud.region", a => a.CloudRegion),
-        ("cloud.account.id", a => a.CloudAccountId),
-        ("cloud.availability_zone", a => a.CloudAvailabilityZone),
-        ("host.id", a => a.HostId),
-        ("host.type", a => a.HostType),
-        ("container.id", a => a.ContainerId),
-        ("k8s.cluster.name", a => a.K8sClusterName),
-        ("k8s.pod.name", a => a.K8sPodName),
-        ("k8s.namespace.name", a => a.K8sNamespaceName),
+        (ResourceSemanticConventions.AttributeCloudProvider, a => a.CloudProvider),
+        (ResourceSemanticConventions.AttributeCloudPlatform, a => a.CloudPlatform),
+        (ResourceSemanticConventions.AttributeCloudRegion, a => a.CloudRegion),
+        (ResourceSemanticConventions.AttributeCloudAccountId, a => a.CloudAccountId),
+        (ResourceSemanticConventions.AttributeCloudAvailabilityZone, a => a.CloudAvailabilityZone),
+        (ResourceSemanticConventions.AttributeHostId, a => a.HostId),
+        (ResourceSemanticConventions.AttributeHostType, a => a.HostType),
+        (ResourceSemanticConventions.AttributeContainerId, a => a.ContainerId),
+        (ResourceSemanticConventions.AttributeK8sClusterName, a => a.K8sClusterName),
+        (ResourceSemanticConventions.AttributeK8sPodName, a => a.K8sPodName),
+        (ResourceSemanticConventions.AttributeK8sNamespaceName, a => a.K8sNamespaceName),
     };
 
     /// <summary>Gets the cloud provider, e.g. <c>"aws"</c>.</summary>
@@ -91,17 +91,17 @@ public sealed record ResourceAttributes
 
         return new ResourceAttributes
         {
-            CloudProvider = GetString(attrs, "cloud.provider"),
-            CloudPlatform = GetString(attrs, "cloud.platform"),
-            CloudRegion = GetString(attrs, "cloud.region"),
-            CloudAccountId = GetString(attrs, "cloud.account.id"),
-            CloudAvailabilityZone = GetString(attrs, "cloud.availability_zone"),
-            HostId = GetString(attrs, "host.id"),
-            HostType = GetString(attrs, "host.type"),
-            ContainerId = GetString(attrs, "container.id"),
-            K8sClusterName = GetString(attrs, "k8s.cluster.name"),
-            K8sPodName = GetString(attrs, "k8s.pod.name"),
-            K8sNamespaceName = GetString(attrs, "k8s.namespace.name"),
+            CloudProvider = GetString(attrs, ResourceSemanticConventions.AttributeCloudProvider),
+            CloudPlatform = GetString(attrs, ResourceSemanticConventions.AttributeCloudPlatform),
+            CloudRegion = GetString(attrs, ResourceSemanticConventions.AttributeCloudRegion),
+            CloudAccountId = GetString(attrs, ResourceSemanticConventions.AttributeCloudAccountId),
+            CloudAvailabilityZone = GetString(attrs, ResourceSemanticConventions.AttributeCloudAvailabilityZone),
+            HostId = GetString(attrs, ResourceSemanticConventions.AttributeHostId),
+            HostType = GetString(attrs, ResourceSemanticConventions.AttributeHostType),
+            ContainerId = GetString(attrs, ResourceSemanticConventions.AttributeContainerId),
+            K8sClusterName = GetString(attrs, ResourceSemanticConventions.AttributeK8sClusterName),
+            K8sPodName = GetString(attrs, ResourceSemanticConventions.AttributeK8sPodName),
+            K8sNamespaceName = GetString(attrs, ResourceSemanticConventions.AttributeK8sNamespaceName),
         };
     }
 
