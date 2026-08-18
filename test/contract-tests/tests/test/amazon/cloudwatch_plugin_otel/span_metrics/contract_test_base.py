@@ -58,7 +58,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
             LocalStackContainer(image="localstack/localstack:4.0.0")
             .with_name(f"localstack-{cls.__name__.lower()}")
             .with_services("s3", "sqs", "sns", "dynamodb")
-            .with_env("DEFAULT_REGION", "us-west-2")
+            .with_env("DEFAULT_REGION", "us-east-1")
             .with_kwargs(
                 network=NETWORK_NAME, networking_config=local_stack_networking_config
             )
@@ -97,10 +97,13 @@ class SpanMetricsContractTestBase(ContractTestBase):
     @override
     def get_application_extra_environment_variables(self) -> Dict[str, str]:
         common = {
-            "AWS_ACCESS_KEY_ID": "test",
-            "AWS_SECRET_ACCESS_KEY": "test",
-            "AWS_REGION": "us-west-2",
+            "AWS_ACCESS_KEY_ID": "testing",
+            "AWS_SECRET_ACCESS_KEY": "testing",
+            "AWS_REGION": "us-east-1",
             "OTEL_AWS_APPLICATION_SIGNALS_ENABLED": "false",
+            "OTEL_BSP_SCHEDULE_DELAY": "50",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+            "OTEL_METRIC_EXPORT_INTERVAL": "100",
             "OTEL_METRICS_EXPORTER": "otlp",
             "OTEL_SERVICE_NAME": _SERVICE_NAME,
             "OTEL_TRACES_EXPORTER": "otlp",
@@ -281,9 +284,12 @@ class SpanMetricsContractTestBase(ContractTestBase):
         expected_method = (
             "ConfigureManualRawSdk"
             if self.get_mode() is InstrumentationMode.MANUAL
-            else "ConfigureManualGlobal"
+            else "ConfigureManualGlobalProviders"
         )
-        self.assertIn(expected_method, logs)
+        self.assertIn(
+            f"SPAN_METRICS_MODE={self.get_mode()} -> {expected_method}",
+            logs,
+        )
         self.assertNotIn("SPAN_METRICS_MODE=auto -> ConfigureAuto", logs)
         self.assertNotIn("OpenTelemetry tracer initialized.", logs)
         self.assertNotIn("OpenTelemetry meter initialized.", logs)
@@ -314,6 +320,16 @@ class SpanMetricsContractTestBase(ContractTestBase):
                     "messaging.operation.name": "receive",
                 },
                 name="orders receive",
+            ),
+            self._find_span(
+                spans,
+                Span.SPAN_KIND_CLIENT,
+                {
+                    "db.system": "sqlite",
+                    "db.operation": "SELECT",
+                    "db.sql.table": "users",
+                },
+                name="SELECT users",
             ),
             self._find_span(
                 spans,
@@ -454,6 +470,16 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 "messaging.system": "contract-broker",
                 "messaging.operation.name": "receive",
                 "messaging.destination.name": "orders",
+            },
+        )
+        self._assert_span_metrics_recorded(
+            metrics,
+            {
+                "span.name": "SELECT users",
+                "span.kind": "CLIENT",
+                "db.system": "sqlite",
+                "db.operation": "SELECT",
+                "db.sql.table": "users",
             },
         )
         self._assert_span_metrics_recorded(

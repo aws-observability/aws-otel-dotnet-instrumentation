@@ -32,13 +32,18 @@ public static class Program
 {
     internal const string ActivitySourceName = "CloudWatchPluginOtel.Contract";
     internal const string DependenciesReadyMessage = "CloudWatchPluginOtel dependencies ready.";
-    internal const string ServiceName = "cloudwatch-plugin-otel-contract-test";
 
     private const string LocalStackEndpoint = "http://localstack:4566";
     private const string RedisEndpoint = "redis:6379,abortConnect=false";
-    private const string RegionName = "us-west-2";
+    private const string RegionName = "us-east-1";
+    private const string DatabaseConnectionString = "Data Source=/tmp/span-metrics-contract.db";
+    private const string RedisKey = "contract-test";
+    private const string RedisValue = "ok";
 
     private static readonly ActivitySource ActivitySource = new(ActivitySourceName);
+    private static string ServiceName =>
+        Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ??
+        "cloudwatch-plugin-otel-contract-test";
 
     public static async Task Main(string[] args)
     {
@@ -60,8 +65,8 @@ public static class Program
             case SpanMetricsMode.Manual:
                 manualProviders = ConfigureManualRawSdk(redisConnection);
                 break;
-            case SpanMetricsMode.ManualGlobal:
-                ConfigureManualGlobal(builder.Services);
+            case SpanMetricsMode.ManualGlobalProviders:
+                ConfigureManualGlobalProviders(builder.Services);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported span metrics mode.");
@@ -125,10 +130,11 @@ public static class Program
         return new ManualProviders(tracerProvider, meterProvider);
     }
 
-    private static void ConfigureManualGlobal(IServiceCollection services)
+    private static void ConfigureManualGlobalProviders(IServiceCollection services)
     {
         // Hosting mode lets dependency injection own both providers; no startup hook participates.
-        Console.WriteLine("SPAN_METRICS_MODE=manual-global -> ConfigureManualGlobal");
+        Console.WriteLine(
+            "SPAN_METRICS_MODE=manual-global-providers -> ConfigureManualGlobalProviders");
         var rootSampler = CreateRootSampler();
         services
             .AddOpenTelemetry()
@@ -170,13 +176,13 @@ public static class Program
         IConnectionMultiplexer redisConnection)
     {
         var credentials = new BasicAWSCredentials(
-            Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID") ?? "test",
-            Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY") ?? "test");
+            Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID") ?? "testing",
+            Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY") ?? "testing");
 
         services.AddSingleton(redisConnection);
         services.AddSingleton<IConnectionMultiplexer>(redisConnection);
         services.AddDbContext<ContractDbContext>(
-            options => options.UseSqlite("Data Source=/tmp/cloudwatch-plugin-otel.db"));
+            options => options.UseSqlite(DatabaseConnectionString));
         services.AddHttpClient("downstream", client => client.BaseAddress = new Uri("http://127.0.0.1:8080"));
         services.AddGrpc();
         services.AddSingleton(_ => GrpcChannel.ForAddress("http://127.0.0.1:8081"));
@@ -220,8 +226,8 @@ public static class Program
     private static void MapEndpoints(WebApplication app)
     {
         app.MapGrpcService<ContractHealthService>();
-        app.MapGet("/health", () => Results.Ok(new { status = "ready" }));
-        app.MapGet("/downstream", () => Results.Ok(new { status = "downstream-ready" }));
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.MapGet("/downstream", () => Results.Ok(new { status = "ok" }));
         app.MapGet(
             "/exercise",
             async (
@@ -250,16 +256,27 @@ public static class Program
                     .AsNoTracking()
                     .OrderBy(user => user.Id)
                     .FirstAsync(cancellationToken);
-                _ = await redis.GetDatabase().StringGetAsync("contract-key");
-                _ = await grpcClient.CheckAsync(
-                    new HealthCheckRequest(),
-                    cancellationToken: cancellationToken);
+
+                using (var databaseActivity = ActivitySource.StartActivity("SELECT users", ActivityKind.Client))
+                {
+                    databaseActivity?.SetTag("db.system", "sqlite");
+                    databaseActivity?.SetTag("db.operation", "SELECT");
+                    databaseActivity?.SetTag("db.sql.table", "users");
+                }
+
                 _ = await s3.ListBucketsAsync(cancellationToken);
                 _ = await sqs.SendMessageAsync(
                     new SendMessageRequest
                     {
                         QueueUrl = dependencyState.QueueUrl,
-                        MessageBody = "contract-message",
+                        MessageBody = "contract test",
+                    },
+                    cancellationToken);
+                _ = await sns.PublishAsync(
+                    new PublishRequest
+                    {
+                        TopicArn = dependencyState.TopicArn,
+                        Message = "contract test",
                     },
                     cancellationToken);
                 _ = await dynamoDb.GetItemAsync(
@@ -268,33 +285,36 @@ public static class Program
                         TableName = DependencyState.TableName,
                         Key = new Dictionary<string, AttributeValue>
                         {
-                            ["Id"] = new("contract-user"),
+                            ["id"] = new("1"),
                         },
                     },
                     cancellationToken);
-                _ = await sns.PublishAsync(
-                    new PublishRequest
-                    {
-                        TopicArn = dependencyState.TopicArn,
-                        Message = "contract-message",
-                    },
-                    cancellationToken);
+
+                var redisDatabase = redis.GetDatabase();
+                _ = await redisDatabase.StringSetAsync(RedisKey, RedisValue);
+                _ = await redisDatabase.StringGetAsync(RedisKey);
+                _ = await grpcClient.CheckAsync(
+                    new HealthCheckRequest(),
+                    cancellationToken: cancellationToken);
 
                 using (var consumerActivity = ActivitySource.StartActivity("orders receive", ActivityKind.Consumer))
                 {
                     consumerActivity?.SetTag("messaging.system", "contract-broker");
                     consumerActivity?.SetTag("messaging.operation.name", "receive");
+                    consumerActivity?.SetTag("messaging.operation.type", "receive");
                     consumerActivity?.SetTag("messaging.destination.name", "orders");
                 }
 
-                return Results.Ok(new { status = "exercised" });
+                return Results.Ok(new { status = "ok" });
             });
         app.MapGet("/error", ThrowContractError);
     }
 
     private static IResult ThrowContractError()
     {
-        throw new InvalidOperationException("CloudWatch span metrics contract error.");
+        Activity.Current?.SetTag("error.type", "RuntimeError");
+        Activity.Current?.SetStatus(ActivityStatusCode.Error);
+        throw new InvalidOperationException("expected contract-test error");
     }
 
     private static async Task InitializeDependenciesAsync(IServiceProvider services)
@@ -323,7 +343,7 @@ public static class Program
 
     private static async Task InitializeDependenciesOnceAsync(IServiceProvider services)
     {
-        await using var connection = new SqliteConnection("Data Source=/tmp/cloudwatch-plugin-otel.db");
+        await using var connection = new SqliteConnection(DatabaseConnectionString);
         await connection.OpenAsync();
         await using var createCommand = connection.CreateCommand();
         createCommand.CommandText =
@@ -332,12 +352,12 @@ public static class Program
                 Id INTEGER NOT NULL CONSTRAINT PK_users PRIMARY KEY AUTOINCREMENT,
                 Name TEXT NOT NULL
             );
-            INSERT OR IGNORE INTO users (Id, Name) VALUES (1, 'contract-user');
+            INSERT OR IGNORE INTO users (Id, Name) VALUES (1, 'contract-test');
             """;
         await createCommand.ExecuteNonQueryAsync();
 
         var redis = services.GetRequiredService<IConnectionMultiplexer>();
-        await redis.GetDatabase().StringSetAsync("contract-key", "contract-value");
+        await redis.GetDatabase().StringSetAsync(RedisKey, RedisValue);
 
         var healthClient = services.GetRequiredService<Health.HealthClient>();
         var healthResponse = await healthClient.ReadyAsync(new HealthCheckRequest());
@@ -353,7 +373,6 @@ public static class Program
                 new PutBucketRequest
                 {
                     BucketName = DependencyState.BucketName,
-                    BucketRegionName = RegionName,
                 });
         }
         catch (AmazonS3Exception exception)
@@ -374,11 +393,11 @@ public static class Program
                     TableName = DependencyState.TableName,
                     AttributeDefinitions =
                     [
-                        new AttributeDefinition("Id", ScalarAttributeType.S),
+                        new AttributeDefinition("id", ScalarAttributeType.S),
                     ],
                     KeySchema =
                     [
-                        new KeySchemaElement("Id", KeyType.HASH),
+                        new KeySchemaElement("id", KeyType.HASH),
                     ],
                     BillingMode = BillingMode.PAY_PER_REQUEST,
                 });
@@ -393,7 +412,8 @@ public static class Program
                 TableName = DependencyState.TableName,
                 Item = new Dictionary<string, AttributeValue>
                 {
-                    ["Id"] = new("contract-user"),
+                    ["id"] = new("1"),
+                    ["name"] = new("contract-test"),
                 },
             });
 
@@ -440,6 +460,7 @@ public static class Program
         var configuredSampler = Environment.GetEnvironmentVariable("OTEL_TRACES_SAMPLER");
         return configuredSampler?.Trim().ToLowerInvariant() switch
         {
+            null or "" => new AlwaysOnSampler(),
             "always_on" => new AlwaysOnSampler(),
             "always_off" => new AlwaysOffSampler(),
             _ => throw new InvalidOperationException(
@@ -451,12 +472,13 @@ public static class Program
     {
         return configuredMode?.Trim().ToLowerInvariant() switch
         {
+            null or "" => SpanMetricsMode.Auto,
             "auto" => SpanMetricsMode.Auto,
             "manual" => SpanMetricsMode.Manual,
-            "manual-global" => SpanMetricsMode.ManualGlobal,
+            "manual-global-providers" => SpanMetricsMode.ManualGlobalProviders,
             _ => throw new InvalidOperationException(
                 $"Unsupported SPAN_METRICS_MODE '{configuredMode}'. " +
-                "Expected auto, manual, or manual-global."),
+                "Expected auto, manual, or manual-global-providers."),
         };
     }
 
@@ -519,7 +541,7 @@ public static class Program
     {
         Auto,
         Manual,
-        ManualGlobal,
+        ManualGlobalProviders,
     }
 
     private sealed class ManualProviders : IDisposable
@@ -587,9 +609,9 @@ public sealed class ContractUser
 
 public sealed class DependencyState
 {
-    public const string BucketName = "cloudwatch-plugin-otel-contract";
+    public const string BucketName = "contract-test";
     public const string QueueName = "orders";
-    public const string TableName = "contract_users";
+    public const string TableName = "users";
     public const string TopicName = "orders";
 
     public string QueueUrl { get; set; } = string.Empty;
