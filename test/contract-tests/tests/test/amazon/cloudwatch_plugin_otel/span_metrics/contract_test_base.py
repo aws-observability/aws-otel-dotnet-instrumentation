@@ -125,9 +125,9 @@ class SpanMetricsContractTestBase(ContractTestBase):
                     "OTEL_DOTNET_AUTO_LOGGER": "console",
                     "OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED": "false",
                     "OTEL_DOTNET_AUTO_PLUGINS": (
+                        "CloudWatchPluginOtel.AwsInstrumentationPlugin, CloudWatchPluginOtel:"
                         "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, "
-                        "AWS.OpenTelemetry.CloudWatch.Plugin:"
-                        "CloudWatchPluginOtel.AwsInstrumentationPlugin, CloudWatchPluginOtel"
+                        "AWS.OpenTelemetry.CloudWatch.Plugin"
                     ),
                     "OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES": _APPLICATION_SOURCE,
                     "OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_ENABLED": "true",
@@ -235,6 +235,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
             self.assertIn(
                 "AwsInstrumentationPlugin.BeforeConfigureTracerProvider invoked.", logs
             )
+            self.assertNotIn("CloudWatch span metrics were disabled", logs)
             self.assertIn("CORECLR_ENABLE_PROFILING=1", logs)
             self.assertIn(
                 "DOTNET_STARTUP_HOOKS=/opt/aws/otel/dotnet/net/"
