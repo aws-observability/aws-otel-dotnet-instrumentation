@@ -10,7 +10,7 @@ using OpenTelemetry.Trace;
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
 
 [Collection(SpanMetricsTestsCollection.Name)]
-public class CloudWatchSpanMetricsMeterProviderBuilderExtensionsTests
+public class SpanMetricsMeterProviderBuilderExtensionsTests
 {
     [Fact]
     public void AddCloudWatchSpanMetricsIsRequiredToCollectMetrics()
