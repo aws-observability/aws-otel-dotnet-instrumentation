@@ -109,6 +109,30 @@
         <Pack>true</Pack>
         <PackagePath>lib\net472</PackagePath>
     </Content>
+    <!-- Add AWS.Distro.OpenTelemetry.DynamicInstrumentation DLLs -->
+    <!--
+      REQUIRED, not optional. The DI project is a ProjectReference with PrivateAssets="All", which means NuGet
+      emits no package dependency AND does not put the built assembly in the package. Plugin.cs references DI
+      types at COMPILE time (InitializeDynamicInstrumentation, and OnTracerProviderInitialized unconditionally),
+      so without these entries a package consumer hits an assembly-load failure the moment either is JITted —
+      while the distribution zip works fine, because it copies build output rather than package content. That
+      asymmetry is why it went unnoticed: every E2E runs against the zip.
+
+      net472 is deliberately absent, matching the ProjectReference condition above: DI is net8.0+ only, and the
+      call sites are behind #if !NETFRAMEWORK.
+    -->
+    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net8.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
+        <Pack>true</Pack>
+        <PackagePath>lib\net8.0</PackagePath>
+    </Content>
+    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net9.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
+        <Pack>true</Pack>
+        <PackagePath>lib\net9.0</PackagePath>
+    </Content>
+    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net10.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
+        <Pack>true</Pack>
+        <PackagePath>lib\net10.0</PackagePath>
+    </Content>
     <!-- Add AWS.Distro.OpenTelemetry.Exporter.Xray.Udp DLLs -->
     <!-- TODO: Remove once UDP Exporter is published to NuGet -->
     <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net8.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">

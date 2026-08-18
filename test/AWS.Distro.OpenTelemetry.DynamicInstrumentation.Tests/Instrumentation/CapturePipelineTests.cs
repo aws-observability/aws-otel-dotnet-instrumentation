@@ -281,6 +281,66 @@ public class CapturePipelineTests : IDisposable
     }
 
     [Fact]
+    public void RemovedCoLocatedMethod_DoesNotCaptureUnderTheSurvivingProbe()
+    {
+        // REVIEW FINDING (vastin, PR #439): a removed method can still export under a SURVIVING probe on the
+        // same type. Removal drops the arity-index entry but cannot un-weave the IL, so the removed method's
+        // callback keeps firing. Resolution is `byTypeAndArity ?? byType`, and once the type has exactly ONE
+        // config left, the type-only fallback becomes "unambiguous" again — so the removed method's next call
+        // silently attributes to the survivor's LocationHash AND its capture policy.
+        //
+        // That is worse than a lost snapshot: the operator sees captures on a probe they still have, carrying
+        // arguments from a method they deleted, and nothing anywhere reports an error.
+        var registry = new InstrumentationRegistry();
+        var oneArg = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = CodeUnit,
+            ClassName = "MultiMethodTarget",
+            MethodName = "Process",
+            LocationHash = "loc-removed",
+            Capture = CaptureConfiguration.Default,
+        };
+        var twoArg = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = CodeUnit,
+            ClassName = "MultiMethodTarget",
+            MethodName = "Validate",
+            LocationHash = "loc-survivor",
+            Capture = CaptureConfiguration.Default,
+        };
+        registry.Register(oneArg);
+        registry.Register(twoArg);
+        var typeName = $"{CodeUnit}.MultiMethodTarget";
+        registry.IndexArities(typeName, oneArg.InstrumentationKey, new[] { 1 });
+        registry.IndexArities(typeName, twoArg.InstrumentationKey, new[] { 2 });
+        DiIntegrationHelper.Configure(registry);
+
+        // Operator deletes ONLY the one-arg probe; the two-arg one stays.
+        registry.RemoveStale(new HashSet<string> { twoArg.InstrumentationKey })
+            .Should().ContainSingle(c => c.LocationHash == "loc-removed");
+
+        var target = new MultiMethodTarget();
+
+        // The removed method's woven callback still fires (there is no un-weave).
+        var removed = DiIntegrationHelper.OnMethodBegin<MultiMethodTarget>(target, new object?[] { "x" });
+        DiIntegrationHelper.OnMethodEnd<MultiMethodTarget, string>(target, "r", null, in removed);
+
+        DIDataStore.Drain().Should().BeEmpty(
+            "the config was deleted, so its still-woven callback must capture NOTHING — and must never fall " +
+            "through to the surviving probe on the same type");
+
+        // The survivor itself must still work: the fix must suppress the removed method, not the type.
+        var alive = DiIntegrationHelper.OnMethodBegin<MultiMethodTarget>(target, new object?[] { "x", 1 });
+        DiIntegrationHelper.OnMethodEnd<MultiMethodTarget, string>(target, "r", null, in alive);
+
+        var caps = DIDataStore.Drain();
+        caps.Should().ContainSingle(c => c.LocationHash == "loc-survivor",
+            "removing a co-located probe must not disable the one that remains");
+    }
+
+    [Fact]
     public void RecursiveCalls_NestedBeginEnd_BothCapturesSurviveWithOwnEntryData()
     {
         // #1 fix, end-to-end through the helper (not just DIDataStore): a recursive call nests

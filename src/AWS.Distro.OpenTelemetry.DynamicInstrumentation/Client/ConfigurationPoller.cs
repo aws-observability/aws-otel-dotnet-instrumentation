@@ -58,10 +58,29 @@ public sealed class ConfigurationPoller(
         this.breakpointThread.Start();
     }
 
-    /// <summary>Disposes the poller. Threads exit when the cancellation token is cancelled.</summary>
+    /// <summary>
+    /// Disposes the poller, joining the poll threads so Cleanup cannot dispose the shared HttpClient while a
+    /// poll is still using it. An in-flight request can outlast the timeout.
+    /// </summary>
     public void Dispose()
     {
-        // Threads exit when the (externally managed) CancellationToken is cancelled.
+        const int JoinTimeoutMs = 2_000;
+
+        var threads = new[] { this.probeThread, this.breakpointThread };
+        this.probeThread = null;
+        this.breakpointThread = null;
+
+        foreach (var thread in threads)
+        {
+            try
+            {
+                thread?.Join(JoinTimeoutMs);
+            }
+            catch (ThreadStateException)
+            {
+                // Never started (Dispose without Start); nothing to wait for.
+            }
+        }
     }
 
     // Degrade only after all backoff tiers are used (> not >=, else the last tier is skipped).
