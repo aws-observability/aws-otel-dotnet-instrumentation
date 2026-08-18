@@ -111,7 +111,7 @@ public static class Program
                 redisConnection,
                 options => options.FlushInterval = TimeSpan.FromMilliseconds(50))
             .AddOtlpExporter();
-        CloudWatchSpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(
+        SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(
             tracerBuilder,
             rootSampler);
         var tracerProvider = tracerBuilder.Build();
@@ -119,7 +119,7 @@ public static class Program
         var meterBuilder = Sdk.CreateMeterProviderBuilder()
             .SetResourceBuilder(CreateResourceBuilder())
             .AddOtlpExporter();
-        CloudWatchSpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(meterBuilder);
+        SpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(meterBuilder);
         var meterProvider = meterBuilder.Build();
 
         return new ManualProviders(tracerProvider, meterProvider);
@@ -145,14 +145,14 @@ public static class Program
                     .AddRedisInstrumentation(
                         options => options.FlushInterval = TimeSpan.FromMilliseconds(50))
                     .AddOtlpExporter();
-                CloudWatchSpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(
+                SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(
                     tracing,
                     rootSampler);
             })
             .WithMetrics(metrics =>
             {
                 metrics.AddOtlpExporter();
-                CloudWatchSpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(metrics);
+                SpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(metrics);
             });
     }
 
