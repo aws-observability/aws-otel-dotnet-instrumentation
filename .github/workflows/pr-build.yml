@@ -1,9 +1,5 @@
 name: DotNet Instrumentation PR Build
 on:
-  # Lets test.yml run this whole suite on a plain branch push, for validating a branch before a PR
-  # exists. Takes no inputs: everything it needs comes from the git ref being built. The steps that
-  # diff against the PR base are skipped when github.event_name is not pull_request.
-  workflow_call:
   pull_request:
     types:
       - opened
@@ -54,11 +50,8 @@ jobs:
             -ignore SC2162
             -ignore SC2206
           
-      # The next three checks diff against github.base_ref, which only exists on a pull_request. On a
-      # workflow_call from a push it is empty, making `git fetch origin ''` fail and taking the job
-      # down for a reason unrelated to the change being built.
       - name: Check CHANGELOG
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         run: |
           # Check if PR is from workflows bot or dependabot
           if [[ "${{ env.USER }}" == "aws-application-signals-bot" ]]; then
@@ -88,7 +81,7 @@ jobs:
           exit 1
           
       - name: Check for versioned GitHub actions
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         run: |
           # Get changed GitHub workflow/action files
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -E "^\.github/(workflows|actions)/.*\.ya?ml$" || true)
@@ -106,7 +99,7 @@ jobs:
           echo "No versioned actions found in changed files"
 
       - name: Check for github.event in run steps
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         run: |
           # Get changed GitHub workflow/action files
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -E "^\.github/(workflows|actions)/.*\.ya?ml$" || true)
