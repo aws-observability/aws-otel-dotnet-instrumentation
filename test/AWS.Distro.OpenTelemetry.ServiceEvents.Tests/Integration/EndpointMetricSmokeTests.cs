@@ -57,7 +57,7 @@ public class EndpointMetricSmokeTests
                 }
 
                 // A 4xx with a captured exception: increments request.errors but must NOT produce
-                // an exception_breakdown entry or a count data point (fault-only gate, spec §3/§7).
+                // an exception_breakdown entry or a count data point (fault-only gate).
                 collector!.RecordRequest("/orders/{id}", "POST", 400, durationNs: 1_000_000, errorType: "ValidationError", functionName: "parse");
 
                 // Dispose triggers the collector's final flush → emitter → file.

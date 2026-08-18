@@ -4,8 +4,9 @@
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 
 /// <summary>
-/// CloudWatch SEH (Sparse Exponential Histogram) — a direct port of the Python
-/// SDK's <c>utils/seh_histogram.py</c>, which itself ports the SEH1 algorithm
+/// CloudWatch SEH (Sparse Exponential Histogram) — a direct port of the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/utils/seh_histogram.py"><c>seh_histogram.py</c></see>,
+/// which itself ports the SEH1 algorithm
 /// used by the CloudWatch agent
 /// (<see href="https://github.com/aws/amazon-cloudwatch-agent/blob/main/metric/distribution/seh1/seh1_distribution.go" />).
 /// </summary>

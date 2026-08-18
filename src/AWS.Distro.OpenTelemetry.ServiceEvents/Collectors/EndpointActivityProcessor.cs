@@ -241,7 +241,7 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
         }
 
         // No route matched (404 / scanner traffic): collapse to the first path segment to reduce
-        // metric cardinality (spec §3) — e.g. "/wp-admin/setup.php" → "/wp-admin".
+        // metric cardinality — e.g. "/wp-admin/setup.php" → "/wp-admin".
         //
         // This reduces cardinality but does not bound it: traffic spread across many distinct first
         // segments still yields one aggregation per segment per flush window. The window resets on
@@ -321,7 +321,7 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             return (errorType, "unknown");
         }
 
-        // No exception type from either source. Per spec §3/§7 we emit NO synthetic exception
+        // No exception type from either source. We emit NO synthetic exception
         // (no "HTTP{code}" / "UnknownError"): a 5xx that returned a status without raising
         // increments request.faults but produces no breakdown entry or count data point.
         return (null, null);
@@ -347,7 +347,7 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
         var traceId = sampled && activity.TraceId != default ? activity.TraceId.ToHexString() : null;
         var spanId = sampled && activity.SpanId != default ? activity.SpanId.ToHexString() : null;
 
-        // Append the endpoint (entry) frame last — outermost frame, spec §5 orders it after the
+        // Append the endpoint (entry) frame last — outermost frame, ordered after the
         // inner instrumented frames — then drain the per-request call_path buffer. Used by latency
         // incidents; exception incidents derive their call_path from the stack trace instead.
         CallPathCapture.Append(

@@ -19,7 +19,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// <para>
 /// Why a custom exporter instead of the stock <c>AddOtlpExporter</c>: OTel .NET's
 /// <c>LogRecord.Body</c> is string-only, so the stock exporter cannot emit the
-/// nested-object body the other SDKs (Java/Python/JS) produce (spec §1/§2/§5). Our
+/// nested-object body the other distros (Java, Python, JS) produce. Our
 /// emitter stashes the structured body as a JSON string in a <c>body</c> attribute;
 /// this exporter reconstructs it into a proper OTLP <c>AnyValue</c> (kvlist) body,
 /// drops the <c>body</c> attribute, sets the top-level <c>event_name</c> field, and

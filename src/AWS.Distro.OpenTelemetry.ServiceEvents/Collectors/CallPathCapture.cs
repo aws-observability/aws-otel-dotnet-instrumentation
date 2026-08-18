@@ -9,7 +9,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 /// <summary>
 /// Per-request capture of FunctionCall span frames for the IncidentSnapshot
-/// <c>call_path</c> (spec §5), used for <b>latency</b> incidents (Option A).
+/// <c>call_path</c>, used for <b>latency</b> incidents.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -64,7 +64,7 @@ internal static class CallPathCapture
         }
         else if (slot == MaxFrames + 1)
         {
-            // duration_ns == 0 marks this as a partial (unsampled/truncated) frame per spec §5.
+            // duration_ns == 0 marks this as a partial (unsampled/truncated) frame.
             buffer.Frames.Enqueue(new CallPathEntry(TruncatedSentinel, null, 0, false, false));
         }
     }

@@ -5,7 +5,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 
 /// <summary>
 /// In-memory snapshot of a DeploymentEvent record. No body — all data
-/// rides on attributes per spec §6.
+/// rides on attributes.
 /// </summary>
 /// <param name="Trigger">Why this event fired: <c>"startup"</c>, <c>"periodic"</c>, or <c>"shutdown"</c>.</param>
 /// <param name="GitCommitSha">Git commit SHA. Null when unset.</param>

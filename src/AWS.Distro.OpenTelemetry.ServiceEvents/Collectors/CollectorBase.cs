@@ -7,8 +7,11 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 /// <summary>
 /// Base class for periodic telemetry collectors. Ports the flush-loop pattern
-/// from the Python SDK's <c>collectors/base_collector.py</c> and Java's
-/// <c>BaseCollector</c>: a background timer calls <see cref="Collect" /> every
+/// from the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/collectors/base_collector.py"><c>base_collector.py</c></see>
+/// and the Java distro's
+/// <see href="https://github.com/aws-observability/aws-otel-java-instrumentation/blob/main/instrumentation/serviceevents/src/main/java/software/amazon/opentelemetry/javaagent/instrumentation/serviceevents/collectors/BaseCollector.java"><c>BaseCollector</c></see>:
+/// a background timer calls <see cref="Collect" /> every
 /// flush interval, and a final <see cref="Collect" /> runs on dispose to drain
 /// pending data.
 /// </summary>

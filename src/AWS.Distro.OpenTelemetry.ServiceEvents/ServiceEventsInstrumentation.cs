@@ -22,8 +22,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents;
 /// the OTLP emitter, and dynamic-config callbacks.
 /// </summary>
 /// <remarks>
-/// Mirrors the Python distro's <c>ServiceEventsInstrumentation</c> class
-/// (<c>aws-opentelemetry-distro/.../serviceevents/serviceevents_instrumentation.py</c>).
+/// Mirrors the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/serviceevents_instrumentation.py"><c>ServiceEventsInstrumentation</c></see>.
 /// One instance per process, created by the AWS distro's plugin during its
 /// <c>Initializing()</c> hook (ServiceEvents is hosted by that plugin rather than
 /// registered as a separate <c>OTEL_DOTNET_AUTO_PLUGINS</c> entry).
@@ -107,7 +107,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     /// Initialize ServiceEvents for the current process.
     /// </summary>
     /// <remarks>
-    /// Applies the spec §3.11 enablement rules (bundling with Application
+    /// Applies the enablement rules (bundling with Application
     /// Signals, Lambda exclusion, explicit override). When force-enabled
     /// without Application Signals, the OTLP endpoints are required.
     /// </remarks>
@@ -288,7 +288,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             .SetResourceBuilder(ResourceBuilder.CreateEmpty().AddAttributes(resourceAttrs))
             .AddMeter(ServiceEventsOtlpEmitter.InstrumentationScopeName)
 
-            // FunctionCall (§4) must be a base-2 exponential-bucket histogram on the wire;
+            // The FunctionCall duration metric must be a base-2 exponential-bucket histogram on the wire;
             // the SDK default is explicit-bucket, so map this instrument explicitly.
             .AddView(
                 instrumentName: "service.function.duration",
@@ -377,7 +377,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     }
 
     /// <summary>
-    /// Apply the spec §3.11 endpoint policy: required when force-enabled
+    /// Apply the endpoint policy: required when force-enabled
     /// without App Signals; defaults to the CW Agent <c>localhost:4316</c>
     /// when bundled.
     /// </summary>
@@ -427,7 +427,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         var attrs = new Dictionary<string, object>
         {
             ["service.name"] = this.config.ServiceName,
-            ["aws.local.service"] = this.config.ServiceName, // duplicate for backend compatibility (spec §2)
+            ["aws.local.service"] = this.config.ServiceName, // duplicate for backend compatibility
 
             // Distro provenance — mirrors the AWS distro's DistroAttributes (Plugin.cs) so
             // ServiceEvents signals self-identify the same way the other SDKs do (Java/Python
@@ -443,7 +443,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             attrs["telemetry.distro.version"] = this.config.DistroVersion + "-aws";
         }
 
-        // deployment.environment(.name): omit entirely when unset — no sentinel (spec v2.5 §2).
+        // deployment.environment(.name): omit entirely when unset — no sentinel.
         if (!string.IsNullOrEmpty(this.config.Environment))
         {
             attrs["deployment.environment.name"] = this.config.Environment;

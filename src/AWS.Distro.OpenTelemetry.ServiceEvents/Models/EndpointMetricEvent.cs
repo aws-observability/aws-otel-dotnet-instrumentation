@@ -10,8 +10,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 /// window.
 /// </summary>
 /// <remarks>
-/// Field shape mirrors the Python distro's <c>EndpointMetricEvent</c>
-/// (<c>aws-opentelemetry-distro/.../serviceevents/models/endpoint_telemetry.py</c>).
+/// Field shape mirrors the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/models/endpoint_telemetry.py"><c>endpoint_telemetry.py</c></see>.
 /// The mapping from this model onto the wire lives in <c>ServiceEventsOtlpEmitter</c>.
 /// </remarks>
 public sealed record EndpointMetricEvent

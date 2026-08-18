@@ -4,7 +4,7 @@
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 
 /// <summary>
-/// One entry in a call path. Mirrors spec §5 <c>call_path[]</c> shape.
+/// One entry in a call path — the shape of one <c>call_path[]</c> element on the wire.
 /// </summary>
 /// <param name="FunctionName">Function name, e.g. <c>"MyApp.UserService.GetUser"</c>.</param>
 /// <param name="CallerFunctionName">Caller function name. Null if outermost.</param>

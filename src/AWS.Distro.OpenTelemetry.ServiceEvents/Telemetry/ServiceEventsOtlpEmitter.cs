@@ -141,7 +141,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
             attrs.Add(new("aws.service_events.deployment.timestamp", evt.DeploymentTimestamp!));
         }
 
-        // DeploymentEvent has no body per spec §6.
+        // DeploymentEvent has no body.
         EmitLog(this.generalLogger, attrs, body: null);
     }
 
@@ -161,7 +161,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
                 { "service_name", metric.ServiceName },
             };
 
-            // deployment.environment is omitted from the data point when unset — no sentinel (spec v2.5 §7).
+            // deployment.environment is omitted from the data point when unset — no sentinel.
             if (!string.IsNullOrEmpty(metric.Environment))
             {
                 tags.Add("environment", metric.Environment);
@@ -176,7 +176,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
 
     /// <summary>
     /// Record one FunctionCall data point on the <c>service.function.duration</c>
-    /// ExponentialHistogram (spec §4). Service-level context rides on the OTel
+    /// ExponentialHistogram. Service-level context rides on the OTel
     /// Resource, so only the per-call dimensions are attached here.
     /// </summary>
     /// <param name="durationMicros">Call duration in microseconds.</param>
@@ -209,7 +209,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
     private static IDictionary<string, object?> DurationToWireDictionary(DurationMetrics duration) =>
         new Dictionary<string, object?>
         {
-            // CamelCase keys per spec §3 — NOT snake_case.
+            // CamelCase keys here — NOT snake_case, unlike the rest of the payload.
             ["Values"] = duration.Values.ToArray(),
             ["Counts"] = duration.Counts.ToArray(),
             ["Max"] = duration.Max,

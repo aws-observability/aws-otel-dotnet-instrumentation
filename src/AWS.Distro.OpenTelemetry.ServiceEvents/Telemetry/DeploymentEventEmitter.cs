@@ -13,12 +13,12 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deployment context is read from <c>OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_*</c>
-/// and <c>OTEL_AWS_SERVICE_EVENTS_GIT_*</c> env vars per spec §6.
+/// Deployment context is read from the <c>OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_*</c>
+/// and <c>OTEL_AWS_SERVICE_EVENTS_GIT_*</c> environment variables.
 /// </para>
 /// <para>
-/// Re-emission cadence (24 hours) matches the Python SDK's
-/// <c>FunctionCallCollector._deployment_event_interval_seconds</c>.
+/// Re-emission cadence (24 hours) matches the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/collectors/deployment_event_collector.py"><c>deployment_event_collector.py</c></see>.
 /// Backend ingestion picks up the latest record so long-running services
 /// stay queryable even if the original startup record aged out.
 /// </para>

@@ -13,7 +13,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Telemetry;
 
 /// <summary>
 /// Verifies <see cref="ServiceEventsCloudWatchMetricFileExporter" /> emits the
-/// <c>service.function.duration</c> ExponentialHistogram (spec §4) as the canonical
+/// <c>service.function.duration</c> ExponentialHistogram as the canonical
 /// OTLP/JSON <c>exponentialHistogram</c> shape when driven through a real MeterProvider
 /// with the base-2 exponential view.
 /// </summary>

@@ -12,8 +12,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors the Python distro's <c>ServiceEventsConfig</c> dataclass field-for-field
-/// (<c>aws-opentelemetry-distro/.../serviceevents/config.py</c>).
+/// Mirrors the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/config.py"><c>ServiceEventsConfig</c></see>
+/// dataclass field-for-field.
 /// </para>
 /// <para>
 /// Construction:
@@ -115,7 +116,7 @@ public sealed record ServiceEventsConfig
     /// <summary>Gets service name, from <c>OTEL_SERVICE_NAME</c> or <c>OTEL_RESOURCE_ATTRIBUTES[service.name]</c>.</summary>
     public string ServiceName { get; init; } = "UnknownService";
 
-    /// <summary>Gets deployment environment, from <c>OTEL_RESOURCE_ATTRIBUTES[deployment.environment(.name)]</c> or <c>ENVIRONMENT</c>. Empty when unset — omitted from signals, no sentinel (spec v2.5).</summary>
+    /// <summary>Gets deployment environment, from <c>OTEL_RESOURCE_ATTRIBUTES[deployment.environment(.name)]</c> or <c>ENVIRONMENT</c>. Empty when unset — omitted from signals, no sentinel.</summary>
     public string Environment { get; init; } = string.Empty;
 
     /// <summary>
@@ -183,7 +184,7 @@ public sealed record ServiceEventsConfig
     /// </summary>
     public IReadOnlyList<string> ExcludePatterns { get; init; } = Array.Empty<string>();
 
-    /// <summary>Gets functionCall sampling mode: <c>"always"</c> (default), <c>"auto"</c>, or <c>"never"</c>. (<c>adaptive</c> removed in spec v2.5.)</summary>
+    /// <summary>Gets functionCall sampling mode: <c>"always"</c> (default), <c>"auto"</c>, or <c>"never"</c>. (<c>adaptive</c> is no longer accepted.)</summary>
     public string SamplingMode { get; init; } = "always";
 
     /// <summary>Gets tier-1 cutoff: 100% sampling below this call count.</summary>
@@ -200,7 +201,7 @@ public sealed record ServiceEventsConfig
 
     /// <summary>
     /// Gets the OTLP logs endpoint, from the shared ADOT var <c>OTEL_AWS_OTLP_LOGS_ENDPOINT</c>
-    /// (no <c>SERVICE_EVENTS</c> infix — identical across Java/Python/JS per spec v2.5 §0/§9).
+    /// (no <c>SERVICE_EVENTS</c> infix — the name is identical across the Java, Python and JS distros).
     /// Empty here means "unset"; the default is applied at init time (4316 when bundled with
     /// App Signals; required when force-enabled without App Signals).
     /// </summary>
@@ -328,7 +329,7 @@ public sealed record ServiceEventsConfig
     }
 
     /// <summary>
-    /// Decide whether ServiceEvents should run, applying the spec §3.11 bundling
+    /// Decide whether ServiceEvents should run, applying the bundling
     /// rule:
     /// <list type="bullet">
     /// <item><description>Lambda is always disabled (detected via <c>AWS_LAMBDA_FUNCTION_NAME</c>).</description></item>

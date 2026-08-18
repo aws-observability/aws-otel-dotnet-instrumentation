@@ -24,8 +24,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// assigned by the OTLP endpoint, not the SDK.
 /// </para>
 /// <para>
-/// Emits the <c>count</c> Sum metric (EndpointErrorMetrics, §7) and the
-/// <c>service.function.duration</c> ExponentialHistogram (FunctionCall, §4) as
+/// Emits the <c>count</c> Sum metric (EndpointErrorMetrics) and the
+/// <c>service.function.duration</c> ExponentialHistogram (FunctionCall) as
 /// native OTLP/JSON — a faithful mirror of the metrics wire.
 /// </para>
 /// <para>
@@ -159,8 +159,8 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
     /// when the metric carries no emittable data points.
     /// </summary>
     /// <remarks>
-    /// Handles the <c>count</c> Sum metric (EndpointErrorMetrics, §7) and the
-    /// <c>service.function.duration</c> ExponentialHistogram (FunctionCall, §4).
+    /// Handles the <c>count</c> Sum metric (EndpointErrorMetrics) and the
+    /// <c>service.function.duration</c> ExponentialHistogram (FunctionCall).
     /// </remarks>
     private static JsonNode? SerializeMetric(Metric metric)
     {
@@ -178,7 +178,7 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
         }
     }
 
-    /// <summary>Serialize a Sum metric (the <c>count</c> EndpointErrorMetrics metric, spec §7).</summary>
+    /// <summary>Serialize a Sum metric (the <c>count</c> EndpointErrorMetrics metric).</summary>
     private static JsonNode? SerializeSum(Metric metric)
     {
         var dataPoints = new JsonArray();
@@ -226,7 +226,7 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
 
     /// <summary>
     /// Serialize an ExponentialHistogram metric (the <c>service.function.duration</c>
-    /// FunctionCall metric, spec §4) as a base-2 exponential histogram OTLP/JSON node.
+    /// FunctionCall metric) as a base-2 exponential histogram OTLP/JSON node.
     /// </summary>
     private static JsonNode? SerializeExponentialHistogram(Metric metric)
     {

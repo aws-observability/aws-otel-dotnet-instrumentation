@@ -13,7 +13,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 /// <param name="Exception">Exception type dimension, e.g. <c>"RuntimeError"</c>.</param>
 /// <param name="Count">Increment for the window.</param>
 /// <remarks>
-/// Wire-format mapping per spec §7 / Phase 1 design doc §6.6.
+/// The mapping from this model onto the wire lives in <c>ServiceEventsOtlpEmitter</c>.
 /// <c>Telemetry.Source</c> is added by the emitter (not stored here).
 /// </remarks>
 public sealed record EndpointErrorMetric(

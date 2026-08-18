@@ -220,7 +220,7 @@ public class EndpointActivityProcessorTests : IDisposable
 
         recorder.Calls.Should().ContainSingle();
         recorder.Calls[0].StatusCode.Should().Be(500);
-        recorder.Calls[0].ErrorType.Should().BeNull("no exception was captured → no synthetic HTTP500 (spec §3/§7)");
+        recorder.Calls[0].ErrorType.Should().BeNull("no exception was captured → no synthetic HTTP500");
     }
 
     [Fact]

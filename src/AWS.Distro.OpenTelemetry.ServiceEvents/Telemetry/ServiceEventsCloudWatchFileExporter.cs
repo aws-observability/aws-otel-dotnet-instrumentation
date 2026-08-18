@@ -21,7 +21,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// <para>
 /// Trace context (<c>traceId</c>, <c>spanId</c>, <c>flags</c>) is emitted
 /// only when the source LogRecord carries a non-empty trace context — in
-/// practice this is the IncidentSnapshot signal per spec §1.
+/// practice this is the IncidentSnapshot signal.
 /// </para>
 /// </remarks>
 internal sealed class ServiceEventsCloudWatchFileExporter : BaseExporter<LogRecord>
@@ -113,7 +113,7 @@ internal sealed class ServiceEventsCloudWatchFileExporter : BaseExporter<LogReco
                 case "event.name":
                     eventName = kv.Value as string;
 
-                    // Per spec §2 the CloudWatch workaround keeps event.name as an
+                    // The CloudWatch workaround keeps event.name as an
                     // attribute too — preserve it in the output.
                     attributesJson[kv.Key] = JsonValue.Create(kv.Value);
                     break;

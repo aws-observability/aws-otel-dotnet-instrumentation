@@ -9,17 +9,15 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Mirrors the Python SDK's <c>watcher_config_syncer.py</c>. When the
-/// debugger client receives a config update from the WATCHER pipeline
+/// When the debugger client receives a config update from the WATCHER pipeline
 /// (<c>APMPulseDynamicInstrumentation</c>), it invokes
 /// <see cref="OnWatcherUpdate" />, which in turn applies the changes to
 /// the registered collectors.
 /// </para>
 /// <para>
-/// In v1, the dynamic-config integration is wired only for incident-snapshot
-/// settings (per Phase 1 §5.1). Endpoint patterns and adaptive-sampling
-/// thresholds are read from env vars at startup and not refreshed via
-/// WATCHER.
+/// Only incident-snapshot settings are refreshed this way. Endpoint patterns and
+/// adaptive-sampling thresholds are read from environment variables once at startup and are
+/// not updated over WATCHER, so a change to those needs a process restart.
 /// </para>
 /// <para>
 /// The class is deliberately small and dependency-free at this stage —

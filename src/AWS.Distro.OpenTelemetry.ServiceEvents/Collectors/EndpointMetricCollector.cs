@@ -9,8 +9,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 /// <summary>
 /// Aggregates per-endpoint HTTP metrics and, on each flush, emits the
-/// <c>EndpointSummary</c> LogRecord (spec §3) and the <c>EndpointErrorMetrics</c>
-/// Sum metric (spec §7). Ports the Python SDK's <c>EndpointMetricCollector</c>.
+/// <c>EndpointSummary</c> log record and the <c>EndpointErrorMetrics</c> Sum metric.
+/// Ports the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/collectors/endpoint_collector.py"><c>endpoint_collector.py</c></see>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -104,7 +105,7 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
             }
 
             // exception_breakdown + the count metric are fault-only: 5xx with a captured exception
-            // type (spec §3/§7). A 4xx increments request.errors but produces no breakdown entry, and
+            // type. A 4xx increments request.errors but produces no breakdown entry, and
             // a 5xx without an exception type produces none either (no synthetic UnknownError).
             if (statusCode >= 500 && !string.IsNullOrEmpty(errorType))
             {
@@ -225,7 +226,7 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
 
     /// <summary>
     /// Derive the per-<c>(operation, exception)</c> Sum-metric data points from
-    /// an endpoint summary's error breakdown (spec §7). Counts for the same
+    /// an endpoint summary's error breakdown. Counts for the same
     /// exception type are summed across failure types.
     /// </summary>
     private List<EndpointErrorMetric> BuildErrorMetrics(EndpointMetricEvent summary)
