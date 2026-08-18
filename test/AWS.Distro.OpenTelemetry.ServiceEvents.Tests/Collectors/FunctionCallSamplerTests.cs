@@ -9,7 +9,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Collectors;
 
 /// <summary>
 /// Tests for <see cref="FunctionCallSampler" /> — the three sampling modes
-/// (<c>always</c> / <c>never</c> / <c>auto</c>; <c>adaptive</c> removed in spec v2.5).
+/// (<c>always</c> / <c>never</c> / <c>auto</c>; <c>adaptive</c> is no longer accepted).
 /// </summary>
 public class FunctionCallSamplerTests
 {

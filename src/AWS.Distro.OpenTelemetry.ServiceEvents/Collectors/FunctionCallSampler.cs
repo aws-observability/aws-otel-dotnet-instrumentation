@@ -11,7 +11,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// <c>OTEL_AWS_SERVICE_EVENTS_SAMPLING_MODE</c> contract.
 /// </summary>
 /// <remarks>
-/// <para>Three modes (spec v2.5 — <c>adaptive</c> was removed):</para>
+/// <para>Three modes (an earlier <c>adaptive</c> mode is no longer accepted):</para>
 /// <list type="bullet">
 /// <item><description><c>always</c> (default) — record every call.</description></item>
 /// <item><description><c>never</c> — record nothing.</description></item>

@@ -4,10 +4,10 @@
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 
 /// <summary>
-/// Non-payload request context for <see cref="IncidentSnapshot"/>. Per spec §5,
-/// payload fields (body, query, path, headers, custom context) are no longer
-/// captured or emitted — only <c>type</c>, <c>timestamp</c>, and
-/// <c>status_code</c> remain.
+/// Non-payload request context for <see cref="IncidentSnapshot"/>. Payload fields
+/// (body, query, path, headers, custom context) are deliberately neither captured nor
+/// emitted — only <c>type</c>, <c>timestamp</c> and <c>status_code</c> remain, so a
+/// snapshot cannot carry request data off the host.
 /// </summary>
 public sealed record RequestContext
 {

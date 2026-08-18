@@ -374,8 +374,8 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
     private static IDictionary<string, object?> RequestContextToWireDictionary(RequestContext ctx)
     {
         // Payload fields (request_body, query_params, path_params, request_headers)
-        // are no longer emitted per spec §5 — payload capture was removed. Only the
-        // non-payload context fields remain.
+        // are deliberately not emitted — payload capture was removed from the wire format.
+        // Only the non-payload context fields remain.
         return new Dictionary<string, object?>
         {
             ["type"] = ctx.Type,
@@ -411,7 +411,7 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
             //
             // Limitation: the LogRecord's SpanId is this activity's own span (a child of the
             // original), since the .NET ILogger bridge can't stamp an arbitrary SpanId. The
-            // trace id — the backend join key per spec §5 — is preserved exactly.
+            // trace id — the key the backend joins on — is preserved exactly.
             var built = new Activity("service_events.snapshot");
             built.SetIdFormat(ActivityIdFormat.W3C);
             built.SetParentId(traceId, spanId, ActivityTraceFlags.Recorded);

@@ -190,7 +190,7 @@ public class IncidentSnapshotCollectorTests
             "Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Logged|17_1",
             "Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http.HttpProtocol.ProcessRequests[TContext]");
 
-        // Spec §5 adjacency-list model: no frame may be its own caller, and no two
+        // Adjacency-list model: no frame may be its own caller, and no two
         // consecutive frames may share a function name.
         frames.Should().OnlyContain(f => f.CallerFunctionName != f.FunctionName, "no frame calls itself");
         for (var i = 1; i < frames.Count; i++)

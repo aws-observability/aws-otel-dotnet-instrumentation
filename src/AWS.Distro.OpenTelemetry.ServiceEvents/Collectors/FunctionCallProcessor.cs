@@ -9,8 +9,8 @@ using OpenTelemetry;
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 /// <summary>
-/// Records a FunctionCall (the <c>service.function.duration</c> ExponentialHistogram,
-/// spec §4) for each completed non-server <see cref="Activity" /> that passes the
+/// Records a FunctionCall (the <c>service.function.duration</c> ExponentialHistogram)
+/// for each completed non-server <see cref="Activity" /> that passes the
 /// package allowlist and the sampler. Registered on the customer's
 /// <c>TracerProvider</c> via the plugin's <c>AfterConfigureTracerProvider</c> hook, so
 /// ServiceEvents observes the same Activities the upstream auto-instrumentation already
@@ -127,6 +127,18 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
     }
 
     /// <summary>Resolve the route template: <c>http.route</c> → <c>url.path</c> → DisplayName.</summary>
+    /// <remarks>
+    /// The HTTP attribute names here are deliberately literals, unlike the resource attribute keys
+    /// in <c>ResourceAttributes</c>, which come from
+    /// <c>OpenTelemetry.Resources.ResourceSemanticConventions</c>. The semconv package this repo
+    /// pins (<c>OpenTelemetry.SemanticConventions</c> 1.0.0-rc9.9, the only version ever published)
+    /// predates the HTTP convention stabilisation: it defines <c>http.method</c>,
+    /// <c>http.target</c> and <c>http.status_code</c>, and has no constant at all for
+    /// <c>http.request.method</c>, <c>url.path</c>, <c>http.response.status_code</c> or
+    /// <c>error.type</c>. Only <c>http.route</c> is shared. Sourcing these from the package would
+    /// therefore switch us to the pre-stabilisation names and stop matching what the ASP.NET Core
+    /// instrumentation actually emits, so they stay written out here.
+    /// </remarks>
     private static string ResolveRoute(Activity activity)
     {
         if (activity.GetTagItem("http.route") is string route && !string.IsNullOrEmpty(route))

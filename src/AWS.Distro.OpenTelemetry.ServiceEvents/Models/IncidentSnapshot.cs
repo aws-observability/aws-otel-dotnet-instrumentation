@@ -7,8 +7,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 /// In-memory snapshot of an IncidentSnapshot record before it's serialized.
 /// </summary>
 /// <remarks>
-/// Field shape mirrors the Python distro's <c>IncidentSnapshot</c>
-/// (<c>aws-opentelemetry-distro/.../serviceevents/models/incident_telemetry.py</c>).
+/// Field shape mirrors the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/models/incident_telemetry.py"><c>incident_telemetry.py</c></see>.
 /// The mapping from this model onto the wire lives in <c>ServiceEventsOtlpEmitter</c>.
 /// </remarks>
 public sealed record IncidentSnapshot
@@ -19,12 +19,12 @@ public sealed record IncidentSnapshot
     /// <summary>Gets the epoch milliseconds when the snapshot was captured.</summary>
     public required long Timestamp { get; init; }
 
-    // No Severity here on purpose. Spec §5 defines no severity attribute on IncidentSnapshot, so it
-    // must not be emitted; severity instead travels to the wire on the EndpointSummary's
+    // No Severity here on purpose. The wire format defines no severity attribute on
+    // IncidentSnapshot, so it must not be emitted; severity instead travels on the EndpointSummary's
     // IncidentExemplar (see IncidentTriggerResult). Carrying it here as well made it a required
     // field that every construction had to supply and nothing ever read.
 
-    /// <summary>Gets the trigger: one of <c>"exception"</c> or <c>"latency"</c> (spec §5).</summary>
+    /// <summary>Gets the trigger: one of <c>"exception"</c> or <c>"latency"</c>.</summary>
     public required string TriggerType { get; init; }
 
     /// <summary>Gets the HTTP operation, e.g. <c>"POST /api/users"</c>.</summary>

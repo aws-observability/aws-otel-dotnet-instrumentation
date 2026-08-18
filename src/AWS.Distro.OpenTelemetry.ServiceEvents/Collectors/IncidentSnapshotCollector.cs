@@ -11,8 +11,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// <summary>
 /// Captures an <see cref="IncidentSnapshot" /> when a request errors (5xx / unhandled
 /// exception) or breaches its latency threshold, then emits the pending snapshots on each
-/// flush. Ports the Python SDK's <c>IncidentSnapshotCollector</c> algorithm with the
-/// Java SDK's concurrency model (see <see cref="IncidentRateLimiter" />).
+/// flush. Ports the algorithm from the Python distro's
+/// <see href="https://github.com/aws-observability/aws-otel-python-instrumentation/blob/main/aws-opentelemetry-distro/src/amazon/opentelemetry/distro/serviceevents/collectors/incident_snapshot_collector.py"><c>incident_snapshot_collector.py</c></see>,
+/// with the Java distro's concurrency model (see <see cref="IncidentRateLimiter" />).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,10 +25,10 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// <item><description><b>Rate limit</b> — at most <c>maxPerMinute</c> globally per minute.</description></item>
 /// </list>
 /// Dedup runs before the rate limit so deduplicated requests don't consume rate slots
-/// (matching the Python SDK's deliberate ordering).
+/// (matching the Python distro's deliberate ordering).
 /// </para>
 /// <para>
-/// <c>is_partial</c> is computed as <c>any(call_path[].duration_ns == 0)</c> (spec v2.5 §5);
+/// <c>is_partial</c> is computed as <c>any(call_path[].duration_ns == 0)</c>;
 /// an empty call path is not partial. v1 emits no call-path frames, so snapshots report
 /// <c>is_partial: false</c>.
 /// </para>
@@ -160,7 +161,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
             DurationMs = durationMs,
 
             // is_partial = any(call_path[].duration_ns == 0); an empty call path is NOT partial
-            // (spec v2.5 §5). Exception incidents use stack-derived frames (no timing → true);
+            // Exception incidents use stack-derived frames (no timing → true);
             // latency incidents use timed span frames (false unless truncated).
             IsPartial = exceptionInfo.Any(e => e.CallPath.Any(c => c.DurationNs == 0)),
             TraceId = traceId,
@@ -219,7 +220,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
             // Collapse consecutive identical frames. .NET re-lists the same method for inner
             // exceptions (the `--->` / `--- End of inner exception ---` block) and ASP.NET prints
             // repeated `…Logged|` wrapper frames; without this the call_path would contain a frame
-            // whose caller is itself, which is malformed against spec §5's adjacency-list model.
+            // whose caller is itself, which is malformed in the adjacency-list model the wire format uses.
             if (names.Count > 0 && string.Equals(names[names.Count - 1], name, StringComparison.Ordinal))
             {
                 continue;
@@ -324,7 +325,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
     }
 
     /// <summary>
-    /// Decide the trigger type (spec §5): <c>"exception"</c> for a 5xx or captured
+    /// Decide the trigger type: <c>"exception"</c> for a 5xx or captured
     /// exception, <c>"latency"</c> when duration exceeds the per-operation threshold,
     /// or <c>null</c> when there is no trigger.
     /// </summary>
