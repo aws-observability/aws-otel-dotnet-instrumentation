@@ -23,7 +23,7 @@ _logger.setLevel(INFO)
 
 _TestMethod = TypeVar("_TestMethod", bound=Callable[..., None])
 
-_APPLICATION_IMAGE = "aws-application-signals-tests-cloudwatchpluginotel-app"
+_APPLICATION_IMAGE = "aws-application-signals-tests-cloudwatch-plugin-otel-app"
 _APPLICATION_SOURCE = "CloudWatchPluginOtel.Contract"
 _LIBRARY_VERSION = "1.0.0"
 _READY_MESSAGE = "CloudWatchPluginOtel dependencies ready."

@@ -36,14 +36,23 @@ fi
 
 # Create application images
 cd ../../..
-included_application="${CONTRACT_TEST_APPLICATION_INCLUDE:-}"
+applications=("$@")
 excluded_application="${CONTRACT_TEST_APPLICATION_EXCLUDE:-}"
 applications_built=0
 for dir in contract-tests/images/applications/*
 do
   application_directory="${dir##*/}"
-  if [ -n "$included_application" ] && [ "$application_directory" != "$included_application" ]; then
-    continue
+  if [ "${#applications[@]}" -gt 0 ]; then
+    application_included=false
+    for included_application in "${applications[@]}"; do
+      if [ "$application_directory" = "$included_application" ]; then
+        application_included=true
+        break
+      fi
+    done
+    if [ "$application_included" = false ]; then
+      continue
+    fi
   fi
   if [ -n "$excluded_application" ] && [ "$application_directory" = "$excluded_application" ]; then
     continue

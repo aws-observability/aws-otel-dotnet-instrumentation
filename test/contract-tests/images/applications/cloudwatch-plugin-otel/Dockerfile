@@ -6,12 +6,12 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ./dist/nuget /dist/nuget
-COPY ./contract-tests/images/applications/CloudWatchPluginOtel/nuget.config .
-COPY ./contract-tests/images/applications/CloudWatchPluginOtel/CloudWatchPluginOtel.csproj .
-COPY ./contract-tests/images/applications/CloudWatchPluginOtel/Protos ./Protos
+COPY ./contract-tests/images/applications/cloudwatch-plugin-otel/nuget.config .
+COPY ./contract-tests/images/applications/cloudwatch-plugin-otel/CloudWatchPluginOtel.csproj .
+COPY ./contract-tests/images/applications/cloudwatch-plugin-otel/Protos ./Protos
 RUN dotnet restore "CloudWatchPluginOtel.csproj" --configfile nuget.config
-COPY ./contract-tests/images/applications/CloudWatchPluginOtel/Program.cs .
-COPY ./contract-tests/images/applications/CloudWatchPluginOtel/AwsInstrumentationPlugin.cs .
+COPY ./contract-tests/images/applications/cloudwatch-plugin-otel/Program.cs .
+COPY ./contract-tests/images/applications/cloudwatch-plugin-otel/AwsInstrumentationPlugin.cs .
 RUN dotnet publish "CloudWatchPluginOtel.csproj" -c Release --no-restore -o /app/publish
 
 FROM base AS final
