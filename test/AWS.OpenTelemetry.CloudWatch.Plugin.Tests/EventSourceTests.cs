@@ -3,6 +3,7 @@
 
 using System.Diagnostics.Tracing;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -54,6 +55,20 @@ public class EventSourceTests
         Assert.Equal(EventLevel.Error, eventData.Level);
         Assert.Equal(callback, eventData.Payload![0]);
         Assert.Contains(nameof(NullReferenceException), Assert.IsType<string>(eventData.Payload[1]));
+    }
+
+    [Fact]
+    public void UnsupportedSamplerConfigurationIsLoggedAtErrorLevel()
+    {
+        using var environment = new SamplerEnvironment("xray", null);
+        using var listener = new CloudWatchPluginEventListener();
+
+        Assert.Throws<NotSupportedException>(() => SamplerFactory.Create());
+
+        var eventData = Assert.Single(listener.Events);
+        Assert.Equal(2, eventData.EventId);
+        Assert.Equal(EventLevel.Error, eventData.Level);
+        Assert.Equal("xray", eventData.Payload![0]);
     }
 
     private sealed class CloudWatchPluginEventListener : EventListener
