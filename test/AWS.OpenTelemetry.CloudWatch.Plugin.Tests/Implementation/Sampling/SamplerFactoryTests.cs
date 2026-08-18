@@ -18,7 +18,7 @@ public class SamplerFactoryTests
     [InlineData("parentbased_always_on", null)]
     [InlineData("parentbased_always_off", null)]
     [InlineData("parentbased_traceidratio", "0.25")]
-    [InlineData("unknown", null)]
+    [InlineData("ALWAYS_OFF", null)]
     public void CreateUsesConfiguredSampler(string? samplerName, string? samplerArgument)
     {
         using var environment = new SamplerEnvironment(samplerName, samplerArgument);
@@ -42,9 +42,23 @@ public class SamplerFactoryTests
         Assert.Equal("AlwaysOnSampler", alwaysOnSampler.Description);
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("unknown")]
+    [InlineData("xray")]
+    [InlineData("alwayson")]
+    public void CreateRejectsUnsupportedSampler(string samplerName)
+    {
+        using var environment = new SamplerEnvironment(samplerName, null);
+
+        var exception = Assert.Throws<NotSupportedException>(() => SamplerFactory.Create());
+
+        Assert.Contains(samplerName, exception.Message);
+    }
+
     private static Sampler CreateExpectedSampler(string? samplerName, string? samplerArgument)
     {
-        return samplerName switch
+        return samplerName?.ToLowerInvariant() switch
         {
             "always_on" => new AlwaysOnSampler(),
             "always_off" => new AlwaysOffSampler(),

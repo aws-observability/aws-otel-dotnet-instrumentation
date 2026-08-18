@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Globalization;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
 using OpenTelemetry.Trace;
 
 namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
@@ -18,25 +19,55 @@ internal static class SamplerFactory
         var samplerName = Environment.GetEnvironmentVariable(TracesSamplerEnvironmentVariable);
         var samplerArgument = Environment.GetEnvironmentVariable(TracesSamplerArgumentEnvironmentVariable);
 
-        return samplerName switch
+        if (samplerName is null)
         {
-            "always_on" => new AlwaysOnSampler(),
-            "always_off" => new AlwaysOffSampler(),
-            "traceidratio" => CreateTraceIdRatioSampler(samplerArgument),
-            "parentbased_always_on" => new ParentBasedSampler(new AlwaysOnSampler()),
-            "parentbased_always_off" => new ParentBasedSampler(new AlwaysOffSampler()),
-            "parentbased_traceidratio" => new ParentBasedSampler(CreateTraceIdRatioSampler(samplerArgument)),
-            _ => new ParentBasedSampler(new AlwaysOnSampler()),
-        };
+            return new ParentBasedSampler(new AlwaysOnSampler());
+        }
+
+        if (string.Equals(samplerName, "always_on", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AlwaysOnSampler();
+        }
+
+        if (string.Equals(samplerName, "always_off", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AlwaysOffSampler();
+        }
+
+        if (string.Equals(samplerName, "traceidratio", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateTraceIdRatioSampler(samplerArgument);
+        }
+
+        if (string.Equals(samplerName, "parentbased_always_on", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParentBasedSampler(new AlwaysOnSampler());
+        }
+
+        if (string.Equals(samplerName, "parentbased_always_off", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParentBasedSampler(new AlwaysOffSampler());
+        }
+
+        if (string.Equals(samplerName, "parentbased_traceidratio", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParentBasedSampler(CreateTraceIdRatioSampler(samplerArgument));
+        }
+
+        CloudWatchPluginEventSource.Log.UnsupportedSamplerConfiguration(samplerName);
+        throw new NotSupportedException(
+            $"OTEL_TRACES_SAMPLER value '{samplerName}' is not supported by the CloudWatch plugin.");
     }
 
     private static Sampler CreateTraceIdRatioSampler(string? samplerArgument)
     {
         if (!double.TryParse(
                 samplerArgument,
-                NumberStyles.Float,
+                NumberStyles.Float | NumberStyles.AllowThousands,
                 CultureInfo.InvariantCulture,
                 out var probability) ||
+            double.IsNaN(probability) ||
+            double.IsInfinity(probability) ||
             probability < 0 ||
             probability > 1)
         {

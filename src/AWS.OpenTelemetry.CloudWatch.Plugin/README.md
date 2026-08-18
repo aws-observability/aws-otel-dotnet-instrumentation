@@ -48,7 +48,11 @@ package into the upstream distribution's managed assemblies directory under
 
 When combining this with another plugin, separate assembly-qualified names with
 `:`. Standard upstream sampler configuration through `OTEL_TRACES_SAMPLER` and
-`OTEL_TRACES_SAMPLER_ARG` is supported.
+`OTEL_TRACES_SAMPLER_ARG` is supported. The upstream plugin API does not expose
+the sampler resolved by another plugin, so combining this plugin with another
+plugin that configures sampling is not supported. Unsupported
+`OTEL_TRACES_SAMPLER` values are rejected rather than replaced with a different
+sampling policy.
 
 ## Manual OpenTelemetry SDK registration
 
@@ -73,7 +77,8 @@ The tracer extension wraps the supplied sampler so the connector observes every
 span without changing which spans are exported. The meter extension subscribes
 the application's existing `MeterProvider`; it does not create another
 provider. Use the parameterless tracer extension to use the OpenTelemetry SDK
-default sampler.
+default sampler. Register span metrics after all other sampler configuration;
+a later `SetSampler` call replaces the required always-record wrapper.
 
 Do not combine manual registration with the auto-instrumentation plugin.
 

@@ -27,4 +27,13 @@ internal sealed class CloudWatchPluginEventSource : EventSource
     {
         this.WriteEvent(1, callback, exception);
     }
+
+    [Event(
+        2,
+        Message = "Unsupported OTEL_TRACES_SAMPLER value '{0}'. CloudWatch span metrics were not enabled.",
+        Level = EventLevel.Error)]
+    public void UnsupportedSamplerConfiguration(string samplerName)
+    {
+        this.WriteEvent(2, samplerName);
+    }
 }

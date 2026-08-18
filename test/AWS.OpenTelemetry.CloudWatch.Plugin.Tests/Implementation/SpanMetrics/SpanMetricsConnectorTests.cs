@@ -127,7 +127,7 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
-    public void SpanMetricsConnectorStampsSpanStartedBeforeMeterProviderActivation()
+    public void SpanMetricsConnectorLeavesSpanStartedBeforeMeterProviderActivationUnstampedAndUncounted()
     {
         using var environment = new MetricsExporterEnvironment("otlp");
         var exportedActivities = new List<Activity>();
@@ -142,10 +142,8 @@ public class SpanMetricsConnectorTests
         using var source = new ActivitySource(sourceName);
         var activity = Assert.IsType<Activity>(source.StartActivity("provider-ordering"));
 
-        Assert.Equal("v1", activity.GetTagItem("aws.otel.span.metrics.schema"));
-        Assert.Equal(
-            SpanMetricsConstants.LibraryVersion,
-            activity.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.Null(activity.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(activity.GetTagItem("aws.otel.extension.lib.version"));
 
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddMeter(SpanMetricsConnector.ScopeName)
@@ -156,13 +154,10 @@ public class SpanMetricsConnectorTests
         meterProvider.ForceFlush();
 
         var exported = Assert.Single(exportedActivities);
-        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
-        Assert.Equal(
-            SpanMetricsConstants.LibraryVersion,
-            exported.GetTagItem("aws.otel.extension.lib.version"));
-        Assert.Equal(
-            1,
-            GetPoint(metrics, "traces.span.metrics.calls", "provider-ordering").GetSumLong());
+        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.False(HasPoint(metrics, "traces.span.metrics.calls", "provider-ordering"));
+        Assert.False(HasPoint(metrics, "traces.span.metrics.duration", "provider-ordering"));
     }
 
     [Theory]
@@ -194,7 +189,7 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
-    public void SpanMetricsConnectorStampsWhenMetricsAreInactiveButOtlpIsConfigured()
+    public void SpanMetricsConnectorLeavesSpanUnstampedWhenMetricsAreInactive()
     {
         using var environment = new MetricsExporterEnvironment("otlp");
         var exportedActivities = new List<Activity>();
@@ -215,10 +210,44 @@ public class SpanMetricsConnectorTests
         tracerProvider.ForceFlush();
 
         var exported = Assert.Single(exportedActivities);
-        Assert.Equal("v1", exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorRemovesStampsWhenMetricsDeactivateBeforeSpanEnds()
+    {
+        using var environment = new MetricsExporterEnvironment("otlp");
+        var exportedActivities = new List<Activity>();
+        var metrics = new List<Metric>();
+        var sourceName = UniqueName();
+        using var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .AddMeter(SpanMetricsConnector.ScopeName)
+            .AddInMemoryExporter(metrics)
+            .Build();
+        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(sourceName)
+            .SetSampler(new AlwaysOnSampler())
+            .AddInMemoryExporter(exportedActivities)
+            .AddProcessor(new SpanMetricsConnector())
+            .Build();
+        using var source = new ActivitySource(sourceName);
+        var activity = Assert.IsType<Activity>(source.StartActivity("deactivated"));
+
+        Assert.Equal("v1", activity.GetTagItem("aws.otel.span.metrics.schema"));
         Assert.Equal(
             SpanMetricsConstants.LibraryVersion,
-            exported.GetTagItem("aws.otel.extension.lib.version"));
+            activity.GetTagItem("aws.otel.extension.lib.version"));
+
+        meterProvider.Dispose();
+        activity.Dispose();
+        tracerProvider.ForceFlush();
+
+        var exported = Assert.Single(exportedActivities);
+        Assert.Null(exported.GetTagItem("aws.otel.span.metrics.schema"));
+        Assert.Null(exported.GetTagItem("aws.otel.extension.lib.version"));
+        Assert.False(HasPoint(metrics, "traces.span.metrics.calls", "deactivated"));
+        Assert.False(HasPoint(metrics, "traces.span.metrics.duration", "deactivated"));
     }
 
     [Fact]
@@ -520,6 +549,7 @@ public class SpanMetricsConnectorTests
     [Fact]
     public void SpanMetricsConnectorRecordsWhenOnlyCallsIsEnabled()
     {
+        using var environment = new MetricsExporterEnvironment("none");
         var measurements = new List<long>();
         using var meterListener = new MeterListener();
         meterListener.InstrumentPublished = (instrument, listener) =>
@@ -545,6 +575,8 @@ public class SpanMetricsConnectorTests
         using (var activity = source.StartActivity("calls-only"))
         {
             Assert.NotNull(activity);
+            Assert.Null(activity.GetTagItem("aws.otel.span.metrics.schema"));
+            Assert.Null(activity.GetTagItem("aws.otel.extension.lib.version"));
         }
 
         Assert.Single(measurements);
@@ -554,6 +586,7 @@ public class SpanMetricsConnectorTests
     [Fact]
     public void SpanMetricsConnectorRecordsWhenOnlyDurationIsEnabled()
     {
+        using var environment = new MetricsExporterEnvironment("none");
         var measurements = new List<double>();
         using var meterListener = new MeterListener();
         meterListener.InstrumentPublished = (instrument, listener) =>
@@ -579,6 +612,8 @@ public class SpanMetricsConnectorTests
         using (var activity = source.StartActivity("duration-only"))
         {
             Assert.NotNull(activity);
+            Assert.Null(activity.GetTagItem("aws.otel.span.metrics.schema"));
+            Assert.Null(activity.GetTagItem("aws.otel.extension.lib.version"));
         }
 
         Assert.Single(measurements);

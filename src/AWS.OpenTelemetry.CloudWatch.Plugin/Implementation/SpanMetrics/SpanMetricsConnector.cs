@@ -20,6 +20,8 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     internal const string ScopeName = SpanMetricsConstants.ScopeName;
 
     private const string MetricsExporterEnvironmentVariable = "OTEL_METRICS_EXPORTER";
+    private const string RecordingStatePropertyName =
+        "AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.RecordingState";
 
     private static readonly Meter Meter = new(SpanMetricsConstants.ScopeName, SpanMetricsConstants.LibraryVersion);
     private static readonly Counter<long> Calls = Meter.CreateCounter<long>(SpanMetricsConstants.CallsName);
@@ -48,17 +50,39 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     /// <inheritdoc/>
     public override void OnStart(Activity data)
     {
-        if (!this.Enabled || !this.otlpMetricsExporterConfigured)
+        if (!this.Enabled)
         {
             return;
         }
 
         try
         {
-            // Tracer providers can start before the meter provider enables these instruments.
-            // Stamp independently so OnEnd cannot emit a metric for an unstamped span.
-            data.SetTag(SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion);
-            data.SetTag(SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion);
+            var callsEnabled = Calls.Enabled;
+            var durationEnabled = Duration.Enabled;
+
+            // When OTLP is active, only claim local derivation if both metrics can be emitted.
+            // Otherwise leave the span unstamped so the backend can derive the complete pair.
+            if (this.otlpMetricsExporterConfigured && (!callsEnabled || !durationEnabled))
+            {
+                return;
+            }
+
+            if (!callsEnabled && !durationEnabled)
+            {
+                return;
+            }
+
+            var recordingState = new RecordingState(
+                callsEnabled,
+                durationEnabled,
+                this.otlpMetricsExporterConfigured);
+            data.SetCustomProperty(RecordingStatePropertyName, recordingState);
+
+            if (recordingState.Stamped)
+            {
+                data.SetTag(SpanMetricsConstants.Schema, SpanMetricsConstants.SchemaVersion);
+                data.SetTag(SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion);
+            }
         }
         catch (Exception exception)
         {
@@ -69,16 +93,31 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
     /// <inheritdoc/>
     public override void OnEnd(Activity data)
     {
-        if (!this.Enabled || (!Calls.Enabled && !Duration.Enabled))
-        {
-            return;
-        }
-
         try
         {
+            var recordingState = data.GetCustomProperty(RecordingStatePropertyName) as RecordingState;
+            if (recordingState is null)
+            {
+                return;
+            }
+
+            if (!this.Enabled ||
+                (recordingState.Stamped && (!Calls.Enabled || !Duration.Enabled)))
+            {
+                RemoveDeduplicationTags(data, recordingState);
+                return;
+            }
+
             var tags = this.BuildMetricAttributes(data);
-            Calls.Add(1, tags);
-            Duration.Record(data.Duration.TotalSeconds, tags);
+            if (recordingState.CallsEnabled)
+            {
+                Calls.Add(1, tags);
+            }
+
+            if (recordingState.DurationEnabled)
+            {
+                Duration.Record(data.Duration.TotalSeconds, tags);
+            }
         }
         catch (Exception exception)
         {
@@ -117,6 +156,17 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         }
 
         return false;
+    }
+
+    private static void RemoveDeduplicationTags(Activity data, RecordingState recordingState)
+    {
+        if (!recordingState.Stamped)
+        {
+            return;
+        }
+
+        data.SetTag(SpanMetricsConstants.Schema, null);
+        data.SetTag(SpanMetricsConstants.LibraryVersionKey, null);
     }
 
     private static void Copy(ref TagList tags, Activity activity, string key)
@@ -259,5 +309,21 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
                 return;
             }
         }
+    }
+
+    private sealed class RecordingState
+    {
+        public RecordingState(bool callsEnabled, bool durationEnabled, bool stamped)
+        {
+            this.CallsEnabled = callsEnabled;
+            this.DurationEnabled = durationEnabled;
+            this.Stamped = stamped;
+        }
+
+        public bool CallsEnabled { get; }
+
+        public bool DurationEnabled { get; }
+
+        public bool Stamped { get; }
     }
 }
