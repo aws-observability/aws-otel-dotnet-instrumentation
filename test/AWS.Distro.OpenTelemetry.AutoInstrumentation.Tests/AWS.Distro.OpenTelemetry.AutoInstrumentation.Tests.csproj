@@ -47,6 +47,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj" />
+    <!-- The main project references ServiceEvents with PrivateAssets="All", so its types do not
+         flow transitively. Referenced directly here so ServiceEventsGateTest can assert that a
+         disabled ServiceEvents leaves customer telemetry untouched. -->
+    <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.ServiceEvents\AWS.Distro.OpenTelemetry.ServiceEvents.csproj" />
   </ItemGroup>
 
   <ItemGroup>
