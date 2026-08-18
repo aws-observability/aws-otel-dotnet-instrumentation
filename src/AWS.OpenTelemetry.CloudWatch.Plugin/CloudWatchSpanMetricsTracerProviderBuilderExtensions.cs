@@ -3,7 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
-using AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.Implementation;
+using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
 
 namespace OpenTelemetry.Trace;
 
