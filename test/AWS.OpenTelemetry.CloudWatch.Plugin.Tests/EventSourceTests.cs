@@ -71,6 +71,32 @@ public class EventSourceTests
         Assert.Equal("xray", eventData.Payload![0]);
     }
 
+    [Fact]
+    public void PluginDisabledByOrderingIsLoggedAtErrorLevel()
+    {
+        const string cloudWatchPluginName =
+            "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin";
+        using var environment = new PluginsEnvironment(
+            cloudWatchPluginName + ":Example.Plugin, Example");
+        using var listener = new CloudWatchPluginEventListener();
+        using var errorOutput = new StringWriter();
+        var originalError = Console.Error;
+        try
+        {
+            Console.SetError(errorOutput);
+            _ = new CloudWatchPlugin();
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        var eventData = Assert.Single(listener.Events);
+        Assert.Equal(3, eventData.EventId);
+        Assert.Equal(EventLevel.Error, eventData.Level);
+        Assert.Equal("Example.Plugin", eventData.Payload![0]);
+    }
+
     private sealed class CloudWatchPluginEventListener : EventListener
     {
         private readonly int creatingThreadId = Environment.CurrentManagedThreadId;
