@@ -47,13 +47,11 @@ package into the upstream distribution's managed assemblies directory under
 `OTEL_DOTNET_AUTO_PLUGINS` as shown above.
 
 When combining this with another plugin, separate assembly-qualified names with
-`:` and list `CloudWatchPlugin` last. The sampler wrapper must be the final
-sampler configuration; when `OTEL_DOTNET_AUTO_PLUGINS` lists another effective
-plugin after `CloudWatchPlugin`, this plugin logs the ordering error and disables
-both span metrics registrations. Standard upstream sampler configuration through
-`OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` is supported. The upstream
-plugin API does not expose the sampler resolved by another plugin, so combining
-this plugin with another plugin that configures sampling is not supported. Unsupported
+`:` and list `CloudWatchPlugin` last. The upstream plugin API does not expose or
+allow decorating the resolved sampler, so the plugin cannot validate this
+ordering and does not support composition with another plugin that configures
+sampling. Standard upstream sampler configuration through `OTEL_TRACES_SAMPLER`
+and `OTEL_TRACES_SAMPLER_ARG` is supported. Unsupported
 `OTEL_TRACES_SAMPLER` values are rejected rather than replaced with a different
 sampling policy.
 
