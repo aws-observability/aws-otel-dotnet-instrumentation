@@ -35,6 +35,17 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// </remarks>
 internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapshotConfigSink, IIncidentTrigger
 {
+    /// <summary>
+    /// The <c>trigger_type</c> values, named because two methods here have to agree on them:
+    /// <c>DetermineTriggerType</c> produces the value and <c>DetermineSeverity</c> branches on it, so
+    /// a typo in either would silently mis-grade every exception incident's severity rather than
+    /// failing.
+    /// </summary>
+    private const string TriggerTypeException = "exception";
+
+    /// <summary>Companion to <see cref="TriggerTypeException" />; see its remarks.</summary>
+    private const string TriggerTypeLatency = "latency";
+
     private readonly ServiceEventsOtlpEmitter emitter;
     private readonly ServiceEventsConfig config;
     private readonly IncidentRateLimiter rateLimiter;
@@ -275,7 +286,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
             return "critical";
         }
 
-        if (statusCode >= 504 || string.Equals(triggerType, "exception", StringComparison.Ordinal))
+        if (statusCode >= 504 || string.Equals(triggerType, TriggerTypeException, StringComparison.Ordinal))
         {
             return "high";
         }
@@ -283,6 +294,30 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         return "medium";
     }
 
+    /// <summary>
+    /// Build the <c>exception_info</c> entries for a snapshot.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the one place where an exception message and stack trace enter a record that reaches
+    /// the wire, and it is worth naming as such: both are emitted verbatim, with no redaction and no
+    /// length bound. A redaction policy is still an open deliverable, and when it lands this method is
+    /// where it belongs.
+    /// </para>
+    /// <para>
+    /// Specifically not <c>ExceptionCapture.Stash</c>, which is the tempting place to put it. Stash
+    /// only sees ServiceEvents' own private capture; a customer who has independently enabled
+    /// <c>RecordException</c> on their instrumentation supplies the type, message and stack through
+    /// the span's exception event instead, which never passes through Stash.
+    /// <c>EndpointActivityProcessor.ReadExceptionDetails</c> resolves between those two sources and
+    /// hands the winner here, so this is the only point both paths share.
+    /// </para>
+    /// </remarks>
+    /// <param name="exceptionType">Resolved exception type, or null for a latency incident.</param>
+    /// <param name="exceptionMessage">Resolved exception message, if any.</param>
+    /// <param name="stackTrace">Resolved stack trace, if any.</param>
+    /// <param name="spanFrames">Per-request span frames, used for latency incidents.</param>
+    /// <returns>Exactly one entry; never empty.</returns>
     private static IReadOnlyList<ExceptionInfo> BuildExceptionInfo(
         string? exceptionType,
         string? exceptionMessage,
@@ -333,10 +368,10 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
     {
         if (statusCode >= 500 || !string.IsNullOrEmpty(exceptionType))
         {
-            return "exception";
+            return TriggerTypeException;
         }
 
         var thresholdMs = this.config.GetLatencyThresholdMs(operation);
-        return durationMs > thresholdMs ? "latency" : null;
+        return durationMs > thresholdMs ? TriggerTypeLatency : null;
     }
 }

@@ -69,14 +69,24 @@ internal sealed class IncidentRateLimiter
 
     /// <summary>
     /// Generate a dedup hash from operation + exception type. Excludes the exception
-    /// message to bound cardinality. Hex-encoded MD5; falls back to the input's hash
-    /// code if MD5 is unavailable.
+    /// message to bound cardinality. Hex-encoded SHA-256; falls back to the input's hash
+    /// code if hashing is unavailable.
     /// </summary>
     /// <remarks>
-    /// MD5 is used as a dedup key, not as a security primitive: the input is an operation name plus
-    /// an exception type name, the output never leaves the process, and nothing trusts it to be
-    /// collision-resistant against an adversary. Matches Java's choice so hashes are comparable
-    /// across SDKs.
+    /// <para>
+    /// This is a dedup key, not a security primitive. The input is an operation name plus an
+    /// exception type name, and the value is used only as a dictionary key inside this process — it
+    /// is never placed on the <c>IncidentSnapshot</c> model and never reaches the wire.
+    /// </para>
+    /// <para>
+    /// SHA-256 rather than the MD5 the Java distro uses. That is a deliberate divergence: because
+    /// the value never leaves the process, cross-distro comparability of the digest is unobservable
+    /// and buys nothing, while MD5 is reported as a broken algorithm by the security scanners this
+    /// repository runs and would be the only weak-hash use in the codebase — the sampler rules cache
+    /// already uses SHA-256. Collision resistance does still matter functionally, though not against
+    /// an adversary: two distinct errors colliding would share one dedup budget and silently
+    /// suppress one of them.
+    /// </para>
     /// </remarks>
     /// <param name="operation">Operation, e.g. <c>"GET /users/{id}"</c>.</param>
     /// <param name="exceptionType">Exception type name, or null for status-only errors.</param>
@@ -89,8 +99,7 @@ internal sealed class IncidentRateLimiter
 
         try
         {
-            using var md5 = MD5.Create();
-            var digest = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
+            var digest = SHA256.HashData(Encoding.UTF8.GetBytes(input));
             var sb = new StringBuilder(digest.Length * 2);
             foreach (var b in digest)
             {

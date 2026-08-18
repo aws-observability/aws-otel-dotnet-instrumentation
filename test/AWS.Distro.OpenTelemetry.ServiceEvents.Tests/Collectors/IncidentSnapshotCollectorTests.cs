@@ -33,6 +33,88 @@ public class IncidentSnapshotCollectorTests
         return new IncidentSnapshotCollector(flushIntervalMs: 60_000, emitter, config ?? new ServiceEventsConfig());
     }
 
+    /// <summary>
+    /// The incident path's counterpart to <c>EndpointFlushRaceTests</c>. Three pieces of shared
+    /// state are touched concurrently here: the rate limiter's tumbling window (swapped with
+    /// <c>Interlocked.CompareExchange</c>), the batch-dedup hash set (replaced under a lock on every
+    /// flush), and the pending snapshot queue (drained while producers are still enqueuing).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scope worth stating precisely, because it is narrower than it looks. This establishes that
+    /// concurrent triggering and flushing do not throw, deadlock, corrupt the dedup set, or admit
+    /// wildly past the cap. It is <b>not</b> a proof that the counters are atomic: most calls are
+    /// rejected by batch dedup before the global counter is consulted, and the per-call hashing and
+    /// snapshot construction dominate the read-modify-write window, so the test is not sensitive to
+    /// losing an increment. Verified by mutation — replacing the interlocked increment with a plain
+    /// <c>++</c> does not fail this test. Atomicity is covered instead by
+    /// <c>IncidentRateLimiterTests.CheckRateLimit_UnderConcurrency_AdmitsExactlyTheCap</c>, which
+    /// contends on the counter and nothing else.
+    /// </para>
+    /// <para>
+    /// Flushing concurrently with the producers is the part this test does cover well: <c>Collect</c>
+    /// replaces the batch-dedup set and drains the queue while requests are still arriving, which is
+    /// the shape that lost data on the endpoint path before it was fixed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ConcurrentIncidentsAcrossFlushBoundaries_NeverExceedTheRateLimit()
+    {
+        const int maxPerMinute = 50;
+        var collector = NewCollector(new ServiceEventsConfig
+        {
+            IncidentSnapshotMaxPerMinute = maxPerMinute,
+
+            // Distinct error signatures per thread would otherwise hit the per-error ceiling long
+            // before the global one; a high ceiling isolates the global cap as the binding limit.
+            IncidentSnapshotMaxSameError = int.MaxValue,
+        });
+
+        var admitted = 0;
+        var flushes = 0;
+
+        // Many distinct operations so each ProcessPotentialIncident does real work (hashing,
+        // severity, snapshot construction) rather than hitting a fast rejection path.
+        Parallel.For(0, 16, worker =>
+        {
+            for (var i = 0; i < 200; i++)
+            {
+                var result = collector.ProcessPotentialIncident(
+                    route: $"/op{i % 40}", method: "GET", statusCode: 500, durationMs: 5,
+                    exceptionType: $"Ex{worker}_{i % 7}", exceptionMessage: null, stackTrace: null,
+                    traceId: null, spanId: null, requestTimestampMs: 1000 + i);
+
+                if (result is not null)
+                {
+                    Interlocked.Increment(ref admitted);
+                }
+
+                // Interleave flushes with production, from the worker threads themselves.
+                if (i % 50 == 0)
+                {
+                    collector.Flush();
+                    Interlocked.Increment(ref flushes);
+                }
+            }
+        });
+
+        flushes.Should().BeGreaterThan(0, "the test is meaningless if no flush overlapped production");
+
+        admitted.Should().BeLessThanOrEqualTo(
+            maxPerMinute,
+            "the global per-minute cap must hold under concurrency; exceeding it means the window " +
+            "counter or its rollover is not atomic");
+
+        admitted.Should().BeGreaterThan(
+            0,
+            "and the limiter must not reject everything — that would pass the cap assertion for the " +
+            "wrong reason");
+
+        // A final flush must not throw after concurrent use, and must leave the collector usable.
+        var finalFlush = () => collector.Flush();
+        finalFlush.Should().NotThrow();
+    }
+
     [Theory]
     [InlineData(500, "exception", "critical")]
     [InlineData(503, "exception", "critical")]

@@ -44,45 +44,68 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The whole body is wrapped for the same reason <c>EndpointActivityProcessor.OnEnd</c> is, and
+    /// more urgently: this runs from <c>ActivityListener.ActivityStopped</c> on <b>every</b>
+    /// non-server span, not just the request's own server span, so it sits on the busiest path
+    /// ServiceEvents touches. Anything thrown here surfaces in the customer's code at whatever point
+    /// they stopped an activity.
+    /// </para>
+    /// <para>
+    /// Bare <c>catch</c> with no logging, matching <c>CollectorBase.RunCollectSafely</c> and
+    /// <c>EndpointActivityProcessor.OnEnd</c>: the only logger factory reachable from this assembly
+    /// is the one that emits ServiceEvents' own signals, so logging here would inject our internal
+    /// errors into the customer's telemetry. The cost is that a systematic failure is silent —
+    /// function metrics would simply stop.
+    /// </para>
+    /// </remarks>
     public override void OnEnd(Activity activity)
     {
-        // Skip the endpoint's own server span (already covered by M3) — decision #6.
-        if (activity.Kind == ActivityKind.Server)
+        try
         {
-            return;
+            // Skip the endpoint's own server span (already covered by M3) — decision #6.
+            if (activity.Kind == ActivityKind.Server)
+            {
+                return;
+            }
+
+            var functionName = BuildName(activity.Source.Name, activity.OperationName);
+
+            if (!this.config.ShouldInstrumentFunction(functionName))
+            {
+                return;
+            }
+
+            if (!this.sampler.ShouldSample(functionName))
+            {
+                return;
+            }
+
+            var status = activity.Status == ActivityStatusCode.Error ? "error" : "success";
+            var caller = ResolveCaller(activity);
+            var operation = ResolveOperation(activity);
+
+            // Activity.Duration is a TimeSpan; 1 tick = 100 ns ⇒ microseconds = ticks / 10.
+            var durationMicros = activity.Duration.Ticks / 10.0;
+
+            this.recorder.RecordFunctionCall(durationMicros, functionName, status, caller, operation);
+
+            // Capture this frame for the IncidentSnapshot call_path (latency incidents).
+            // Appends to the buffer on the request's server span; no-op if the request isn't tracked.
+            CallPathCapture.Append(
+                activity,
+                new Models.CallPathEntry(
+                    FunctionName: functionName,
+                    CallerFunctionName: caller,
+                    DurationNs: activity.Duration.Ticks * 100L,
+                    Error: activity.Status == ActivityStatusCode.Error,
+                    IsAsync: false));
         }
-
-        var functionName = BuildName(activity.Source.Name, activity.OperationName);
-
-        if (!this.config.ShouldInstrumentFunction(functionName))
+        catch
         {
-            return;
+            // Telemetry must never crash the host. Drop and continue.
         }
-
-        if (!this.sampler.ShouldSample(functionName))
-        {
-            return;
-        }
-
-        var status = activity.Status == ActivityStatusCode.Error ? "error" : "success";
-        var caller = ResolveCaller(activity);
-        var operation = ResolveOperation(activity);
-
-        // Activity.Duration is a TimeSpan; 1 tick = 100 ns ⇒ microseconds = ticks / 10.
-        var durationMicros = activity.Duration.Ticks / 10.0;
-
-        this.recorder.RecordFunctionCall(durationMicros, functionName, status, caller, operation);
-
-        // Capture this frame for the IncidentSnapshot call_path (Option A, latency incidents).
-        // Appends to the buffer on the request's server span; no-op if the request isn't tracked.
-        CallPathCapture.Append(
-            activity,
-            new Models.CallPathEntry(
-                FunctionName: functionName,
-                CallerFunctionName: caller,
-                DurationNs: activity.Duration.Ticks * 100L,
-                Error: activity.Status == ActivityStatusCode.Error,
-                IsAsync: false));
     }
 
     /// <summary>
@@ -105,9 +128,15 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
 
     /// <summary>
     /// Find the owning endpoint operation by walking the parent chain to the nearest HTTP
-    /// server span, formatted as <c>"METHOD /route"</c> (matching EndpointMetricCollector's
-    /// operation key). Null when none is found (e.g. a background call with no request ancestor).
+    /// server span, formatted as <c>"METHOD /route"</c>. Null when none is found (e.g. a background
+    /// call with no request ancestor).
     /// </summary>
+    /// <remarks>
+    /// Resolved through <see cref="HttpOperationResolver" /> rather than locally, so this key is
+    /// byte-identical to the one the endpoint summary uses. The two must match for the FunctionCall
+    /// metric's <c>operation</c> attribute to be joinable with the endpoint signal for the same
+    /// request, and separate copies had already drifted on the unmatched-route path.
+    /// </remarks>
     private static string? ResolveOperation(Activity activity)
     {
         for (var a = activity; a is not null; a = a.Parent)
@@ -117,40 +146,13 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
                 continue;
             }
 
-            if (a.GetTagItem("http.request.method") is string method && !string.IsNullOrEmpty(method))
+            var operation = HttpOperationResolver.ResolveOperation(a);
+            if (operation is not null)
             {
-                return $"{method.ToUpperInvariant()} {ResolveRoute(a)}";
+                return operation;
             }
         }
 
         return null;
-    }
-
-    /// <summary>Resolve the route template: <c>http.route</c> → <c>url.path</c> → DisplayName.</summary>
-    /// <remarks>
-    /// The HTTP attribute names here are deliberately literals, unlike the resource attribute keys
-    /// in <c>ResourceAttributes</c>, which come from
-    /// <c>OpenTelemetry.Resources.ResourceSemanticConventions</c>. The semconv package this repo
-    /// pins (<c>OpenTelemetry.SemanticConventions</c> 1.0.0-rc9.9, the only version ever published)
-    /// predates the HTTP convention stabilisation: it defines <c>http.method</c>,
-    /// <c>http.target</c> and <c>http.status_code</c>, and has no constant at all for
-    /// <c>http.request.method</c>, <c>url.path</c>, <c>http.response.status_code</c> or
-    /// <c>error.type</c>. Only <c>http.route</c> is shared. Sourcing these from the package would
-    /// therefore switch us to the pre-stabilisation names and stop matching what the ASP.NET Core
-    /// instrumentation actually emits, so they stay written out here.
-    /// </remarks>
-    private static string ResolveRoute(Activity activity)
-    {
-        if (activity.GetTagItem("http.route") is string route && !string.IsNullOrEmpty(route))
-        {
-            return route;
-        }
-
-        if (activity.GetTagItem("url.path") is string path && !string.IsNullOrEmpty(path))
-        {
-            return path;
-        }
-
-        return activity.DisplayName;
     }
 }

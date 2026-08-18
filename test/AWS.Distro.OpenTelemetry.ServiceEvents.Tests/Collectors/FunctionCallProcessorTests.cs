@@ -179,6 +179,70 @@ public class FunctionCallProcessorTests
         recorder.Calls[0].FunctionName.Should().Be("Test.FnSource.Outbound");
     }
 
+    /// <summary>
+    /// The FunctionCall metric's <c>operation</c> attribute only has value if it is byte-identical to
+    /// the key the endpoint signal uses for the same request — that is what lets the two be joined.
+    /// This asserts they agree on the unmatched-route path, where two independent copies of the
+    /// resolution logic had drifted: one collapsed the path to its first segment, the other emitted
+    /// it raw, so <c>/wp-admin/setup.php</c> appeared collapsed on one signal and in full on the
+    /// other, and the function metric carried one distinct value per scanned URL.
+    /// </summary>
+    [Fact]
+    public void OnEnd_UnmatchedRoute_ResolvesTheSameOperationKeyAsTheEndpointSignal()
+    {
+        var recorder = new FakeRecorder();
+        var processor = new FunctionCallProcessor(recorder, AllowAll(), AlwaysSampler());
+
+        using var server = Source.StartActivity("ingress", ActivityKind.Server)!;
+        server.SetTag("http.request.method", "get");
+
+        // No http.route — the shape a 404 or scanner request produces.
+        server.SetTag("url.path", "/wp-admin/setup.php");
+
+        using var child = Source.StartActivity("Outbound", ActivityKind.Client)!;
+        child.Stop();
+        processor.OnEnd(child);
+        server.Stop();
+
+        var call = recorder.Calls.Should().ContainSingle().Subject;
+
+        call.Operation.Should().Be(
+            "GET /wp-admin",
+            "the path must collapse to its first segment, exactly as the endpoint signal does — " +
+            "emitting the full path here would put one value per scanned URL on this metric and " +
+            "stop it joining with the endpoint summary");
+    }
+
+    /// <summary>
+    /// This processor runs from <c>ActivityListener.ActivityStopped</c> on every non-server span, so
+    /// it is on the busiest path ServiceEvents touches — a throw here would surface in the
+    /// customer's code wherever they happened to stop an activity.
+    /// </summary>
+    [Fact]
+    public void OnEnd_WhenTheRecorderThrows_DoesNotPropagateToTheCaller()
+    {
+        var processor = new FunctionCallProcessor(new ThrowingRecorder(), AllowAll(), AlwaysSampler());
+
+        using var activity = Source.StartActivity("Outbound", ActivityKind.Client)!;
+        activity.Stop();
+
+        var onEnd = () => processor.OnEnd(activity);
+
+        onEnd.Should().NotThrow(
+            "a throw here would propagate through Activity.Stop() into whatever customer code " +
+            "ended the span");
+    }
+
+    [Fact]
+    public void OnEnd_WhenTheActivityIsUnusable_DoesNotPropagateToTheCaller()
+    {
+        var processor = new FunctionCallProcessor(new FakeRecorder(), AllowAll(), AlwaysSampler());
+
+        var onEnd = () => processor.OnEnd(null!);
+
+        onEnd.Should().NotThrow();
+    }
+
     private static ServiceEventsConfig AllowAll() =>
         new() { PackagesToInstrument = new[] { "Test.FnSource.*" } };
 
@@ -191,5 +255,12 @@ public class FunctionCallProcessorTests
 
         public void RecordFunctionCall(double durationMicros, string functionName, string status, string? caller, string? operation) =>
             this.Calls.Add((durationMicros, functionName, status, caller, operation));
+    }
+
+    /// <summary>Stands in for a recorder that fails, to prove the processor's guard holds.</summary>
+    private sealed class ThrowingRecorder : IFunctionCallRecorder
+    {
+        public void RecordFunctionCall(double durationMicros, string functionName, string status, string? caller, string? operation) =>
+            throw new InvalidOperationException("recorder failed");
     }
 }

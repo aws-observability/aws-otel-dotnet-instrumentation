@@ -23,6 +23,76 @@ public class IncidentRateLimiterTests
     private IncidentRateLimiter NewLimiter(int maxPerMinute = 3, int maxSameError = 2)
         => new(maxPerMinute, maxSameError, this.Now);
 
+    /// <summary>
+    /// The global cap must hold exactly under contention, not approximately. With the clock pinned so
+    /// no window rollover can occur, exactly <c>maxPerMinute</c> calls may be admitted out of however
+    /// many are made — the counter decides admission, so a lost increment hands two callers the same
+    /// position and admits one too many.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a tight loop with no other work: the read-modify-write on the window counter is
+    /// the only thing happening, which is what makes the assertion sensitive to atomicity. Driving
+    /// this through <c>IncidentSnapshotCollector</c> instead would not be — hashing, dedup and
+    /// snapshot construction dominate, and most calls are rejected before the counter is consulted.
+    /// </remarks>
+    [Fact]
+    public void CheckRateLimit_UnderConcurrency_AdmitsExactlyTheCap()
+    {
+        // The cap is deliberately close to the total call count. With a small cap, a lost increment
+        // only changes the outcome during the first few calls — a window so narrow the race almost
+        // never lands in it. Setting the cap to half the calls puts contention right through the
+        // admission region, where a lost increment directly admits one too many.
+        const int threads = 32;
+        const int callsPerThread = 500;
+        const int maxPerMinute = threads * callsPerThread / 2;
+
+        // Pinned clock: no rollover, so every call competes for the same window's counter.
+        var limiter = new IncidentRateLimiter(maxPerMinute, maxSameError: 1, nowMs: () => 1_000L);
+
+        var admitted = 0;
+        Parallel.For(0, threads, _ =>
+        {
+            for (var i = 0; i < callsPerThread; i++)
+            {
+                if (limiter.CheckRateLimit())
+                {
+                    Interlocked.Increment(ref admitted);
+                }
+            }
+        });
+
+        admitted.Should().Be(
+            maxPerMinute,
+            "exactly maxPerMinute of the {0} concurrent calls may be admitted; more means increments " +
+            "were lost to a non-atomic counter, fewer means admissions were dropped",
+            threads * callsPerThread);
+    }
+
+    [Fact]
+    public void CheckDeduplication_UnderConcurrency_AdmitsExactlyTheCeilingPerHash()
+    {
+        const int maxSameError = 25;
+        var limiter = new IncidentRateLimiter(maxPerMinute: int.MaxValue, maxSameError, nowMs: () => 1_000L);
+
+        var admitted = 0;
+        Parallel.For(0, 32, _ =>
+        {
+            for (var i = 0; i < 500; i++)
+            {
+                // One hash, so every thread contends for the same per-error counter.
+                if (limiter.CheckDeduplication("same-hash"))
+                {
+                    Interlocked.Increment(ref admitted);
+                }
+            }
+        });
+
+        admitted.Should().Be(
+            maxSameError,
+            "the per-error ceiling is enforced under the dedup lock; a different count means the " +
+            "check-then-increment is not atomic with respect to the ceiling");
+    }
+
     [Fact]
     public void CheckRateLimit_AllowsUpToMax_ThenRejects()
     {

@@ -56,6 +56,16 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
             // Gated on there being an incident trigger, because it is the only thing that ever drains the
             // buffer. Without one this allocated a queue and a custom property on every single server
             // span and then threw them away — per-request hot-path cost for data nobody read.
+            //
+            // The gate cannot also honour the endpoint exclude filter, which is the obvious next
+            // question: the filter keys on the route, and http.route is not set until the routing
+            // middleware has run, which is after the activity starts (the same ordering that forces
+            // the plugin to stash an HttpContext weak reference). So a request to an excluded
+            // endpoint still allocates a buffer here and is dropped in OnEnd without draining. That
+            // is one small allocation per excluded request, and closing it would mean deferring
+            // buffer creation to the first Append — which reintroduces the concurrent-first-append
+            // race that Reserve() exists to avoid, for no gain on tracked requests, since every
+            // tracked request appends its endpoint frame anyway.
             if (this.incidentTrigger is not null && activity.Kind == ActivityKind.Server)
             {
                 CallPathCapture.Begin(activity);
@@ -244,36 +254,7 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
     }
 
     /// <summary>Resolve the route template: <c>http.route</c> → first segment of <c>url.path</c> → DisplayName.</summary>
-    private static string ResolveRoute(Activity activity)
-    {
-        if (activity.GetTagItem("http.route") is string route && !string.IsNullOrEmpty(route))
-        {
-            return route;
-        }
-
-        // No route matched (404 / scanner traffic): collapse to the first path segment to reduce
-        // metric cardinality — e.g. "/wp-admin/setup.php" → "/wp-admin".
-        //
-        // This reduces cardinality but does not bound it: traffic spread across many distinct first
-        // segments still yields one aggregation per segment per flush window. The window resets on
-        // every flush so nothing accumulates, and no SDK caps this today, so the behaviour is
-        // deliberately consistent across SDKs rather than capped here unilaterally.
-        if (activity.GetTagItem("url.path") is string path && !string.IsNullOrEmpty(path))
-        {
-            return FirstPathSegment(path);
-        }
-
-        return activity.DisplayName;
-    }
-
-    /// <summary>Return the first path segment with a leading slash (e.g. <c>"/wp-admin/x" → "/wp-admin"</c>, <c>"/" → "/"</c>).</summary>
-    private static string FirstPathSegment(string path)
-    {
-        var trimmed = path.TrimStart('/');
-        var slash = trimmed.IndexOf('/');
-        var first = slash >= 0 ? trimmed.Substring(0, slash) : trimmed;
-        return "/" + first;
-    }
+    private static string ResolveRoute(Activity activity) => HttpOperationResolver.ResolveRoute(activity);
 
     /// <summary>Read the HTTP status code tag, tolerating int/long/string encodings.</summary>
     private static int ReadStatusCode(Activity activity)
