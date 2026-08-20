@@ -500,6 +500,24 @@ back as exit 0 with output that merely looked truncated. Always capture to a fil
   leaves yesterday's probe pointing at a comment and reporting ERROR forever. Cleanup must run BEFORE the app
   launches, because the first poll fires from the startup hook.
 
+## REMAINING WORK — the checklist
+
+Everything line-level that was planned is done and verified (W2–W8 above). What is left is release mechanics,
+one parked test, and the platform follow-ups. Ordered by risk, not by effort.
+
+| # | Item | State | Why it matters / what it needs |
+|---|---|---|---|
+| R1 | **First real CI run** | BLOCKED on push (held by decision) | THE LONG POLE. The branch is 30 commits, **local only** — `origin` has never seen it. `build-native-x64` has never executed on a real runner, and net9.0 has never been executed anywhere. One break has already been found that ONLY CI severity catches (see blocked item 2), so treat "it passes locally" as weak evidence. A **draft PR triggers all 9 `pr-build.yml` jobs** — verified: there is no `draft` filter — so no workflow changes are needed to get the signal. |
+| R2 | **Do NOT commit `.github/workflows/test.yml`** | DECIDED, no action | The untracked scaffold calls `pr-build.yml` as a reusable workflow, but that file has only a `pull_request` trigger — **it would fail as written**. The saved `pr-build-workflow_call.patch` would fix it by adding `workflow_call` plus three `github.event_name == 'pull_request'` guards, i.e. changing a shared workflow to do what a draft PR already does. Untracked, it has no effect; leave it that way. |
+| R3 | **Fill the `#TBD` CHANGELOG link** | BLOCKED on the PR number | `CHANGELOG.md:14` carries a literal `#TBD` placeholder. Must be replaced with the real PR number, and `pr-build.yml`'s static-code-checks job has a CHANGELOG check that runs on a PR. |
+| R4 | **Review cycle** | NOT STARTED | Two reviewer-emulating agents exist for this repo: one for the .NET diff, one for CI/workflow/native-build/shell. Cheap, nothing outward-facing, and the natural thing to run against a 30-commit branch before anyone else reads it. |
+| R5 | **Native soak** | PARKED (deliberately) | The MANAGED soak exists (`test/.../Soak/DISoakTests.cs`, 3 tests, `DI_SOAK_SECONDS` default 5s, not `[Skip]`-attributed). The gap is a duration-driven NATIVE soak over `R9RemovalUnderLoadE2E`: ReJIT churn, `m_requests` growth across add/remove cycles, and `AllocHGlobal`/`FreeHGlobal` balance. R9 already sustains 10.6 M verified calls in a burst; what is unproven is ACCUMULATION over time. |
+| R6 | **The other four RIDs** | DEFERRED by decision | See blocked item 7. Cheapest next is `linux-glibc-arm64`: its CI job already runs on an arm64 runner and upstream builds their own arm64 native on a modern host (GLIBC_2.35), so no old-glibc container is needed to match them — but whether that runner image has cmake + clang is UNVERIFIED. Windows needs an MSVC leg; the two musl legs need clang/cmake added to `alpine.dockerfile` and are the least explored. |
+| R7 | **Line-level contract test in CI** | NOT STARTED | See blocked item 6. The beta-backed proof needs credentials and can never run in CI, so an in-CI line-level contract test against the mock collector is the only automated coverage possible. |
+
+Not on this list because they are done: the per-probe weave status (W7), the stock-profiler RID path (W8), the
+demo + runbook, and the AssemblyRef define branch.
+
 ## Known-unverified / blocked
 
 1. **The full `Workflow` has never run green in one pass.** The native chain does succeed in CI order
@@ -507,15 +525,24 @@ back as exit 0 with output that merely looked truncated. Always capture to a fil
    container over a macOS-built tree (NuGet restore graph), and skipping it makes `BuildInstallationScripts`
    fail on `File ... already exists`. Neither implicates the native changes. **A real CI run on a clean
    checkout is the only way to confirm.**
-2. **`Compile` fails for an unrelated, pre-existing reason.** `OpenTelemetry.Instrumentation.AWS` needs
+2. **`Compile` fails for unrelated, pre-existing reasons.** `OpenTelemetry.Instrumentation.AWS` needs
    `AWSSDK.Core [4.0.3.3, 5.0.0)` (commit `6f063df feat: AWS SDK V4 migration`) but this machine resolved
-   `AWSSDK.Core/3.7.300` — only 3.7.x is cached locally. `git status` shows that directory untouched by this
-   work. Needs a restore with network access.
-3. **net9.0 tests cannot run locally** — only runtimes 8.0.25 and 10.0.5 are installed. net9.0 compiles;
-   net8.0 and net10.0 both pass **406 of 407** (the one skip is a function-level parity gap, not line-level:
-   `ConfigurationPollerTests.StalenessWarning_ForcesFullResync_WhenNoSuccessWithinWindow`, whose feature is
-   still only a TODO at `ConfigurationPoller.cs:42`). Confirmed in Debug AND Release — an earlier round had
-   two tests hardcoding Debug-only IL offsets, so Release must be run separately.
+   `AWSSDK.Core/3.7.300` — only 3.7.x is cached locally. Needs a restore with network access.
+
+   **`Compile` also builds EVERY project with `TreatWarningsAsErrors=true`**, which is how the soak test's
+   `Task.Run` + `Task.Wait` drainer was a BUILD BREAK rather than a warning (xUnit1031) — found and fixed
+   2026-08-20 by running `dotnet build -p:TreatWarningsAsErrors=true` locally, which is the only cheap way to
+   see it. At that severity these ALSO fail, all pre-existing and none from this work: NU1902/NU1903 package
+   audit warnings (`OpenTelemetry.Api` 1.5.1, `SSH.NET` 2023.0.0, `OpenTelemetry.Exporter.*` 1.9.0-alpha.1),
+   the Bedrock request-validation analyzer in `TestSimpleApp.AWSSDK.Core`, and CS8601 in
+   `TestSimpleApp.MySql`. Main is green today, so CI's restore/audit configuration evidently differs from a
+   local one — worth knowing before reading a red CI leg as ours.
+3. **net9.0 tests cannot run locally** — only runtimes 8.0.25 and 10.0.5 are installed. net9.0 compiles but
+   has NEVER been executed, on any machine, because CI has not run either. Current counts (2026-08-20):
+   **442 pass / 1 skip** on net8.0 in BOTH Debug and Release. Release must be run separately — an earlier round
+   had two tests hardcoding Debug-only IL offsets. The single skip is a function-level parity gap, not
+   line-level: `ConfigurationPollerTests.StalenessWarning_ForcesFullResync_WhenNoSuccessWithinWindow`, whose
+   feature is still only a TODO at `ConfigurationPoller.cs:42`.
 4. **arm64 old-glibc container does not exist.** `ubuntu1604-native.dockerfile` installs an x86_64 CMake and
    cannot build arm64 as written. Upstream has no equivalent either, which is why their arm64 floor is 2.35.
 5. **CLOSED 2026-08-20.** The mutex now has runtime coverage: `R9RemovalUnderLoadE2E` 22/22 against the
@@ -524,10 +551,13 @@ back as exit 0 with output that merely looked truncated. Always capture to a fil
 6. **Line-level has no contract test in CI.** The function-level suite (`test/contract-tests/tests/test/amazon/di/`)
    lives on the contract-tests branch and covers function-level only. Line-level is proven by an out-of-repo
    harness against real beta, which needs AWS credentials and therefore cannot run in CI.
-7. **Only linux-glibc-x64 gets the forked profiler in CI.** `main-build.yml` passes `--build-native-profiler`
-   for the Linux job only, so Windows, macOS and musl still ship the stock upstream binary. On those RIDs a
-   line-level probe refuses with `ProfilerMissingLineProbeSupport` and function-level is unaffected — this is
-   an OPEN SCOPE QUESTION for v1, not a settled decision.
+7. **DECIDED 2026-08-20: linux-glibc-x64 only for v1**, with the other four RIDs to follow "after we have one
+   verified working". `main-build.yml` passes `--build-native-profiler` for that job only, so Windows,
+   arm64 and musl ship the stock upstream binary and refuse line-level with
+   `ProfilerMissingLineProbeSupport`. No longer an open question, and no CI legs should be built for the other
+   RIDs yet. What that costs is measured in W8, and it is now stated in the CUSTOMER doc
+   (`docs/dynamic-instrumentation.md` prerequisites + the AddLineProbes troubleshooting entry), which
+   previously never mentioned a platform restriction at all.
 
 ## Not built out — function-level parity gaps
 

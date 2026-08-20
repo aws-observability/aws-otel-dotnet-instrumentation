@@ -22,6 +22,11 @@ Line-level probes carry more restrictions than function-level ones — see
 - **.NET 8, 9, or 10.** .NET Framework is not supported.
 - Your application runs with the **AWS Distro for OpenTelemetry (ADOT) .NET auto-instrumentation**
   (the native profiler + plugin). DI ships as part of that distribution.
+- **For line-level probes only: `linux-x64` (glibc).** Line-level needs a capability that is currently built
+  only into the `linux-x64` profiler. On every other platform — Windows, `linux-arm64`, and Alpine/musl — a
+  line-level probe reports an error and captures nothing, while **function-level probes work normally**. See
+  [the troubleshooting entry](#line-level-probes-error-with-the-native-profiler-does-not-export-addlineprobes)
+  for how this surfaces. Support for the remaining platforms follows.
 - **For line-level probes only:** the target assembly's debug info must be deployed with it, as either a
   sidecar `.pdb` next to the `.dll` or an embedded PDB, and it must come from the same build as the
   assembly. Without it, line-level probes report an error and capture nothing; function-level probes are
@@ -279,10 +284,16 @@ brace. This is a property of the deployed binary, not of the probe.
 
 ### Line-level probes error with "the native profiler does not export AddLineProbes"
 
-The process is running a native profiler that predates line-level support, or none at all — the app was
-started without the profiler environment variables. Function-level probes are unaffected, since they do
-not use that API. Reinstall the ADOT .NET distribution and relaunch through `instrument.sh` (or the
-`adot-launch` script). The profiler cannot be swapped without a restart, so this is not retried.
+Either the platform does not support line-level yet, or the app was started without the profiler environment
+variables.
+
+**Check the platform first.** Line-level currently requires **`linux-x64` (glibc)**; on Windows,
+`linux-arm64`, or Alpine/musl this error is expected and is not a misconfiguration. Function-level probes are
+unaffected on every platform, since they do not use that API.
+
+On `linux-x64`, this means the process is running a profiler that predates line-level support, or none at all.
+Reinstall the ADOT .NET distribution and relaunch through `instrument.sh` (or the `adot-launch` script). The
+profiler cannot be swapped without a restart, so this is not retried.
 
 ### App exits immediately with a "Permission denied" filesystem error
 
