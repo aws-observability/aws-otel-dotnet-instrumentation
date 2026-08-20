@@ -66,6 +66,96 @@ public class DynamicInstrumentationManagerTests : IDisposable
         act().Should().BeNull("Cleanup drops the reporter, so there is nothing to ask");
     }
 
+    [Fact]
+    public void OnConfigurationsChanged_WithNoLineProbeSupportInTheProfiler_ReportsAnErrorForEVERYLineConfig()
+    {
+        // THE STOCK-PROFILER PATH, and it is not hypothetical: four of the five shipped RIDs carry upstream's
+        // native binary, which has no AddLineProbes export (measured on the real v1.16.0 macOS artifact: 0
+        // line-level exports, AddInstrumentations present as a control). On those RIDs every line-level probe
+        // an operator creates lands here.
+        //
+        // A test process is that condition exactly — no profiler is loaded, so the P/Invoke throws
+        // DllNotFoundException and the translator maps it to ProfilerMissingLineProbeSupport.
+        //
+        // EVERY config must report, not just one. This started as a discrepancy in a real run: the demo app
+        // driven against the stock upstream profiler created seven line-level configs and only ONE ERROR
+        // reached the backend. If that is the agent's behaviour rather than an artifact of that run's timing,
+        // then on four of five RIDs an operator would create several line probes and be told about one of
+        // them, with the rest silently doing nothing.
+        //
+        // Targets are real methods in this test assembly with a real PDB, so resolution gets PAST the
+        // type-loaded and debug-info checks and actually reaches the P/Invoke. That matters: a config that
+        // fails EARLIER returns the retryable TypeNotLoaded and deliberately reports nothing, which would make
+        // this test pass for the wrong reason.
+        var statusBodies = new List<string>();
+        using var server = StatusCapturingApiServer.Start(statusBodies);
+
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(apiUrl: server.Url));
+
+        const string codeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Instrumentation.LineLevel";
+        const string className = "PdbReaderTargets";
+
+        InstrumentationConfiguration LineConfig(string method, int line, string hash) => new()
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = codeUnit,
+            ClassName = className,
+            MethodName = method,
+            LineNumber = line,
+            LocationHash = hash,
+            Capture = CaptureConfiguration.Default with { CaptureLocals = ["a"] }
+        };
+
+        var configs = new List<InstrumentationConfiguration>
+        {
+            LineConfig("ThreeStatements", Tests.Instrumentation.LineLevel.PdbReaderTargets.LineOf("assignsA"), "line-hash-1"),
+            LineConfig("ThreeStatements", Tests.Instrumentation.LineLevel.PdbReaderTargets.LineOf("assignsB"), "line-hash-2"),
+            LineConfig("ThreeStatements", Tests.Instrumentation.LineLevel.PdbReaderTargets.LineOf("assignsC"), "line-hash-3"),
+        };
+
+        manager.OnConfigurationsChanged(configs);
+
+        // Status sends are asynchronous (handed to the reporter's worker thread), so wait for the last one
+        // rather than sleeping a fixed amount and hoping.
+        server.WaitForStatusContaining("line-hash-3", TimeSpan.FromSeconds(10))
+            .Should().BeTrue("the third config's status must reach the API");
+        Thread.Sleep(500);
+
+        string body;
+        lock (statusBodies)
+        {
+            body = string.Concat(statusBodies);
+        }
+
+        // Every one of the three, individually named. Asserting a COUNT alone would pass if the same hash were
+        // reported three times.
+        body.Should().Contain("line-hash-1");
+        body.Should().Contain("line-hash-2");
+        body.Should().Contain("line-hash-3");
+        CountOccurrences(body, "\"Status\":\"ERROR\"").Should().Be(
+            3,
+            "one ERROR per line-level config: on a stock profiler none of them can ever fire, so an operator "
+            + "who is told about only some of them is left with probes that silently do nothing");
+        body.Should().NotContain(
+            "\"Status\":\"READY\"", "nothing was woven, so nothing may claim to be live");
+
+        manager.Shutdown();
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        int count = 0, idx = 0;
+        while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += needle.Length;
+        }
+
+        return count;
+    }
+
     private static DynamicInstrumentationConfig CreateConfig(bool enabled = true, string apiUrl = "http://localhost:2000") =>
         new(
             Enabled: enabled,

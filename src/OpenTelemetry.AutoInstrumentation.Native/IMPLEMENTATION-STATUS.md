@@ -332,6 +332,44 @@ siblings keep capturing. The second is reported because that local can never be 
 the only channel that reaches the operator. Both are documented in
 `docs/dynamic-instrumentation.md`.
 
+### W8 — the stock-profiler RID path, measured on upstream's real artifact
+
+Four of the five shipped RIDs (windows, linux-musl-x64, linux-glibc-arm64, linux-musl-arm64) carry upstream's
+native binary; only `linux-glibc-x64` builds the fork. Everything below that depends on "line-level degrades
+gracefully there" was previously an argument, not a measurement. It is now measured.
+
+**Upstream v1.16.0, real released artifact** (`opentelemetry-dotnet-instrumentation-macos.zip`, downloaded and
+inspected): `AddLineProbes` / `RemoveLineProbe` / `GetLineProbeWeaveResults` symbol count = **0**;
+`AddInstrumentations` = 1, as a control proving the binary and the symbol query are both sound. Ours: 3.
+
+**DeployedAppDemo run against that stock binary** (`DI_PROFILER_OVERRIDE`):
+
+| Observed | Result |
+|---|---|
+| Function-level probe | **5/5** — CallTarget weave, snapshot on the wire, argument + return value verified |
+| App process | exits 0, no crash, no `InvalidProgramException` |
+| Line-level snapshots | none, as expected |
+| Harness behaviour | prints `[SKIP] line-level checks — profiler has no AddLineProbes export … This is NOT a pass` — it degrades honestly rather than passing vacuously |
+
+**Reporting every refused line config is proven in-repo, not from the demo.** A test process has no profiler
+loaded, which IS the stock-profiler condition for line-level, so
+`OnConfigurationsChanged_WithNoLineProbeSupportInTheProfiler_ReportsAnErrorForEVERYLineConfig` drives three line
+configs on real PDB-backed methods in the test assembly and asserts three distinct ERRORs and no READY. Targets
+are chosen so resolution gets PAST the type-loaded and debug-info checks and actually reaches the P/Invoke — a
+config that fails earlier returns the retryable `TypeNotLoaded` and deliberately reports nothing, which would
+make the test pass for the wrong reason. Mutation-verified: making `ProfilerMissingLineProbeSupport` retryable
+turns it red.
+
+**Why the demo could NOT settle this.** Two identical stock runs delivered **1** ERROR and then **0**. The count
+is timing-dependent because the harness tears the app down promptly and `StatusReporter.Dispose` drops whatever
+is still queued (documented, deliberate — the cancellation token is already cancelled, so a send during the
+drain fails and is swallowed). Inferred cause, not measured: the reliable part is that the count varies across
+identical runs, so the demo is not a valid oracle for status delivery. The in-repo test is.
+
+**Consequence for RID scope.** Shipping four RIDs on the stock binary is safe in the sense that matters: no
+crash, function-level untouched, and a typed per-config ERROR rather than silence. It is NOT equivalent to
+support, and short-lived processes may lose that ERROR at shutdown.
+
 ### DEMO_LINE_ONLY — the define-if-absent AssemblyRef branch, proven both ways
 
 `DEMO_LINE_ONLY=1 bash run-demo.sh` creates NO method-level configuration, which is what makes the

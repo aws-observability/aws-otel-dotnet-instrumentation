@@ -81,7 +81,13 @@ public class DISoakTests : IDisposable
         var depthSamples = new ConcurrentBag<int>();
         var stop = new CancellationTokenSource();
 
-        var drainer = Task.Run(() =>
+        // A DEDICATED THREAD, not Task.Run. Two reasons, and the first one is not style:
+        //   * Task.Run puts a multi-second sleep-loop on a thread-pool thread, and joining it needs a blocking
+        //     Task.Wait — which xUnit1031 reports, and `Compile` builds every project with
+        //     TreatWarningsAsErrors=true, so it is a BUILD BREAK rather than a warning. Measured.
+        //   * DISnapshotCollector, the thing this loop stands in for, is itself a dedicated Thread. Modelling
+        //     it as one keeps the soak shaped like production.
+        var drainer = new Thread(() =>
         {
             while (!stop.IsCancellationRequested)
             {
@@ -93,7 +99,12 @@ public class DISoakTests : IDisposable
 
                 Thread.Sleep(25);
             }
-        });
+        })
+        {
+            IsBackground = true,
+            Name = "DI-Soak-Drainer",
+        };
+        drainer.Start();
 
         var deadline = Stopwatch.StartNew();
         var calls = 0L;
@@ -111,7 +122,7 @@ public class DISoakTests : IDisposable
         act.Should().NotThrow("the hot path must never throw into user code, however long it runs");
 
         stop.Cancel();
-        drainer.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("the drainer must not wedge");
+        drainer.Join(TimeSpan.FromSeconds(10)).Should().BeTrue("the drainer must not wedge");
         foreach (var capture in DIDataStore.Drain())
         {
             drained.Add(capture);
