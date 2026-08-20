@@ -157,6 +157,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     auto            metaEmit        = module_metadata.metadata_emit;
     auto            metaImport      = module_metadata.metadata_import;
     auto            assemblyImport  = module_metadata.assembly_import;
+    auto            assemblyEmit    = module_metadata.assembly_emit;
 
     Logger::Info("*** LineProbe_Rewrite() Start: ", caller->type.name, ".", caller->name, "() with ",
                  requests.size(), " probe(s) — resolving callbacks PER PROBE.");
@@ -308,22 +309,78 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     //          the loop. A failure here skips ONLY this probe (`continue`), matching the per-probe
     //          fail-safe already used for bad offsets — one malformed probe must not discard the
     //          method's other, valid probes.
+    // The managed side sends a FULL DISPLAY NAME here ("Name, Version=..., Culture=..., PublicKeyToken=..."),
+    // which AssemblyReference parses. A bare simple name still parses — name only, version 0.0.0.0, empty key —
+    // which keeps the pre-existing spike harnesses working: they pass a simple name AND their target assembly
+    // has a compile-time reference, so the search below always succeeds and the define path is never reached.
+    const AssemblyReference* callbackAssembly = AssemblyReference::GetFromCache(request->callback_assembly);
+
     mdAssemblyRef callbackAssemblyRef = mdAssemblyRefNil;
     for (mdAssemblyRef candidate : EnumAssemblyRefs(assemblyImport))
     {
         const auto& asmMeta = GetReferencedAssemblyMetadata(assemblyImport, candidate);
-        if (asmMeta.name == request->callback_assembly)
+        if (asmMeta.name == callbackAssembly->name)
         {
             callbackAssemblyRef = candidate;
             break;
         }
     }
 
+    // DEFINE THE REF IF THE MODULE DOES NOT ALREADY HAVE ONE, rather than skipping the probe.
+    //
+    // A customer assembly has no compile-time reference to the DI assembly — verified: the demo's SampleApp.dll
+    // references only System.Runtime/System.Console/System.Threading.Thread. Line-level nevertheless worked in
+    // every E2E because a FUNCTION-level probe on the same module ran first, and the CallTarget weave emits a
+    // TypeRef to DiIntegrationN, which forces the AssemblyRef into that module's metadata as a side effect.
+    // So this search only ever succeeded by accident of ordering. A module carrying ONLY line-level probes hit
+    // the `continue` below and was silently never woven — a probe reporting READY that can never fire.
+    //
+    // Mirrors calltarget_tokens.cpp's EnsureBaseCalltargetTokens, which defines its profiler AssemblyRef the
+    // same way. Upstream's MetadataBuilder::FindIntegrationTypeRef has the identical gap, still marked
+    // "TODO: emit assembly reference if not found?" — this is that TODO, for the line-probe path.
     if (callbackAssemblyRef == mdAssemblyRefNil)
     {
-        Logger::Warn("*** LineProbe_Rewrite(): callback AssemblyRef not found in target module for '",
-                     request->callback_assembly, "'. Skipping probeId=", request->probe_id);
-        continue;
+        ASSEMBLYMETADATA callbackAssemblyMetadata{};
+        callbackAssemblyMetadata.usMajorVersion   = callbackAssembly->version.major;
+        callbackAssemblyMetadata.usMinorVersion   = callbackAssembly->version.minor;
+        callbackAssemblyMetadata.usBuildNumber    = callbackAssembly->version.build;
+        callbackAssemblyMetadata.usRevisionNumber = callbackAssembly->version.revision;
+
+        if (callbackAssembly->locale == WStr("neutral"))
+        {
+            callbackAssemblyMetadata.szLocale = const_cast<WCHAR*>(WStr("\0"));
+            callbackAssemblyMetadata.cbLocale = 0;
+        }
+        else
+        {
+            callbackAssemblyMetadata.szLocale = const_cast<WCHAR*>(callbackAssembly->locale.c_str());
+            callbackAssemblyMetadata.cbLocale = (DWORD)(callbackAssembly->locale.size());
+        }
+
+        // A STRONG-NAMED assembly must carry its public key token or the emitted ref binds to nothing at
+        // runtime — the probe would weave a call that resolves to no method. Zero length is only correct for an
+        // unsigned assembly, which is why the size is derived from the parsed key rather than hardcoded.
+        DWORD publicKeySize = kPublicKeySize;
+        if (callbackAssembly->public_key == trace::PublicKey())
+        {
+            publicKeySize = 0;
+        }
+
+        hr = assemblyEmit->DefineAssemblyRef(&callbackAssembly->public_key.data, publicKeySize,
+                                             callbackAssembly->name.c_str(), &callbackAssemblyMetadata,
+                                             // hash blob, size, flags
+                                             nullptr, 0, 0, &callbackAssemblyRef);
+
+        if (FAILED(hr) || callbackAssemblyRef == mdAssemblyRefNil)
+        {
+            Logger::Warn("*** LineProbe_Rewrite(): could not DEFINE callback AssemblyRef for '",
+                         request->callback_assembly, "' (hr=", HResultStr(hr), "). Skipping probeId=",
+                         request->probe_id);
+            continue;
+        }
+
+        Logger::Info("*** LineProbe_Rewrite(): defined a new callback AssemblyRef for '",
+                     callbackAssembly->name, "' in the target module (it had none).");
     }
 
     mdTypeRef callbackTypeRef = mdTypeRefNil;

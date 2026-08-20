@@ -22,8 +22,24 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 // the fork lands.
 internal sealed class LineProbeTranslator : IDisposable
 {
-    /// <summary>Assembly hosting the managed line-probe callback.</summary>
+    /// <summary>Simple name of the assembly hosting the managed line-probe callback.</summary>
     internal const string CallbackAssembly = "AWS.Distro.OpenTelemetry.DynamicInstrumentation";
+
+    /// <summary>
+    /// Full display name of the callback assembly — what actually crosses the ABI.
+    /// </summary>
+    // A DISPLAY NAME, NOT THE SIMPLE NAME, because the native side may have to DEFINE the AssemblyRef rather
+    // than find one. A customer assembly has no compile-time reference to this one, so when a module carries
+    // only line-level probes there is no existing ref to reuse, and emitting one requires the version, culture
+    // and public key token. `AssemblyReference` on the native side parses exactly this format, so the whole
+    // identity fits in the string field the ABI already had — no struct change, and every harness that still
+    // passes a bare simple name keeps working.
+    //
+    // Read off the loaded assembly rather than hardcoded: this assembly is strong-named, and a hardcoded
+    // token would silently rot the moment the signing key or version changed. A ref carrying the WRONG token
+    // does not fail loudly — it binds to nothing, and the woven call resolves to no method at runtime.
+    internal static readonly string CallbackAssemblyFullName =
+        typeof(DiLineIntegration).Assembly.FullName ?? CallbackAssembly;
 
     /// <summary>Fully-qualified type hosting the managed line-probe callback.</summary>
     internal const string CallbackType =
@@ -231,7 +247,7 @@ internal sealed class LineProbeTranslator : IDisposable
                 targetSignatureTypes: BuildSignatureTypes(location.ParameterCount),
                 ilOffset: location.IlOffset,
                 probeId: nextId,
-                callbackAssembly: CallbackAssembly,
+                callbackAssembly: CallbackAssemblyFullName,
                 callbackType: CallbackType,
                 callbackMethod: callbackMethod,
                 emissionMode: mode,

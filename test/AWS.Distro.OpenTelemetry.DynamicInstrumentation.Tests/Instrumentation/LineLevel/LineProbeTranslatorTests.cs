@@ -661,6 +661,41 @@ public class LineProbeTranslatorTests
     }
 
     [Fact]
+    public void ApplyLineProbe_SendsTheCallbackAssemblyAsAFullDisplayName_SoTheNativeSideCanDefineTheRef()
+    {
+        // A customer assembly has NO compile-time reference to the DI assembly, so when a module carries only
+        // line-level probes the native side has to EMIT the AssemblyRef rather than find one. Emitting it needs
+        // the version, culture and public key token, which only a full display name carries.
+        //
+        // Guarded by a test because reverting to the bare simple name fails SILENTLY in the worst way: the
+        // native side would emit a reference with no public key token, that reference would not bind to this
+        // strong-named assembly at runtime, and the woven `call` would resolve to no method — a probe that
+        // reports READY, weaves, and never fires. Nothing in an offline run notices.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+
+        var result = translator.ApplyLineProbe(
+            LineConfig(nameof(PdbReaderTargets.ThreeStatements), PdbReaderTargets.LineOf("assignsA"), "a"),
+            probeId: 77);
+
+        result.IsResolved.Should().BeTrue($"{result.Status} {result.Detail}");
+
+        var callbackAssembly = read()!.Definitions[0].CallbackAssembly;
+
+        callbackAssembly.Should().StartWith(
+            LineProbeTranslator.CallbackAssembly, "the display name still begins with the simple name");
+        callbackAssembly.Should().Contain("Version=", "the emitted AssemblyRef needs a version");
+        callbackAssembly.Should().Contain("Culture=", "and a culture");
+        callbackAssembly.Should().Contain(
+            "PublicKeyToken=",
+            "and the public key token — this assembly is strong-named, so a reference without it binds to "
+            + "nothing and the woven call resolves to no method");
+        callbackAssembly.Should().NotBe(
+            LineProbeTranslator.CallbackAssembly,
+            "sending only the simple name is the regression this test exists to catch");
+    }
+
+    [Fact]
     public void ApplyLineProbe_TwoLinesInOneMethod_GetTheirOwnOffsetsAndIds()
     {
         // Two SEPARATE configs on two different lines of one method — distinct LocationHashes, distinct
