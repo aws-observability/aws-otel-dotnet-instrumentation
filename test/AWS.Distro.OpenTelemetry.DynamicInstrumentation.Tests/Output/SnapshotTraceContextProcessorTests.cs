@@ -17,7 +17,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Output;
 // thread's ambient Activity, and the fix depends on two things only the SDK decides: that the log state stays
 // reachable as SnapshotLogState (rather than being flattened into an attribute list) and that a processor runs
 // before the exporter serializes. Neither can be asserted by calling OnEnd on a hand-built record.
-public class DISnapshotTraceContextProcessorTests
+public class SnapshotTraceContextProcessorTests
 {
     private const string CapturedTraceId = "0af7651916cd43dd8448eb211c80319c";
     private const string CapturedSpanId = "b7ad6b7169203331";
@@ -51,7 +51,7 @@ public class DISnapshotTraceContextProcessorTests
             {
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
-                options.AddProcessor(new DISnapshotTraceContextProcessor());
+                options.AddProcessor(new SnapshotTraceContextProcessor());
                 options.AddProcessor(new CapturingProcessor(stamped));
             });
         }))
@@ -94,7 +94,7 @@ public class DISnapshotTraceContextProcessorTests
             {
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
-                options.AddProcessor(new DISnapshotTraceContextProcessor());
+                options.AddProcessor(new SnapshotTraceContextProcessor());
                 options.AddProcessor(new CapturingProcessor(stamped));
             });
         }))
@@ -133,7 +133,7 @@ public class DISnapshotTraceContextProcessorTests
             {
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
-                options.AddProcessor(new DISnapshotTraceContextProcessor());
+                options.AddProcessor(new SnapshotTraceContextProcessor());
                 options.AddProcessor(new CapturingProcessor(stamped));
             });
         }))

@@ -6,22 +6,11 @@ from typing import List
 from grpc import ServicerContext
 from typing_extensions import override
 
-from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
-    ExportLogsServiceRequest,
-    ExportLogsServiceResponse,
-)
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest, ExportLogsServiceResponse
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2_grpc import LogsServiceServicer
 
 
 class MockCollectorLogsService(LogsServiceServicer):
-    """Collects OTLP log export requests so contract tests can assert on them.
-
-    Dynamic Instrumentation snapshots are emitted as OTLP LogRecords, so this is the only surface through
-    which a contract test can observe a DI capture. Without it the collector accepted traces and metrics
-    but had no logs servicer registered at all, which makes an exporting agent fail with UNIMPLEMENTED
-    rather than simply recording nothing.
-    """
-
     _export_requests: Queue = Queue(maxsize=-1)
 
     def get_requests(self) -> List[ExportLogsServiceRequest]:

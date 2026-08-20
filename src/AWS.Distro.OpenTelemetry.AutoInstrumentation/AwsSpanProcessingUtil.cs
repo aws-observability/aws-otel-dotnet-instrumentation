@@ -148,57 +148,15 @@ internal sealed class AwsSpanProcessingUtil
     }
 
     /// <summary>
-    /// If OTEL_AWS_HTTP_OPERATION_PATHS is configured and a pattern matches the span's URL path,
-    /// mutates the span's DisplayName to "METHOD /path/template". Returns the span unchanged if
-    /// no config is set or no pattern matches.
+    /// If OTEL_AWS_HTTP_OPERATION_PATHS matches the span's URL path, sets DisplayName to the
+    /// configured operation name so the exported trace carries it. Returns the span unchanged otherwise.
     /// </summary>
     internal static Activity ApplyOperationPathSpanName(Activity span)
     {
-        var paths = GetOperationPaths();
-        if (paths.Count == 0)
+        string? overriddenName = GetOperationPathOverride(span);
+        if (overriddenName != null)
         {
-            return span;
-        }
-
-        string? urlPath = GetUrlPath(span);
-        if (string.IsNullOrEmpty(urlPath))
-        {
-            return span;
-        }
-
-        // Strip query string and fragment (relevant for http.target)
-        string path = urlPath!;
-        foreach (char sep in new[] { '?', '#' })
-        {
-            int idx = path.IndexOf(sep);
-            if (idx >= 0)
-            {
-                path = path.Substring(0, idx);
-            }
-        }
-
-        // Normalize trailing slashes
-        while (path.EndsWith("/") && path.Length > 1)
-        {
-            path = path.Substring(0, path.Length - 1);
-        }
-
-        string[] urlSegments = path.Split('/');
-        foreach (string pattern in paths)
-        {
-            string normalizedPattern = pattern;
-            while (normalizedPattern.EndsWith("/") && normalizedPattern.Length > 1)
-            {
-                normalizedPattern = normalizedPattern.Substring(0, normalizedPattern.Length - 1);
-            }
-
-            if (SegmentsMatch(urlSegments, normalizedPattern.Split('/')))
-            {
-                string? httpMethod = GetHttpMethod(span);
-                string newName = httpMethod != null ? httpMethod + " " + pattern : pattern;
-                span.DisplayName = newName;
-                return span;
-            }
+            span.DisplayName = overriddenName;
         }
 
         return span;
@@ -214,14 +172,22 @@ internal sealed class AwsSpanProcessingUtil
             return InternalOperation;
         }
 
+        // A configured operation path takes precedence over the ASP.NET Core route template.
+        string? operationPathOverride = GetOperationPathOverride(span);
+        if (operationPathOverride != null)
+        {
+            return operationPathOverride;
+        }
+
         // this takes precedence over the FunctionHandler path. Basically, if HttpContextWeakRef exists,
         // this means the the span is coming from ASP.NET Core instrumentation and we want the
         // operation name to be the API Route
-        else if (span.GetCustomProperty("HttpContextWeakRef") != null)
+        if (span.GetCustomProperty("HttpContextWeakRef") != null)
         {
             return GetRouteTemplate(span);
         }
-        else if (IsLambdaEnvironment())
+
+        if (IsLambdaEnvironment())
         {
             return AwsLambdaFunctionName + "/FunctionHandler";
         }
@@ -413,6 +379,60 @@ internal sealed class AwsSpanProcessingUtil
     private static string? GetHttpMethod(Activity span)
     {
         return (string?)span.GetTagItem(AttributeHttpRequestMethod) ?? (string?)span.GetTagItem(AttributeHttpMethod);
+    }
+
+    /// <summary>
+    /// If OTEL_AWS_HTTP_OPERATION_PATHS matches the span's URL path, returns the resolved operation
+    /// name ("METHOD /path/template"). Returns null if no config is set or no pattern matches.
+    /// </summary>
+    private static string? GetOperationPathOverride(Activity span)
+    {
+        var paths = GetOperationPaths();
+        if (paths.Count == 0)
+        {
+            return null;
+        }
+
+        string? urlPath = GetUrlPath(span);
+        if (string.IsNullOrEmpty(urlPath))
+        {
+            return null;
+        }
+
+        // Strip query string and fragment
+        string path = urlPath!;
+        foreach (char sep in new[] { '?', '#' })
+        {
+            int idx = path.IndexOf(sep);
+            if (idx >= 0)
+            {
+                path = path.Substring(0, idx);
+            }
+        }
+
+        // Normalize trailing slashes
+        while (path.EndsWith("/") && path.Length > 1)
+        {
+            path = path.Substring(0, path.Length - 1);
+        }
+
+        string[] urlSegments = path.Split('/');
+        foreach (string pattern in paths)
+        {
+            string normalizedPattern = pattern;
+            while (normalizedPattern.EndsWith("/") && normalizedPattern.Length > 1)
+            {
+                normalizedPattern = normalizedPattern.Substring(0, normalizedPattern.Length - 1);
+            }
+
+            if (SegmentsMatch(urlSegments, normalizedPattern.Split('/')))
+            {
+                string? httpMethod = GetHttpMethod(span);
+                return httpMethod != null ? httpMethod + " " + pattern : pattern;
+            }
+        }
+
+        return null;
     }
 
     private static bool SegmentsMatch(string[] urlSegments, string[] patternSegments)

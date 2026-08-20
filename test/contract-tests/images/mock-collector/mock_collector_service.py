@@ -27,7 +27,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 class MockCollectorService(MockCollectorServiceServicer):
     """Implements clear, get_traces, get_metrics, and get_logs for the mock collector.
 
-    Relies on metrics, trace and logs collector services to collect the telemetry.
+    Relies on metrics, trace, and logs collector services to collect the telemetry.
     """
 
     def __init__(
@@ -58,10 +58,6 @@ class MockCollectorService(MockCollectorServiceServicer):
     @override
     def get_metrics(self, request: GetMetricsRequest, context: ServicerContext) -> GetMetricsResponse:
         metric_requests: List[ExportMetricsServiceRequest] = self.metrics_collector.get_requests()
-        # Serialized through the METRICS class. This previously used ExportTraceServiceRequest, which happens
-        # to produce byte-identical output because protobuf's SerializeToString is duck-typed on the instance
-        # rather than the class it is reached through — so it was misleading rather than broken. Named
-        # correctly now so the new get_logs below is not copied from a wrong example.
         metrics: List[bytes] = list(map(ExportMetricsServiceRequest.SerializeToString, metric_requests))
         response: GetMetricsResponse = GetMetricsResponse(metrics=metrics)
         return response

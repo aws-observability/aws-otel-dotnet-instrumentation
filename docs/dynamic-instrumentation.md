@@ -37,8 +37,7 @@ alongside the standard ADOT auto-instrumentation variables:
 | Variable | Default | Purpose |
 |---|---|---|
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED` | `false` | Master switch. Set to `true` to enable DI. |
-| `OTEL_AWS_OTLP_LOGS_ENDPOINT` | *(unset)* | Where captured snapshots are sent — the local collector/agent's OTLP logs endpoint. **Required** to see any data (see below). |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Transport for snapshots: `http/protobuf` or `grpc`. Standard OpenTelemetry variable, shared with traces and metrics; `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` overrides it for snapshots only. The endpoint above must match the protocol (see below). |
+| `OTEL_AWS_OTLP_LOGS_ENDPOINT` | `http://localhost:4316/v1/logs` | Where captured snapshots are sent. The default is the local CloudWatch Agent's OTLP logs receiver — the same default the Java, Python and Node.js agents use — so it is usually correct. Must be an OTLP/**HTTP** endpoint including the `/v1/logs` path. |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL` | `http://localhost:2000` | The local CloudWatch Agent that delivers your probe configurations. Usually the default is correct. |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL` | `600` | Seconds between checks for new/changed probes (minimum 10). |
 | `OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL` | `60` | Seconds between checks for new/changed breakpoints (minimum 10). |
@@ -188,26 +187,25 @@ restarts.
 
 ### Probes show ACTIVE but no snapshots appear
 
-The most common cause is a missing **`OTEL_AWS_OTLP_LOGS_ENDPOINT`**. When it's unset, snapshots are
-captured but have nowhere to go and are dropped. Set it to your local collector/agent's OTLP logs
-receiver:
+ACTIVE means the probe was hit and a snapshot was captured — it says nothing about whether the export
+succeeded. Check the export path:
+
+- **Is something listening on the endpoint?** Snapshots go to `OTEL_AWS_OTLP_LOGS_ENDPOINT`, which defaults
+  to `http://localhost:4316/v1/logs`, the local CloudWatch Agent's OTLP logs receiver. If the agent isn't
+  running, or isn't listening there, exports fail and the snapshots are lost.
+- **Is the endpoint OTLP/HTTP, with the `/v1/logs` path?** The path is not appended for you, and the
+  transport is fixed at **`http/protobuf`** — neither `OTEL_EXPORTER_OTLP_PROTOCOL` nor
+  `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` affects snapshots, even though both do affect traces and metrics.
+  Pointing this at a gRPC-only port (`:4317`) yields no snapshots.
+
+To send them somewhere else, set the endpoint explicitly:
 
 ```bash
-# Default transport (http/protobuf). The /v1/logs path is required — it is not appended for you.
 export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4318/v1/logs"
 ```
 
-To send snapshots over gRPC instead, switch the protocol as well as the endpoint — the two have to agree,
-and `http/protobuf` is the default:
-
-```bash
-export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"                        # or OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
-export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4317"       # no path for gRPC
-```
-
-A mismatch is silent: snapshots are captured, the export fails, and probes still show ACTIVE. An HTTP
-endpoint with `grpc`, or a `grpc`-style endpoint (no `/v1/logs`) with the default protocol, both lose data
-without an error in your application logs.
+Setting the variable to an empty value does **not** disable export — a blank value is treated as unset and
+falls back to the default, matching the other agents.
 
 ### A line-level probe reports an error mentioning "no readable PDB"
 

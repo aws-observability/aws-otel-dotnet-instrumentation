@@ -126,6 +126,18 @@ internal partial class Build : NukeBuild
                     DirectoryExistsPolicy.Merge,
                     FileExistsPolicy.Skip);
 
+            // Bundle ServiceEvents.dll into the distribution. It is not a separate plugin and gets
+            // no OTEL_DOTNET_AUTO_PLUGINS entry — the distro's own Plugin references its types
+            // directly, so the assembly just has to sit beside it on disk.
+            // Merge + Skip so the distro's dependency versions copied above win on any
+            // overlap; this only adds ServiceEvents.dll and any deps not already present.
+            FileSystemTasks.CopyDirectoryRecursively(
+                    RootDirectory / "src" / "AWS.Distro.OpenTelemetry.ServiceEvents" / "bin" / this.configuration /
+                    "net8.0",
+                    this.openTelemetryDistributionFolder / "net",
+                    DirectoryExistsPolicy.Merge,
+                    FileExistsPolicy.Skip);
+
             if (EnvironmentInfo.IsWin)
             {
                 FileSystemTasks.CopyDirectoryRecursively(
@@ -134,6 +146,9 @@ internal partial class Build : NukeBuild
                     this.openTelemetryDistributionFolder / "netfx",
                     DirectoryExistsPolicy.Merge,
                     FileExistsPolicy.Skip);
+
+                // No ServiceEvents copy here: the plugin targets modern .NET only, so it
+                // is not bundled into the .NET Framework (netfx) distribution.
             }
         });
 

@@ -59,34 +59,27 @@ public sealed class ConfigurationPoller(
     }
 
     /// <summary>
-    /// Disposes the poller, waiting (bounded) for both poll threads to exit.
+    /// Disposes the poller, joining the poll threads so Cleanup cannot dispose the shared HttpClient while a
+    /// poll is still using it. An in-flight request can outlast the timeout.
     /// </summary>
-    /// <remarks>
-    /// The threads exit on the externally-managed CancellationToken, but cancellation is ASYNCHRONOUS: a
-    /// thread can be mid-FetchAndApply, using the HttpClient and calling OnConfigurationsChanged. The manager
-    /// disposes this poller first and then disposes the HttpClient and the capture engine, so returning
-    /// immediately let a still-running poll touch a disposed HttpClient (ObjectDisposedException on a
-    /// background thread) or apply configurations to a torn-down registry. Joining here makes "poller
-    /// disposed" mean "no poll is running" in the normal case.
-    ///
-    /// Best-effort, NOT a guarantee: on timeout a poll may still be running, which is why the downstream paths
-    /// are individually guarded (PostAsync catches ObjectDisposedException, OnConfigurationsChangedLocked
-    /// null-checks the registry). The join removes the common race; those guards cover the bounded remainder.
-    ///
-    /// The 2s-per-thread bound is a backstop, matching DISnapshotCollector and StatusReporter: the token is
-    /// already cancelled, so a thread is either about to observe it or is finishing a pre-cancel HTTP call,
-    /// and we do not hang process shutdown on a wedged backend. The threads are background threads, so one
-    /// that overruns the bound cannot keep the process alive.
-    /// </remarks>
     public void Dispose()
     {
-        var threadsToJoin = new[] { this.probeThread, this.breakpointThread };
+        const int JoinTimeoutMs = 2_000;
+
+        var threads = new[] { this.probeThread, this.breakpointThread };
         this.probeThread = null;
         this.breakpointThread = null;
 
-        foreach (var thread in threadsToJoin)
+        foreach (var thread in threads)
         {
-            thread?.Join(TimeSpan.FromSeconds(2));
+            try
+            {
+                thread?.Join(JoinTimeoutMs);
+            }
+            catch (ThreadStateException)
+            {
+                // Never started (Dispose without Start); nothing to wait for.
+            }
         }
     }
 

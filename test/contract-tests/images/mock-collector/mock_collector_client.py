@@ -55,11 +55,10 @@ class ResourceScopeMetric:
         self.metric: Metric = metric
 
 
-class ResourceScopeLog:
+class ResourceScopeLogRecord:
     """Data class used to correlate resources, scope and telemetry signals.
 
-    Correlate resource, scope and log record. Dynamic Instrumentation snapshots arrive as LogRecords, so
-    this is the shape a DI contract test asserts against.
+    Correlate resource, scope and log record
     """
 
     def __init__(self, resource_logs: ResourceLogs, scope_logs: ScopeLogs, log_record: LogRecord):
@@ -141,14 +140,12 @@ class MockCollectorClient:
                         metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
         return metrics
 
-    def get_logs(self, expected_count: int = 1) -> List[ResourceScopeLog]:
-        """Get all log records currently stored in the mock collector.
-
-        Args:
-            expected_count: minimum number of log records to wait for before returning.
+    def get_logs(self) -> List[ResourceScopeLogRecord]:
+        """Get all logs that are currently stored in the mock collector.
 
         Returns:
-            List of `ResourceScopeLog`, a flat list of every log record with its scope and resource.
+            List of `ResourceScopeLogRecord` which is a flat list containing all log records and their related
+            scope and resources.
         """
 
         def get_export() -> List[ExportLogsServiceRequest]:
@@ -157,30 +154,45 @@ class MockCollectorClient:
             return list(map(ExportLogsServiceRequest.FromString, serialized_logs))
 
         def wait_condition(exported: List[ExportLogsServiceRequest], current: List[ExportLogsServiceRequest]) -> bool:
-            # Counts RECORDS, not export requests. An agent may batch many snapshots into one request or
-            # split them across several, so "len(current) == len(exported)" alone would settle as soon as
-            # the first request landed and drop the rest.
-            return _count_log_records(current) >= expected_count and _count_log_records(exported) == _count_log_records(
-                current
-            )
+            return 0 < len(exported) == len(current)
 
         exported_logs: List[ExportLogsServiceRequest] = _wait_for_content(get_export, wait_condition)
-        logs: List[ResourceScopeLog] = []
+        records: List[ResourceScopeLogRecord] = []
         for exported_log in exported_logs:
             for resource_log in exported_log.resource_logs:
                 for scope_log in resource_log.scope_logs:
                     for log_record in scope_log.log_records:
-                        logs.append(ResourceScopeLog(resource_log, scope_log, log_record))
-        return logs
+                        records.append(ResourceScopeLogRecord(resource_log, scope_log, log_record))
+        return records
 
+    def get_logs_by_event_name(self, event_name: str) -> List[ResourceScopeLogRecord]:
+        """Get log records matching a specific event.name attribute value."""
+        return [
+            r
+            for r in self.get_logs()
+            if any(kv.key == "event.name" and kv.value.string_value == event_name for kv in r.log_record.attributes)
+        ]
 
-def _count_log_records(exports: List[ExportLogsServiceRequest]) -> int:
-    return sum(
-        len(scope_log.log_records)
-        for export in exports
-        for resource_log in export.resource_logs
-        for scope_log in resource_log.scope_logs
-    )
+    def peek_logs(self) -> List[ResourceScopeLogRecord]:
+        """Return all logs currently stored without waiting for new ones. Safe when empty."""
+        response: GetLogsResponse = self.client.get_logs(GetLogsRequest())
+        serialized_logs: RepeatedScalarFieldContainer[bytes] = response.logs
+        exported_logs: List[ExportLogsServiceRequest] = list(map(ExportLogsServiceRequest.FromString, serialized_logs))
+        records: List[ResourceScopeLogRecord] = []
+        for exported_log in exported_logs:
+            for resource_log in exported_log.resource_logs:
+                for scope_log in resource_log.scope_logs:
+                    for log_record in scope_log.log_records:
+                        records.append(ResourceScopeLogRecord(resource_log, scope_log, log_record))
+        return records
+
+    def peek_logs_by_event_name(self, event_name: str) -> List[ResourceScopeLogRecord]:
+        """Like get_logs_by_event_name but non-blocking — returns empty list if no logs."""
+        return [
+            r
+            for r in self.peek_logs()
+            if any(kv.key == "event.name" and kv.value.string_value == event_name for kv in r.log_record.attributes)
+        ]
 
 
 def _wait_for_content(get_export: Callable[[], List[T]], wait_condition: Callable[[List[T], List[T]], bool]) -> List[T]:

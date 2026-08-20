@@ -48,13 +48,13 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 // BEFORE AddOtlpExporter, and the order is load-bearing: processors run in registration
                 // order, and the exporter is itself the last processor in that chain. Registered after it,
                 // this would stamp records the exporter had already serialized.
-                //
-                // Also note ParseStateValues is left at its default (false), which is what keeps the log state
-                // reachable as SnapshotLogState in the processor instead of a flattened attribute list.
-                options.AddProcessor(new DISnapshotTraceContextProcessor());
+                options.AddProcessor(new SnapshotTraceContextProcessor());
 
-                // No endpoint => no exporter => snapshots are dropped (not buffered). Documented operator
-                // trap; see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
+                // No endpoint => no exporter => snapshots are dropped (not buffered). NOT reachable from
+                // DynamicInstrumentationConfig.FromEnvironment, which now defaults the endpoint rather than
+                // leaving it unset; kept for callers that construct a config directly (tests, and any future
+                // in-process host) so a null endpoint degrades to "capture, don't export" instead of throwing
+                // inside the Uri constructor.
                 if (!string.IsNullOrEmpty(logsEndpoint))
                 {
                     options.AddOtlpExporter(otlp =>

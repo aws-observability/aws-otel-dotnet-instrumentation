@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
 using Microsoft.Extensions.Logging;
@@ -134,6 +135,9 @@ public class DISnapshotOtlpEmitterExportTests
             builder.AddOpenTelemetry(options =>
             {
                 options.IncludeFormattedMessage = false;
+
+                // Same order as DISnapshotOtlpEmitter.Create: the processor runs before the exporter.
+                options.AddProcessor(new SnapshotTraceContextProcessor());
                 options.AddInMemoryExporter(exported);
             });
         });
@@ -257,32 +261,27 @@ public class DISnapshotOtlpEmitterExportTests
     }
 
     [Fact]
-    public void Export_FieldCountTruncatedObject_CarriesItsRealSizeOnTheWire()
+    public void Export_FieldCountTruncatedObject_CarriesSizeOnTheWire()
     {
-        // An object over MaxFieldsPerObject used to serialize to `fields` with NO truncation marker at all: the
-        // shape rule reaches `not_captured_reason` only for values with no partial data, so a truncated object
-        // was byte-identical to a complete one and the dropped members were invisible to the operator. The
-        // serializer now reports the real member count, which surfaces here as `size` — the same signal a
-        // truncated collection carries.
+        // The `fields` branch is evaluated before `not_captured_reason`, so size is the truncation signal.
         var (emitter, exported, factory) = CreateRealPipeline();
-
         using (factory)
         {
             emitter.Emit(new PendingCapture
             {
                 Type = CaptureType.METHOD,
                 InstrumentationKey = "MyApp.Svc.Run",
-                LocationHash = "hash1",
+                LocationHash = "h",
                 Arguments = new Dictionary<string, CapturedValue>
                 {
-                    ["order"] = new CapturedValue
+                    ["obj"] = new CapturedValue
                     {
                         Type = "MyApp.Order",
                         Fields = new Dictionary<string, CapturedValue>
                         {
                             ["id"] = new CapturedValue { Type = "System.String", Value = "ORD-1" },
                         },
-                        OriginalSize = 37,
+                        OriginalSize = 50,
                         NotCapturedReason = NotCapturedReason.FieldCount,
                     },
                 },
@@ -291,8 +290,12 @@ public class DISnapshotOtlpEmitterExportTests
 
         var body = exported.Single().Body ?? string.Empty;
 
-        body.Should().Contain("\"size\":37", "a field-count-truncated object must carry its real member count");
-        body.Should().Contain("fields", "the members that WERE captured are still emitted");
+        body.Should().Contain("fields", "partial field data is still emitted");
+        body.Should().Contain("\"size\":50", "a field-count-truncated object carries its real member count");
+
+        // Exactly-one-of: partial data present means the reason is NOT also emitted (same contract the
+        // truncated-collection case follows).
+        body.Should().NotContain("FIELD_COUNT");
     }
 
     [Fact]
@@ -328,11 +331,9 @@ public class DISnapshotOtlpEmitterExportTests
     }
 
     [Fact]
-    public void Export_TraceContext_EmittedAsAttributes_FromCapturedIds()
+    public void Export_TraceContext_SetOnNativeLogRecordFields_FromCapturedIds()
     {
-        // Trace/span IDs are captured on the user's thread and must be emitted explicitly — the LogRecord is
-        // built on the drain thread, whose ambient Activity is unrelated. Regression guard: these were
-        // captured but never emitted, breaking snapshot-to-trace correlation.
+        // The native fields are what the backend correlates on; the aws.di.* attributes are only carriers.
         var (emitter, exported, factory) = CreateRealPipeline();
         using (factory)
         {
@@ -347,14 +348,21 @@ public class DISnapshotOtlpEmitterExportTests
         }
 
         var record = exported.Single();
-        AttrString(record, "aws.di.trace_id").Should().Be("0af7651916cd43dd8448eb211c80319c");
-        AttrString(record, "aws.di.span_id").Should().Be("b7ad6b7169203331");
+        record.TraceId.ToHexString().Should().Be("0af7651916cd43dd8448eb211c80319c");
+        record.SpanId.ToHexString().Should().Be("b7ad6b7169203331");
+
+        // A snapshot only exists because a probe fired, so the record is sampled-in by definition.
+        record.TraceFlags.Should().Be(ActivityTraceFlags.Recorded);
+
+        // The attributes were only carriers; the values now live on the native fields exactly once.
+        record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.trace_id");
+        record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.span_id");
     }
 
     [Fact]
-    public void Export_NoTraceContext_OmitsTraceAttributes()
+    public void Export_NoTraceContext_LeavesNativeTraceFieldsDefault()
     {
-        // When the probed call ran outside a trace, no empty trace/span attributes are emitted.
+        // Untraced call: the native fields stay default.
         var (emitter, exported, factory) = CreateRealPipeline();
         using (factory)
         {
@@ -369,15 +377,16 @@ public class DISnapshotOtlpEmitterExportTests
         }
 
         var record = exported.Single();
+        record.TraceId.Should().Be(default(ActivityTraceId));
+        record.SpanId.Should().Be(default(ActivitySpanId));
         record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.trace_id");
         record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.span_id");
     }
 
     [Fact]
-    public void Export_CaptureTimestamp_EmittedAsAttribute_NotEmitTime()
+    public void Export_CaptureTimestamp_SetOnNativeTimestamp_NotEmitTime()
     {
-        // The true capture instant (recorded on the user's thread) must be emitted explicitly, since the
-        // LogRecord's own Timestamp is set later on the drain thread.
+        // Timestamp must carry the capture instant, not the drain thread's emit time.
         var (emitter, exported, factory) = CreateRealPipeline();
         using (factory)
         {
@@ -391,7 +400,9 @@ public class DISnapshotOtlpEmitterExportTests
         }
 
         var record = exported.Single();
-        AttrString(record, "aws.di.timestamp_ms").Should().Be("1785000000000");
+        record.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1_785_000_000_000).UtcDateTime);
+        record.Timestamp.Kind.Should().Be(DateTimeKind.Utc);
+        record.Attributes.Should().NotContain(kv => kv.Key == "aws.di.timestamp_ms");
     }
 
     [Fact]

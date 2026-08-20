@@ -236,40 +236,39 @@ internal static class ValueSerializer
         int count = 0;
         bool fieldCountExceeded = false;
 
-        // Declared out here because the return below reports it: the loops live inside the try.
-        var totalCapturable = 0;
+        // Counted independently of the cap so a truncated object reports its true size. The emitter's
+        // `fields` branch precedes `not_captured_reason`, so size is the truncation signal here.
+        int totalMemberCount = 0;
 
         try
         {
             var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
-            var declaredFields = type.GetFields(bindingFlags);
-            var declaredProperties = type.GetProperties(bindingFlags);
 
-            // Total capturable members, counted with the SAME filter the loops below apply. Needed because the
-            // loops break at the cap and so never learn how many members there were — and without a total, a
-            // truncated object is indistinguishable on the wire from a complete one (see OriginalSize below).
-            // Counted rather than LINQ-projected: this runs per captured object on the user's thread.
-            // DISTINCT NAMES, because `fields` below is keyed by name and GetFields does NOT apply
-            // hide-by-name: a `public new string Name` returns TWO FieldInfos, and a derived property
-            // shadowing a base field collides the same way. Counting both reported `size` greater than the
-            // fields emitted for an object captured completely — a truncation signal for nothing dropped.
+            // Reflected once and reused for both the count and the capture walk; this runs on the user's
+            // thread in every woven method.
+            var typeFields = type.GetFields(bindingFlags);
+            var readableProperties = type.GetProperties(bindingFlags)
+                .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
+                .ToArray();
+
+            // DISTINCT NAMES: `fields` below is keyed by name, and GetFields does NOT apply hide-by-name, so a
+            // `public new string Name` returns TWO FieldInfos (a derived property shadowing a base field
+            // collides the same way). Counting both reported `size` greater than the members actually emitted
+            // for an object captured completely — a truncation signal for nothing dropped.
             var capturableNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var field in declaredFields)
+            foreach (var field in typeFields)
             {
                 capturableNames.Add(field.Name);
             }
 
-            foreach (var prop in declaredProperties)
+            foreach (var prop in readableProperties)
             {
-                if (prop.CanRead && prop.GetIndexParameters().Length == 0)
-                {
-                    capturableNames.Add(prop.Name);
-                }
+                capturableNames.Add(prop.Name);
             }
 
-            totalCapturable = capturableNames.Count;
+            totalMemberCount = capturableNames.Count;
 
-            foreach (var field in declaredFields)
+            foreach (var field in typeFields)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
@@ -290,17 +289,12 @@ internal static class ValueSerializer
                 }
             }
 
-            foreach (var prop in declaredProperties)
+            foreach (var prop in readableProperties)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
                     fieldCountExceeded = true;
                     break;
-                }
-
-                if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
-                {
-                    continue;
                 }
 
                 try
@@ -325,14 +319,7 @@ internal static class ValueSerializer
         {
             Type = typeName,
             Fields = fields,
-
-            // THE TRUNCATION SIGNAL. Without OriginalSize, an object over MaxFieldsPerObject serialized to
-            // `fields` with no marker of any kind: the emitter's shape rule emits `size` from OriginalSize and
-            // reaches `not_captured_reason` only for values carrying NO partial data, so a truncated object was
-            // byte-identical to a complete one and the dropped fields were invisible. Reporting the total the
-            // same way the collection and dictionary paths do makes truncation detectable (size > fields
-            // emitted) and keeps one signal across all three container shapes.
-            OriginalSize = fieldCountExceeded ? totalCapturable : null,
+            OriginalSize = fieldCountExceeded ? totalMemberCount : null,
             NotCapturedReason = fieldCountExceeded ? NotCapturedReason.FieldCount : NotCapturedReason.None,
         };
     }

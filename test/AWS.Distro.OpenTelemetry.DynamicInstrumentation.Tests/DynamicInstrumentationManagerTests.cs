@@ -25,6 +25,63 @@ public class DynamicInstrumentationManagerTests : IDisposable
             ServiceName: "test-service",
             Environment: "test-env");
 
+    /// <summary>A loadable target, so applying it fails PERMANENTLY (RuntimeError, no profiler in-process)
+    /// and the manager therefore RETAINS its applied-state entry — which is what makes the identity visible.</summary>
+    /// <param name="x">Any value.</param>
+    /// <returns>x + 1.</returns>
+    public static int EditableTarget(int x) => x + 1;
+
+    [Fact]
+    public void OnConfigurationsChanged_ConfigEditedInPlace_ReAppliesUnderTheNewIdentity()
+    {
+        // An edit (different captured arguments, a different MaxHits) keeps the InstrumentationKey and changes
+        // the LocationHash. Applied-state used to be a key-only set, so RemoveStale did not see the key as
+        // stale and the apply loop saw it as already-applied: the edited configuration was never applied and
+        // never reported any status, while the backend kept the pre-edit identity.
+        //
+        // Asserted through the private applied-state map because the distinguishing outcome is bookkeeping:
+        // in this process every apply fails (no profiler), so neither version can report READY. RuntimeError
+        // is a PERMANENT failure, which is what keeps the entry around to be inspected.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig());
+
+        var v1 = EditableConfig("hash-v1");
+        var v2 = EditableConfig("hash-v2");
+        v2.InstrumentationKey.Should().Be(v1.InstrumentationKey, "an edit must not change the key");
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { v1 });
+        AppliedHashFor(manager, v1.InstrumentationKey).Should().Be(
+            "hash-v1", "a permanent failure retains applied-state so it is reported exactly once");
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { v2 });
+        AppliedHashFor(manager, v2.InstrumentationKey).Should().Be(
+            "hash-v2",
+            "the edited configuration must be re-applied under its new identity, not skipped as already-applied");
+
+        manager.Shutdown();
+    }
+
+    private static InstrumentationConfiguration EditableConfig(string hash) =>
+        new()
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = typeof(DynamicInstrumentationManagerTests).Namespace!,
+            ClassName = nameof(DynamicInstrumentationManagerTests),
+            MethodName = nameof(EditableTarget),
+            LocationHash = hash,
+            Capture = CaptureConfiguration.Default,
+        };
+
+    private static string? AppliedHashFor(DynamicInstrumentationManager manager, string key)
+    {
+        var field = typeof(DynamicInstrumentationManager).GetField(
+            "appliedInstrumentations",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var map = (Dictionary<string, string>)field.GetValue(manager)!;
+        return map.TryGetValue(key, out var hash) ? hash : null;
+    }
+
     [Fact]
     public void OnConfigurationsChanged_ConfigThatCouldNotBeApplied_IsNeverReportedReady()
     {

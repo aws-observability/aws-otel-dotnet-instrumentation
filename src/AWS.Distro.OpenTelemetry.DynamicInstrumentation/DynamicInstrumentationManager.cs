@@ -25,14 +25,16 @@ public sealed class DynamicInstrumentationManager : IDisposable
     // Serializes OnConfigurationsChanged: the poller calls it from both poll threads. Lock order is always initLock -> configChangeLock.
     private readonly object configChangeLock = new();
 
-    // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity. Cleared on
-    // Cleanup (C3). Guarded by configChangeLock.
+    // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
+    // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity.
     //
-    // WHY THE HASH AND NOT JUST THE KEY. A line-level key is Type.Method:Line, so editing a probe in place
-    // (different captured locals, a different MaxHits) arrives as the SAME key with a NEW LocationHash. With a
-    // key-only set, that edit was invisible: RemoveStale did not consider the key stale, so nothing was
-    // forgotten or unregistered, and the apply loop saw the key already present and skipped it. The new
-    // configuration was never applied and never reported any status, while the old probes kept firing.
+    // WHY THE HASH AND NOT JUST THE KEY. An in-place edit of a probe (different captured arguments or locals, a
+    // different MaxHits) arrives as the SAME key with a NEW LocationHash — a line-level key is Type.Method:Line,
+    // so it is stable across an edit for the same reason a method-level one is. With a key-only set that edit was
+    // invisible: RemoveStale did not consider the key stale, so nothing was forgotten or unregistered, and this
+    // loop saw the key already present and skipped it. The edited configuration was never applied and never
+    // reported any status, while the previous incarnation's probes kept firing under the identity the backend
+    // knew about.
     private readonly Dictionary<string, string> appliedInstrumentations = new();
 
     private volatile bool initialized;
@@ -121,8 +123,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 // Output subsystems must be live before the poller starts: the first OnConfigurationsChanged
                 // reports READY/ERROR via statusReporter, and woven captures begin enqueuing immediately, so
                 // the collector must already be draining. The emitter routes snapshots to the configured OTLP
-                // logs endpoint (no exporter is attached when LogsEndpoint is null — captures are dropped, not
-                // buffered) and is enriched from the registry.
+                // logs endpoint and is enriched from the registry.
                 this.snapshotEmitter = DISnapshotOtlpEmitter.Create(config.LogsEndpoint, this.registry);
                 this.snapshotCollector = new DISnapshotCollector(this.snapshotEmitter, this.cts.Token);
                 this.snapshotCollector.Start();
@@ -216,8 +217,11 @@ public sealed class DynamicInstrumentationManager : IDisposable
         {
             if (!IsSupported(config))
             {
-                // Only method-level targets can be refused on shape (ctor/static-init), so this is
-                // unconditional now rather than gated on IsMethodLevel.
+                // Unconditional, where this used to be gated on IsMethodLevel. That gate existed to stop
+                // line-level configs — unsupported at the time — from spamming ERROR on every poll. Line-level
+                // is now supported, so IsSupported returns true for it and it never reaches here; anything that
+                // does is either a method-level target refused on shape (ctor/static-init) or a malformed
+                // LineNumber, and both deserve to be reported rather than dropped in silence.
                 this.statusReporter?.ReportError(config, "UNSUPPORTED_TARGET");
                 continue;
             }
@@ -310,6 +314,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 continue;
             }
 
+            this.appliedInstrumentations[key] = config.LocationHash;
+
             IReadOnlyCollection<int> appliedArities = Array.Empty<int>();
             var result = this.profilerTranslator?.ApplyInstrumentation(config, out appliedArities)
                 ?? InstrumentationApplyResult.TypeNotLoaded;
@@ -317,9 +323,9 @@ public sealed class DynamicInstrumentationManager : IDisposable
             {
                 case InstrumentationApplyResult.Applied:
                     // The target is woven, so this config may now report READY. Marked here rather than
-                    // inferred from registration: every supported config is registered, including ones that
-                    // did not apply (TypeNotLoaded, permanent failures), and READY for those would claim a
-                    // probe is live when nothing was instrumented.
+                    // inferred from registration: every supported config is registered, including ones that did
+                    // not apply (TypeNotLoaded, permanent failures), and READY for those claimed a probe was
+                    // live when nothing had been instrumented.
                     this.statusReporter?.MarkApplied(config);
 
                     // Index the woven arities so the capture hot path resolves this call by (type, arity),
