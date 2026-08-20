@@ -622,6 +622,79 @@ public class LineProbeTranslatorTests
     }
 
     [Fact]
+    public void ApplyLineProbe_SomeLocalsResolveAndOthersDoNot_CapturesTheGoodOnesAndStillSurfacesTheFailure()
+    {
+        // PARTIAL SUCCESS, the case an operator hits by misspelling one name out of several. The valuable
+        // half — capture what resolved rather than discarding the whole probe — is asserted first.
+        //
+        // The second half is the one that has been missing: the unresolved name has to be reported somewhere,
+        // or a typo is indistinguishable from a working probe. docs/dynamic-instrumentation.md states the
+        // probe "captures the ones that did and reports an error naming the ones that did not", so `Detail`
+        // must name it. Asserting on Detail rather than on Status deliberately: the config IS live (two probes
+        // woven), so flipping Status to a failure would be wrong — the manager suppresses READY for anything
+        // it has reported an error against, and an operator would then believe nothing was instrumented.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+        var nextId = 700;
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "number", "nosuchlocal", "text"),
+            probeId: 60,
+            allocateProbeId: () => nextId++);
+
+        result.IsResolved.Should().BeTrue(
+            $"two of the three names resolve, so the probe must still apply: {result.Status} {result.Detail}");
+
+        var captured = read();
+        captured!.Size.Should().Be(2, "only the two resolvable locals may be emitted");
+        result.Locations.Select(l => l.Location.LocalName)
+            .Should().BeEquivalentTo(["number", "text"], "the bogus name must be dropped, not substituted");
+
+        result.Detail.Should().NotBeNullOrEmpty(
+            "a silently-dropped local is indistinguishable from a working probe; the unresolved name has to "
+            + "reach the operator somehow");
+        result.Detail.Should().Contain(
+            "nosuchlocal", "the detail has to name WHICH local was dropped, not merely that one was");
+    }
+
+    [Fact]
+    public void ApplyLineProbe_TwoLinesInOneMethod_GetTheirOwnOffsetsAndIds()
+    {
+        // Two SEPARATE configs on two different lines of one method — distinct LocationHashes, distinct
+        // offsets. Different from the co-located multi-local case (N probes at ONE offset) and from the
+        // native-level multi-probe harnesses: this is the manager-facing path, where each config resolves
+        // independently and the second must not inherit or overwrite the first's offset.
+        var (seamA, readA) = Spy();
+        var translatorA = new LineProbeTranslator(seamA(), typeResolver: ResolvesToFixture);
+        var first = translatorA.ApplyLineProbe(
+            LineConfig(nameof(PdbReaderTargets.ThreeStatements), PdbReaderTargets.LineOf("assignsA"), "a"),
+            probeId: 10);
+
+        var (seamB, readB) = Spy();
+        var translatorB = new LineProbeTranslator(seamB(), typeResolver: ResolvesToFixture);
+        var second = translatorB.ApplyLineProbe(
+            LineConfig(nameof(PdbReaderTargets.ThreeStatements), PdbReaderTargets.LineOf("assignsB"), "b"),
+            probeId: 11);
+
+        first.IsResolved.Should().BeTrue($"{first.Status} {first.Detail}");
+        second.IsResolved.Should().BeTrue($"{second.Status} {second.Detail}");
+
+        var defA = readA()!.Definitions[0];
+        var defB = readB()!.Definitions[0];
+
+        defA.IlOffset.Should().NotBe(
+            defB.IlOffset,
+            "two different source lines must weave at two different IL offsets; sharing one would make both "
+            + "probes fire together and report the same line twice");
+        defA.ProbeId.Should().NotBe(defB.ProbeId);
+        defA.BoxValue.Should().NotBe(
+            defB.BoxValue, "each probe reads its own local slot, so the slot operands must differ");
+    }
+
+    [Fact]
     public void BuildSignatureTypes_IsAllWildcards_MatchingTheFunctionLevelConvention()
     {
         // Individual entries are never resolved by the native side (it matches on length), so wildcards

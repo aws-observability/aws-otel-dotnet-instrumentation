@@ -150,8 +150,11 @@ Additional behaviour to know about:
 
 - **Up to 5 locals per line.** Extra names beyond the fifth are dropped; the rest are still captured.
   Each captured local adds a call on that line, so a line that runs millions of times pays for every one.
-- **Partial success is normal.** If some named locals resolve and others do not, the probe captures the
-  ones that did and reports an error naming the ones that did not.
+- **Partial success is normal.** If some named locals resolve and others do not, the probe still applies and
+  captures the ones that did. The probe reports **READY**, not an error — it really is live — so a misspelled
+  or out-of-scope name shows up as a local that is simply absent from the snapshot, with the dropped names
+  named in the agent's own log rather than in the probe's status. Check the snapshot's `locals` against what
+  you asked for if a value you expected is missing.
 - **The last statement of a method cannot be probed.** The probe reads the effect of your line at the
   *next* statement, so a line with no following statement in the same body is refused.
 - **A line whose next statement is a branch target cannot be probed.** In `Release` builds this most often

@@ -158,6 +158,11 @@ internal sealed class LineProbeTranslator : IDisposable
         var definitions = new List<NativeLineProbeDefinition>(localNames.Length);
         var applied = new List<LineProbeProbeLocation>(localNames.Length);
         LineProbeResolution? firstFailure = null;
+
+        // Names that did not resolve, so a PARTIAL success can say WHICH ones were dropped. The first
+        // failure alone is not enough: it carries a cause but not the operator's spelling, and with
+        // several names dropped only the first would ever be mentioned.
+        List<string>? unresolvedLocals = null;
         var nextId = probeId;
 
         foreach (var localName in localNames)
@@ -170,6 +175,11 @@ internal sealed class LineProbeTranslator : IDisposable
                 // naming what was not. The first failure is remembered so a run where NOTHING resolves
                 // still reports a real cause instead of a generic one.
                 firstFailure ??= resolution;
+                if (localName != null)
+                {
+                    (unresolvedLocals ??= new List<string>()).Add(localName);
+                }
+
                 continue;
             }
 
@@ -189,6 +199,7 @@ internal sealed class LineProbeTranslator : IDisposable
                     $"local '{localName}' resolved to neither a slot nor a hoisted field at IL offset " +
                     $"{location.IlOffset}";
                 firstFailure ??= LineProbeResolution.Fail(LineProbeResolutionStatus.LocalOutOfScope, detail);
+                (unresolvedLocals ??= new List<string>()).Add(localName);
                 continue;
             }
 
@@ -295,7 +306,25 @@ internal sealed class LineProbeTranslator : IDisposable
             // Carries EVERY applied probe so the caller can register each id against its own local. The
             // single Location stays populated (the first probe) so existing single-local callers and tests
             // read unchanged.
-            return LineProbeResolution.Success(applied[0].Location, applied);
+            var success = LineProbeResolution.Success(applied[0].Location, applied);
+
+            // PARTIAL SUCCESS MUST NOT LOOK LIKE A CLEAN ONE. Previously `firstFailure` was discarded here, so
+            // a misspelled name among several was dropped with no signal anywhere — indistinguishable from a
+            // probe that captured everything asked of it, which is precisely the case an operator needs told.
+            //
+            // Carried as Detail rather than as a failure Status ON PURPOSE. The config IS live: probes are
+            // woven and capturing. Returning a failure would make the manager skip MarkApplied, and
+            // StatusReporter suppresses READY for anything it has reported an error against — so the operator
+            // would be told nothing was instrumented while snapshots were arriving. Detail keeps both facts
+            // true at once.
+            return unresolvedLocals == null
+                ? success
+                : success with
+                {
+                    Detail =
+                        $"captured {applied.Count} of {localNames.Length} requested locals at line " +
+                        $"{config.LineNumber}; not in scope: {string.Join(", ", unresolvedLocals)}",
+                };
         }
         catch (EntryPointNotFoundException)
         {
