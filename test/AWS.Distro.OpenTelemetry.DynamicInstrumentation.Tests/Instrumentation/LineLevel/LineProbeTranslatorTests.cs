@@ -737,4 +737,126 @@ public class LineProbeTranslatorTests
         LineProbeTranslator.BuildSignatureTypes(0).Should().Equal("_");
         LineProbeTranslator.BuildSignatureTypes(3).Should().Equal("_", "_", "_", "_");
     }
+
+    [Fact]
+    public void GetWeaveResults_ReadsBackWhatTheProfilerRecorded()
+    {
+        using var translator = new LineProbeTranslator(getWeaveResultsOverride: (buffer, capacity) =>
+        {
+            buffer[0] = new NativeLineProbeWeaveResult { ProbeId = 7, Outcome = 1 };
+            buffer[1] = new NativeLineProbeWeaveResult { ProbeId = 9, Outcome = 2 };
+            return 2;
+        });
+
+        var results = translator.GetWeaveResults();
+
+        results.Should().HaveCount(2);
+        results[0].Should().Be((7, LineProbeWeaveOutcome.Woven));
+        results[1].Should().Be((9, LineProbeWeaveOutcome.CallbackAssemblyRefFailed));
+    }
+
+    [Fact]
+    public void GetWeaveResults_WhenTheProfilerHoldsMoreThanTheBuffer_GrowsAndRetriesRatherThanTruncating()
+    {
+        // THE NATIVE CONTRACT IS "TOTAL, NOT WRITTEN". A short buffer gets a partial view and a total that
+        // exceeds it, and the entries come back ordered by probe id — so silently accepting the truncation
+        // would permanently hide the failures of the HIGHEST ids, i.e. the most recently created probes,
+        // which are exactly the ones an operator is watching.
+        var total = LineProbeTranslator.InitialWeaveResultCapacity + 3;
+        var capacities = new List<int>();
+
+        using var translator = new LineProbeTranslator(getWeaveResultsOverride: (buffer, capacity) =>
+        {
+            capacities.Add(capacity);
+            for (var i = 0; i < Math.Min(total, capacity); i++)
+            {
+                buffer[i] = new NativeLineProbeWeaveResult { ProbeId = i + 1, Outcome = 2 };
+            }
+
+            return total;
+        });
+
+        var results = translator.GetWeaveResults();
+
+        capacities.Should().HaveCount(2, "one truncated read, then one sized from the reported total");
+        capacities[0].Should().Be(LineProbeTranslator.InitialWeaveResultCapacity);
+        capacities[1].Should().Be(total);
+        results.Should().HaveCount(total);
+        results[^1].ProbeId.Should().Be(total, "the highest id must survive the grow, not be cut off");
+    }
+
+    [Fact]
+    public void GetWeaveResults_WhenTheProfilerGrowsBetweenTheTwoReads_TakesWhatFitsInsteadOfOverreading()
+    {
+        // A method can be ReJIT-ed between the two P/Invokes, so the second total can exceed even the grown
+        // buffer. Reading `total` elements out of a shorter array would be an IndexOutOfRange on a status
+        // timer; the rest simply arrive next period.
+        var call = 0;
+
+        using var translator = new LineProbeTranslator(getWeaveResultsOverride: (buffer, capacity) =>
+        {
+            call++;
+            for (var i = 0; i < capacity; i++)
+            {
+                buffer[i] = new NativeLineProbeWeaveResult { ProbeId = i + 1, Outcome = 2 };
+            }
+
+            // Grows on every call, so the retry can never catch up.
+            return capacity + 5;
+        });
+
+        // ONE invocation, captured. Calling it twice would not be a repeat: the buffer it grew persists, so the
+        // second call starts from a larger capacity and returns a different count.
+        IReadOnlyList<(int ProbeId, LineProbeWeaveOutcome Outcome)>? results = null;
+        var act = () => results = translator.GetWeaveResults();
+
+        act.Should().NotThrow();
+        results.Should().HaveCount(
+            LineProbeTranslator.InitialWeaveResultCapacity + 5,
+            "capped at what the grown buffer actually holds");
+        call.Should().Be(2, "exactly one grow-and-retry, not a loop that chases a moving total");
+    }
+
+    [Fact]
+    public void GetWeaveResults_TreatsAnUnrecognisedOutcomeCodeAsAFailure_NotAsWoven()
+    {
+        // FAIL-CLOSED ON AN UNKNOWN CODE. A newer profiler paired with this assembly could report a reason
+        // this enum does not have. Mapping it to Woven would silently restore the exact bug this whole feature
+        // exists to fix, so an unknown code is reported as a failure instead.
+        using var translator = new LineProbeTranslator(getWeaveResultsOverride: (buffer, capacity) =>
+        {
+            buffer[0] = new NativeLineProbeWeaveResult { ProbeId = 4, Outcome = 4242 };
+            return 1;
+        });
+
+        var results = translator.GetWeaveResults();
+
+        results.Should().ContainSingle();
+        results[0].Outcome.IsWeaveFailure().Should().BeTrue();
+        results[0].Outcome.Should().NotBe(LineProbeWeaveOutcome.Woven);
+        results[0].Outcome.Should().NotBe(LineProbeWeaveOutcome.Pending);
+    }
+
+    [Fact]
+    public void GetWeaveResults_WhenTheExportIsMissing_ReturnsEmptyInsteadOfThrowing()
+    {
+        // Stock upstream profiler, or none at all — which is the state of this test process. Nothing was woven
+        // either, so there is no verdict to miss, and a throw here would take down a status-reporting period
+        // that still has DISABLED/ACTIVE to deliver for every other config.
+        using var translator = new LineProbeTranslator();
+
+        var act = () => translator.GetWeaveResults();
+
+        act.Should().NotThrow<DllNotFoundException>();
+        act.Should().NotThrow<EntryPointNotFoundException>();
+        act().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetWeaveResults_WhenTheProfilerHasNoVerdictsYet_ReturnsEmpty()
+    {
+        using var translator = new LineProbeTranslator(getWeaveResultsOverride: (_, _) => 0);
+
+        translator.GetWeaveResults().Should().BeEmpty();
+    }
 }

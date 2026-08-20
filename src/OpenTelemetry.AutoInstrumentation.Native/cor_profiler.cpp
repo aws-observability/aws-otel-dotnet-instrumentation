@@ -1285,6 +1285,13 @@ void CorProfiler::AddLineProbes(WCHAR* id, LineProbeDefinition* items, int size)
 void CorProfiler::RemoveLineProbe(int probeId)
 {
     Logger::Info("RemoveLineProbe: probeId ", probeId);
+
+    // Drop the weave record FIRST, and unconditionally — before the rejit_handler guard, because a probe
+    // removed while the handler is already gone still has to stop being reported. Keeping it would leave a
+    // failure verdict in the log for a probe the operator has deleted, and the managed side would eventually
+    // attribute it to whatever configuration next occupied that key.
+    LineProbeWeaveLog::Forget(probeId);
+
     if (rejit_handler == nullptr)
     {
         return;

@@ -22,7 +22,7 @@ internal static class NativeMethods
         int size);
 
     // ---------------------------------------------------------------------------------------------
-    // LINE-LEVEL (fork-only). The two exports below exist ONLY in our forked profiler; the stock
+    // LINE-LEVEL (fork-only). The three exports below exist ONLY in our forked profiler; the stock
     // upstream binary does not define them (verified: `AddLineProbes` symbol count in the shipped
     // OpenTelemetryDistribution profiler is 0).
     //
@@ -40,4 +40,23 @@ internal static class NativeMethods
 
     [DllImport(NativeLib, EntryPoint = "RemoveLineProbe")]
     public static extern void RemoveLineProbe(int probeId);
+
+    /// <summary>
+    /// Reads back what the native rewriter actually did with each applied probe.
+    /// </summary>
+    /// <param name="buffer">Receives up to <paramref name="capacity"/> results.</param>
+    /// <param name="capacity">Number of elements <paramref name="buffer"/> can hold.</param>
+    /// <returns>
+    /// The TOTAL number of results the profiler holds, which may exceed <paramref name="capacity"/>.
+    /// </returns>
+    // The return value is the total, NOT the number written, so a caller whose buffer was too small can tell.
+    // Reporting the written count instead would make truncation look like completeness, and every failure past
+    // the buffer's end would go unreported for the process lifetime.
+    //
+    // `[Out]` rather than `[In, Out]`: the native side only ever writes. That lets the marshaler skip copying
+    // the managed contents in, which matters because this is polled on a timer.
+    [DllImport(NativeLib, EntryPoint = "GetLineProbeWeaveResults")]
+    public static extern int GetLineProbeWeaveResults(
+        [Out] LineLevel.NativeLineProbeWeaveResult[] buffer,
+        int capacity);
 }

@@ -106,6 +106,7 @@ internal partial class Build
         // useful here: they distinguish "our profiler shipped" from "the download shipped".
         "AddLineProbes",
         "RemoveLineProbe",
+        "GetLineProbeWeaveResults",
 
         // Upstream's own COM entry point. Included as a CONTROL: if this one fails too, the library is
         // broken outright rather than merely missing our delta, which is a different diagnosis.

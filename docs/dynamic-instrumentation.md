@@ -210,6 +210,33 @@ export OTEL_AWS_OTLP_LOGS_ENDPOINT="http://localhost:4318/v1/logs"
 Setting the variable to an empty value does **not** disable export — a blank value is treated as unset and
 falls back to the default, matching the other agents.
 
+### A line-level probe went READY and then reported an error
+
+This is expected behaviour, not a glitch. Applying a line-level probe happens in two steps at two different
+times: the agent resolves your line to a location and reports **READY**, and the profiler splices the capture
+into the method later — the next time that method actually runs. If the profiler then declines the location,
+the probe changes to **ERROR** on the following status report (up to a minute later).
+
+So a probe on a method that is called rarely can sit at READY for a long time before either capturing or
+reporting an error. Both outcomes are normal:
+
+- **READY, then snapshots** — the location was accepted.
+- **READY, then ERROR** — the profiler refused the location. The error cause distinguishes the two kinds:
+  `LINE_NOT_EXECUTABLE` means the location itself cannot be used and you should move the probe;
+  `RUNTIME_ERROR` means something else prevented it, and the agent's own log names the reason.
+- **READY, and nothing else** — the method has not been called yet.
+
+A probe capturing several locals can be **partly** applied, and the two ways that happens are reported
+differently:
+
+- A name that is **not in scope** at your line is dropped at resolution time. The probe stays **READY** and the
+  dropped names appear only in the agent's log (see *Partial success is normal* above).
+- A location the **profiler** refuses for one of your locals reports **ERROR**, even though the other locals
+  are still captured — because that local can never be captured there, and the status is the only channel
+  that reaches you.
+
+Either way, compare the snapshot's `locals` against what you asked for.
+
 ### A line-level probe reports an error mentioning "no readable PDB"
 
 The target assembly was deployed without its debug info. This is the most common line-level failure,

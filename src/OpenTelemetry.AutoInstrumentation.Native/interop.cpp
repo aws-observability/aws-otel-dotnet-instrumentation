@@ -54,6 +54,15 @@ EXTERN_C VOID STDAPICALLTYPE RemoveLineProbe(int probeId)
     return trace::profiler->RemoveLineProbe(probeId);
 }
 
+// Per-probe weave status (AWS Distro DI). Additive export — the managed side polls this to learn that a probe
+// it reported READY was in fact never woven. Deliberately NOT routed through trace::profiler: the log is
+// process-wide static state, and the query must answer even when no profiler instance is attached (which is
+// also what keeps it safe to call from a status-reporting timer during shutdown).
+EXTERN_C INT32 STDAPICALLTYPE GetLineProbeWeaveResults(trace::LineProbeWeaveResult* buffer, INT32 capacity)
+{
+    return trace::LineProbeWeaveLog::Snapshot(buffer, capacity);
+}
+
 EXTERN_C VOID STDAPICALLTYPE SetSqlClientNetFxILRewriteEnabled(bool enabled)
 {
     return trace::SetSqlClientNetFxILRewriteEnabled(enabled);

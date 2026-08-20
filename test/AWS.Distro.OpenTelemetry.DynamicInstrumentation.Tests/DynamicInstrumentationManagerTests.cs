@@ -15,6 +15,57 @@ public class DynamicInstrumentationManagerTests : IDisposable
     // with other global-state suites for the shared queue.
     public void Dispose() => DynamicInstrumentationManager.Instance.Shutdown();
 
+    [Fact]
+    public void ReportLineProbeWeaveFailures_AfterInitialize_IsWiredUpAndSurvivesAMissingProfiler()
+    {
+        // WIRING, not logic. LineProbeWeaveReporterTests covers the decision; this covers the four lambdas
+        // Initialize hands it — translator, sink, registry, status reporter — which nothing else exercises.
+        //
+        // WHY IT NEEDS ITS OWN TEST. In production this runs from StatusReporter's 60-second timer, and no E2E
+        // run lasts that long (measured: the DeployedAppDemo harness reports READY but never an ACTIVE, which
+        // is the tell that the timer never fired). So without this, a mis-wired hook — a null field, a lambda
+        // over the wrong instance — would ship green.
+        //
+        // No profiler is loaded in a test process, so GetLineProbeWeaveResults throws DllNotFoundException
+        // inside the translator, which swallows it and returns no verdicts. Reporting nothing is the CORRECT
+        // outcome for a process where nothing was ever woven; throwing would take down the whole reporting
+        // period.
+        //
+        // SO THE ASSERTION IS ON NULL-VS-ZERO, not on the count. A wired reporter and a missing one BOTH find
+        // zero verdicts here, so asserting `== 0` proved nothing — measured: that version passed with the
+        // assignment in Initialize deleted. Null means there was no reporter to ask.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig());
+
+        var lineConfig = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = "MyApp",
+            ClassName = "OrderService",
+            MethodName = "Process",
+            LineNumber = 42,
+            LocationHash = "weave-wiring-hash",
+            Capture = CaptureConfiguration.Default
+        };
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { lineConfig });
+
+        var act = () => manager.ReportLineProbeWeaveFailures();
+
+        act.Should().NotThrow("a missing profiler export must not escape into the status timer");
+        act().Should().Be(
+            0,
+            "Initialize must have wired a reporter (non-null), and with no profiler it finds no verdicts (0)");
+
+        manager.Shutdown();
+
+        // AFTER SHUTDOWN the reporter is gone, and the hook must be a no-op rather than a NullReference on a
+        // timer callback that Dispose is already waiting for. Null here, not 0 — the difference is the same one
+        // that makes the assertion above non-vacuous.
+        act.Should().NotThrow();
+        act().Should().BeNull("Cleanup drops the reporter, so there is nothing to ask");
+    }
+
     private static DynamicInstrumentationConfig CreateConfig(bool enabled = true, string apiUrl = "http://localhost:2000") =>
         new(
             Enabled: enabled,

@@ -258,6 +258,80 @@ post-fix out-of-line `RequestCount` symbol):
 
 That is 73 passing checks plus the two negative controls, on the current native code.
 
+### W7 — per-probe weave status: the operator is told when the rewriter refuses a probe
+
+**The gap.** A line probe reported READY as soon as its MANAGED resolution succeeded, because that is all that
+is knowable then. `AddLineProbes` returns void after waiting at most 100 ms for the ReJIT *request*; the rewrite
+runs later, on a CLR ReJIT thread, the first time the target method is invoked. Anything
+`LineProbeMethodRewriter::Rewrite` then declined was reported live and never corrected. Not hypothetical —
+measured: before the callback-AssemblyRef fix, a module carrying only line-level probes had **eleven probes
+skipped while every one of them reported READY** (see DEMO_LINE_ONLY below). That fix removed one *cause*; this
+removes the *class*.
+
+**What was added.** A process-wide `LineProbeWeaveLog` (probeId → outcome, mutex-guarded), one recorded outcome
+per `continue`/early-return in `Rewrite`, published ONCE at the end of the pass so a probe marked woven mid-loop
+is downgraded if `Export` then fails. Exposed as a third fork-only export, `GetLineProbeWeaveResults`, which
+returns the TOTAL it holds rather than the number written so a short buffer is detectable. Cleared by
+`RemoveLineProbe`, so the log tracks live probes rather than growing for the process lifetime.
+
+Managed side: `LineProbeTranslator.GetWeaveResults` (grow-and-retry, missing export → empty) →
+`LineProbeWeaveReporter` (dedup per probe id AND per configuration, `Forget` on retire/removal) → an ERROR
+status through the existing `StatusReporter`, driven by a `beforeReport` hook on its 60-second timer. The timer,
+not the config poll: `ConfigurationPoller` latches on an unchanged fingerprint, so in a service whose probe set
+has settled `OnConfigurationsChanged` may never be called again.
+
+**PENDING is not a failure, and that is half the design.** A probe on a method nobody has called has no verdict.
+Reporting it would turn every idle code path into a console full of errors, so the absence of a record is
+explicitly not an error, and PENDING is never cached as "already examined" — otherwise the real verdict, when it
+arrives, would be discarded as old news.
+
+**Evidence — `W1WeaveStatusE2E`, a real profiler, 12/12:**
+
+| Check | What it proves |
+|---|---|
+| valid offset → `WOVEN(1)`, and the probe really fires | no false alarms, and WOVEN is corroborated rather than trusted |
+| mid-instruction offset → `OFFSET_NOT_INSTR(8)`, never fires | the refusal is actually visible |
+| its valid sibling stays `WOVEN` | one refusal does not poison the method |
+| out-of-range local slot → `LOCAL_SLOT_RANGE(7)`, a DISTINCT code | the log is not collapsing every failure onto one reason |
+| no record before the method is first called | PENDING is the absence of a record |
+| capacity-1 read returns the total (≥3) | truncation is detectable |
+| `RemoveLineProbe` drops only that verdict | the log tracks live probes |
+| the method still returns 116 after two refusals and a removal | a refused probe never corrupts the body |
+
+**Native mutations — 3/3 red**, each on the specific check that covers it:
+
+| Mutation | Result |
+|---|---|
+| stop recording the bad-offset refusal | check 2 FAILS (`got {7101=>1}`) — plus checks 3.1 and 6, which depend on three verdicts existing |
+| `Snapshot` returns the written count instead of the total | check 6 FAILS (`returned 1 with 3+ verdicts held`) |
+| `RemoveLineProbe` no longer calls `Forget` | check 5 FAILS (`got {7101=>1, 7102=>8, 7103=>7}`) |
+
+**Managed mutations — 7/7 red:** caching PENDING as examined; dropping the per-configuration dedup; removing
+grow-and-retry; mapping an unknown outcome code to `Woven`; running the hook after the batch is built; and both
+directions of the manager wiring (Initialize not assigning the reporter, Cleanup not dropping it).
+
+**One vacuous check, found and fixed.** The manager wiring test first asserted `ReportLineProbeWeaveFailures()
+== 0`. In a test process there is no profiler, so a correctly wired reporter and a MISSING one both find zero
+verdicts — the test passed with the assignment in `Initialize` deleted. The method now returns `int?`: null means
+"no reporter to ask", 0 means "asked, nothing to report". Both mutations are red against the corrected version.
+
+**Regression:** every other local harness re-run on the new native binary — DeployedAppDemo 19/19,
+DEMO_LINE_ONLY 6/6, R9 22/22 (10.6 M verified calls under load), G1 10/10, N2 5/5, LineProbeGated 7/7,
+LineProbeE2E 3/3, AsyncLineProbe 4/4. Managed suite 441 passing / 1 pre-existing skip, Debug and Release.
+
+**Honest scope.** The ERROR path has NOT been observed end to end through the real agent, because with the
+AssemblyRef fix in place no native refusal is reachable through the product's own resolution — `PdbReader`
+refuses those locations first. The value here is the class of future/unknown refusals. The chain is covered in
+three overlapping pieces instead: the native verdicts by `W1WeaveStatusE2E` against a real profiler, the managed
+decision-to-wire path by a test using the real sink/registry/StatusReporter (asserting the ERROR body and that
+READY does not return), and the hook wiring by a manager test after a real `Initialize()`.
+
+**Known asymmetry, deliberate.** A local dropped by MANAGED resolution (not in scope) leaves the probe READY
+with the dropped names in the agent log only; a local refused by the NATIVE rewriter reports ERROR while its
+siblings keep capturing. The second is reported because that local can never be captured there and the status is
+the only channel that reaches the operator. Both are documented in
+`docs/dynamic-instrumentation.md`.
+
 ### DEMO_LINE_ONLY — the define-if-absent AssemblyRef branch, proven both ways
 
 `DEMO_LINE_ONLY=1 bash run-demo.sh` creates NO method-level configuration, which is what makes the

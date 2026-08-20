@@ -25,22 +25,6 @@ internal sealed class LineProbeTranslator : IDisposable
     /// <summary>Simple name of the assembly hosting the managed line-probe callback.</summary>
     internal const string CallbackAssembly = "AWS.Distro.OpenTelemetry.DynamicInstrumentation";
 
-    /// <summary>
-    /// Full display name of the callback assembly — what actually crosses the ABI.
-    /// </summary>
-    // A DISPLAY NAME, NOT THE SIMPLE NAME, because the native side may have to DEFINE the AssemblyRef rather
-    // than find one. A customer assembly has no compile-time reference to this one, so when a module carries
-    // only line-level probes there is no existing ref to reuse, and emitting one requires the version, culture
-    // and public key token. `AssemblyReference` on the native side parses exactly this format, so the whole
-    // identity fits in the string field the ABI already had — no struct change, and every harness that still
-    // passes a bare simple name keeps working.
-    //
-    // Read off the loaded assembly rather than hardcoded: this assembly is strong-named, and a hardcoded
-    // token would silently rot the moment the signing key or version changed. A ref carrying the WRONG token
-    // does not fail loudly — it binds to nothing, and the woven call resolves to no method at runtime.
-    internal static readonly string CallbackAssemblyFullName =
-        typeof(DiLineIntegration).Assembly.FullName ?? CallbackAssembly;
-
     /// <summary>Fully-qualified type hosting the managed line-probe callback.</summary>
     internal const string CallbackType =
         "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLevel.DiLineIntegration";
@@ -64,10 +48,42 @@ internal sealed class LineProbeTranslator : IDisposable
     // number to mirror here.
     internal const int MaxLocalsPerLine = 5;
 
+    /// <summary>
+    /// Initial size of the weave-result buffer, grown on demand.
+    /// </summary>
+    // Comfortably above any realistic live-probe count (each config contributes at most MaxLocalsPerLine),
+    // so the steady state is one P/Invoke per poll with no reallocation. The grow path below is what keeps
+    // this a performance choice rather than a correctness limit.
+    internal const int InitialWeaveResultCapacity = 64;
+
+    /// <summary>
+    /// Full display name of the callback assembly — what actually crosses the ABI.
+    /// </summary>
+    // A DISPLAY NAME, NOT THE SIMPLE NAME, because the native side may have to DEFINE the AssemblyRef rather
+    // than find one. A customer assembly has no compile-time reference to this one, so when a module carries
+    // only line-level probes there is no existing ref to reuse, and emitting one requires the version, culture
+    // and public key token. `AssemblyReference` on the native side parses exactly this format, so the whole
+    // identity fits in the string field the ABI already had — no struct change, and every harness that still
+    // passes a bare simple name keeps working.
+    //
+    // Read off the loaded assembly rather than hardcoded: this assembly is strong-named, and a hardcoded
+    // token would silently rot the moment the signing key or version changed. A ref carrying the WRONG token
+    // does not fail loudly — it binds to nothing, and the woven call resolves to no method at runtime.
+    //
+    // Declared BELOW the constants, not next to CallbackAssembly which it derives from, purely to satisfy
+    // SA1203 (constants before non-constant fields).
+    internal static readonly string CallbackAssemblyFullName =
+        typeof(DiLineIntegration).Assembly.FullName ?? CallbackAssembly;
+
     private readonly Action<string, NativeLineProbeDefinition[], int>? addLineProbesOverride;
     private readonly Action<int>? removeLineProbeOverride;
+    private readonly Func<NativeLineProbeWeaveResult[], int, int>? getWeaveResultsOverride;
     private readonly Func<InstrumentationConfiguration, Type?> resolveType;
     private readonly PdbReader pdbReader;
+
+    // Reused across polls, and only ever touched by GetWeaveResults. Not thread-safe on purpose — see the
+    // no-concurrent-callers note there.
+    private NativeLineProbeWeaveResult[] weaveResultBuffer = new NativeLineProbeWeaveResult[InitialWeaveResultCapacity];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LineProbeTranslator"/> class.
@@ -76,14 +92,21 @@ internal sealed class LineProbeTranslator : IDisposable
     /// <param name="removeLineProbeOverride">Test seam replacing the <c>RemoveLineProbe</c> P/Invoke.</param>
     /// <param name="typeResolver">Test seam replacing loaded-assembly type resolution.</param>
     /// <param name="pdbReader">Reader used to resolve line→offset; a fresh one is created if omitted.</param>
+    /// <param name="getWeaveResultsOverride">
+    /// Test seam replacing the <c>GetLineProbeWeaveResults</c> P/Invoke. Takes the buffer and its capacity,
+    /// and returns the TOTAL result count exactly as the native export does — including the case where that
+    /// total exceeds the capacity, so the grow-and-retry path is testable without a profiler.
+    /// </param>
     public LineProbeTranslator(
         Action<string, NativeLineProbeDefinition[], int>? addLineProbesOverride = null,
         Action<int>? removeLineProbeOverride = null,
         Func<InstrumentationConfiguration, Type?>? typeResolver = null,
-        PdbReader? pdbReader = null)
+        PdbReader? pdbReader = null,
+        Func<NativeLineProbeWeaveResult[], int, int>? getWeaveResultsOverride = null)
     {
         this.addLineProbesOverride = addLineProbesOverride;
         this.removeLineProbeOverride = removeLineProbeOverride;
+        this.getWeaveResultsOverride = getWeaveResultsOverride;
         this.resolveType = typeResolver ?? ReflectionResolveType;
         this.pdbReader = pdbReader ?? new PdbReader();
     }
@@ -419,6 +442,74 @@ internal sealed class LineProbeTranslator : IDisposable
         return types;
     }
 
+    /// <summary>
+    /// Reads back what the native rewriter actually did with every probe it has a verdict for.
+    /// </summary>
+    /// <returns>
+    /// One entry per probe the profiler holds a verdict for. Empty when the profiler has no verdicts yet, or
+    /// when it predates this export.
+    /// </returns>
+    // WHY THIS IS A POLL AND NOT A CALLBACK. The rewrite happens on a CLR ReJIT thread at an arbitrary moment
+    // — the first time the target method runs, which may be hours after the apply. Calling managed code from
+    // there would mean a native->managed transition inside the rewriter, on a thread the CLR owns mid-JIT.
+    // Polling moves all of that onto a thread we already own, at a cadence we choose, at the cost of latency
+    // that does not matter for a status report.
+    //
+    // NOT THREAD-SAFE: `weaveResultBuffer` is reused, so two concurrent callers would write the same array.
+    // The single caller is the status-reporting timer. Documented rather than locked, because adding a lock
+    // would imply concurrent use is supported when the reuse of the buffer is the point.
+    internal IReadOnlyList<(int ProbeId, LineProbeWeaveOutcome Outcome)> GetWeaveResults()
+    {
+        int total;
+        try
+        {
+            total = this.QueryWeaveResults();
+
+            // GROW AND RETRY ONCE. The native side returns the TOTAL it holds, not the number it wrote, so a
+            // total above capacity means the view was truncated. Truncation is not benign here: the entries
+            // are ordered by probe id, so a short buffer would permanently hide the failures of the
+            // most-recently-applied probes — precisely the ones an operator just created and is watching.
+            if (total > this.weaveResultBuffer.Length)
+            {
+                this.weaveResultBuffer = new NativeLineProbeWeaveResult[total];
+                total = this.QueryWeaveResults();
+            }
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+        {
+            // Stock upstream profiler, or no profiler at all. Nothing was woven either, so there is no verdict
+            // to miss. Deliberately silent: LineProbeTranslator.ApplyLineProbe already reports
+            // ProfilerMissingLineProbeSupport once per config, and this runs on a timer.
+            return Array.Empty<(int, LineProbeWeaveOutcome)>();
+        }
+
+        // Still short after the retry means the profiler recorded more verdicts between the two calls (a
+        // method got ReJIT-ed in between). Take what fits; the rest arrive on the next poll.
+        var count = Math.Min(total, this.weaveResultBuffer.Length);
+        if (count <= 0)
+        {
+            return Array.Empty<(int, LineProbeWeaveOutcome)>();
+        }
+
+        var results = new List<(int ProbeId, LineProbeWeaveOutcome Outcome)>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var entry = this.weaveResultBuffer[i];
+
+            // A value this assembly does not know maps to ExportFailed rather than being dropped or thrown on:
+            // a newer profiler could add a reason code, and "some failure we cannot name" is far closer to the
+            // truth than silently treating it as woven. Pending/Woven are inside the range, so a genuinely
+            // successful probe can never land here.
+            var outcome = Enum.IsDefined(typeof(LineProbeWeaveOutcome), entry.Outcome)
+                ? (LineProbeWeaveOutcome)entry.Outcome
+                : LineProbeWeaveOutcome.ExportFailed;
+
+            results.Add((entry.ProbeId, outcome));
+        }
+
+        return results;
+    }
+
     private static Type? ReflectionResolveType(InstrumentationConfiguration config)
     {
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -439,4 +530,9 @@ internal sealed class LineProbeTranslator : IDisposable
 
         return null;
     }
+
+    private int QueryWeaveResults() =>
+        this.getWeaveResultsOverride != null
+            ? this.getWeaveResultsOverride(this.weaveResultBuffer, this.weaveResultBuffer.Length)
+            : NativeMethods.GetLineProbeWeaveResults(this.weaveResultBuffer, this.weaveResultBuffer.Length);
 }

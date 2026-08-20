@@ -21,6 +21,63 @@ namespace trace
 {
 
 //
+// LineProbeWeaveLog — the per-probe record of what the rewriter actually did. See line_probe.h for why
+// this exists at all (AddLineProbes cannot report a weave outcome it has not happened yet).
+//
+
+namespace
+{
+// TOUCHED FROM TWO THREADS: a CLR ReJIT thread publishes through Record while whichever managed thread
+// drives the configuration poll reads through Snapshot and erases through Forget. std::map is not
+// thread-safe for concurrent insert+read, and an insert can rebalance the tree under an in-flight
+// iteration — so every entry point below locks. Same discipline, and the same reason, as
+// LineProbeRejitHandlerModuleMethod::m_requestsLock.
+std::mutex             g_weave_log_lock;
+std::map<INT32, INT32> g_weave_log; // probeId -> LineProbeWeaveOutcome
+} // namespace
+
+void LineProbeWeaveLog::Record(const std::vector<LineProbeWeaveResult>& results)
+{
+    std::scoped_lock<std::mutex> lock(g_weave_log_lock);
+    for (const auto& result : results)
+    {
+        g_weave_log[result.probeId] = result.outcome;
+    }
+}
+
+void LineProbeWeaveLog::Forget(INT32 probeId)
+{
+    std::scoped_lock<std::mutex> lock(g_weave_log_lock);
+    g_weave_log.erase(probeId);
+}
+
+INT32 LineProbeWeaveLog::Snapshot(LineProbeWeaveResult* buffer, INT32 capacity)
+{
+    std::scoped_lock<std::mutex> lock(g_weave_log_lock);
+
+    INT32 written = 0;
+    if (buffer != nullptr)
+    {
+        for (const auto& entry : g_weave_log)
+        {
+            if (written >= capacity)
+            {
+                break;
+            }
+
+            buffer[written].probeId = entry.first;
+            buffer[written].outcome = entry.second;
+            written++;
+        }
+    }
+
+    // The TOTAL, not `written`. A caller handed a short buffer must be able to tell it got a partial view;
+    // returning the written count would make truncation indistinguishable from completeness, and the managed
+    // side would silently stop reporting failures once the log outgrew its first guess.
+    return static_cast<INT32>(g_weave_log.size());
+}
+
+//
 // LineProbeRejitPreprocessor — reuses RejitPreprocessor<T> (enumeration, signature-count match,
 // ReJIT enqueue). We only supply the request-specific hooks.
 //
@@ -140,6 +197,16 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         Logger::Warn("LineProbeMethodRewriter::Rewrite: no LineProbeRequests.");
         return S_FALSE;
     }
+
+    // PER-PROBE WEAVE OUTCOMES, accumulated locally and published ONCE at the end rather than as each probe
+    // is decided. Two reasons it cannot be published incrementally:
+    //   * Export is all-or-nothing. A probe marked WOVEN mid-loop is only really woven if Export succeeds, so
+    //     publishing early would tell the operator a probe is live during the window before Export fails —
+    //     and, if Export never succeeds, forever.
+    //   * The managed reader would otherwise observe a half-finished pass and report an ERROR for a probe the
+    //     rewriter was still working through.
+    std::vector<LineProbeWeaveResult> outcomes;
+    outcomes.reserve(requests.size());
 
     // GAP-3 FIX (per-probe callback resolution). Callback + emission-mode resolution now happens
     // INSIDE the per-probe loop, so probes with DIFFERENT callbacks and DIFFERENT emission modes can
@@ -290,6 +357,15 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     if (FAILED(hr))
     {
         Logger::Warn("*** LineProbe_Rewrite(): ILRewriter.Import() failed for ", module_id, " ", function_token);
+
+        // EVERY probe on this method failed, not just one. Recorded rather than left PENDING because Import
+        // failing is permanent for this body — a caller that saw PENDING would wait for a verdict forever.
+        for (const auto& req : requests)
+        {
+            outcomes.push_back({req.probe_id, LINE_WEAVE_FAILED_IMPORT});
+        }
+
+        LineProbeWeaveLog::Record(outcomes);
         return S_FALSE;
     }
 
@@ -376,6 +452,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
             Logger::Warn("*** LineProbe_Rewrite(): could not DEFINE callback AssemblyRef for '",
                          request->callback_assembly, "' (hr=", HResultStr(hr), "). Skipping probeId=",
                          request->probe_id);
+            outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_CALLBACK_ASSEMBLY_REF});
             continue;
         }
 
@@ -393,6 +470,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     {
         Logger::Warn("*** LineProbe_Rewrite(): could not resolve callback TypeRef for ", request->callback_type,
                      ". Skipping probeId=", request->probe_id);
+        outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_CALLBACK_TYPE_REF});
         continue;
     }
 
@@ -432,6 +510,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     {
         Logger::Warn("*** LineProbe_Rewrite(): local slot ", request->box_value,
                      " is out of range for probeId=", request->probe_id, ". Skipping.");
+        outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_LOCAL_SLOT_RANGE});
         continue;
     }
 
@@ -462,6 +541,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
             // captures nothing.
             Logger::Warn("*** LineProbe_Rewrite(): cannot resolve box token for local type '",
                          request->local_type_name, "'. Skipping probeId=", request->probe_id);
+            outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_BOX_TYPE});
             continue;
         }
     }
@@ -470,6 +550,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         if (!resolveInt32Box())
         {
             Logger::Warn("*** LineProbe_Rewrite(): no box token available. Skipping probeId=", request->probe_id);
+            outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_BOX_TYPE});
             continue;
         }
 
@@ -503,6 +584,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     {
         Logger::Warn("*** LineProbe_Rewrite(): DefineMemberRef failed for ", request->callback_method,
                      ". Skipping probeId=", request->probe_id);
+        outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_CALLBACK_MEMBER_REF});
         continue;
     }
 
@@ -523,6 +605,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         {
             Logger::Warn("*** LineProbe_Rewrite(): DefineMemberRef failed for gate method ",
                          request->gate_method, ". Skipping probeId=", request->probe_id);
+            outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_GATE_MEMBER_REF});
             continue;
         }
     }
@@ -538,6 +621,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         // aborting the whole method. Others already emitted into this rewriter remain.
         Logger::Warn("*** LineProbe_Rewrite(): il_offset ", request->il_offset,
                      " is not an instruction boundary. Skipping this probe. HR=", HResultStr(hr));
+        outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_OFFSET_NOT_INSTR});
         continue;
     }
 
@@ -568,6 +652,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
 
     if (ehBoundary)
     {
+        outcomes.push_back({request->probe_id, LINE_WEAVE_FAILED_EH_BOUNDARY});
         continue; // skip this probe, keep the rest
     }
 
@@ -665,6 +750,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     }
 
     wovenCount++;
+    outcomes.push_back({request->probe_id, LINE_WEAVE_WOVEN});
     Logger::Info("*** LineProbe_Rewrite(): wove probeId=", request->probe_id, " at ilOffset=",
                  request->il_offset, " (", wovenCount, "/", requests.size(), ") in ", caller->type.name, ".",
                  caller->name, "()");
@@ -687,8 +773,25 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     {
         Logger::Warn("*** LineProbe_Rewrite(): ILRewriter.Export() failed for ModuleID=", module_id, " ",
                      function_token);
+
+        // NOTHING reached the customer's method: the rewritten body was never installed, so every probe this
+        // pass had marked WOVEN is in fact not woven. Downgrade only those — a probe that already failed for
+        // its own reason keeps that reason, which is the more useful one to show an operator.
+        for (auto& outcome : outcomes)
+        {
+            if (outcome.outcome == LINE_WEAVE_WOVEN)
+            {
+                outcome.outcome = LINE_WEAVE_FAILED_EXPORT;
+            }
+        }
+
+        LineProbeWeaveLog::Record(outcomes);
         return S_FALSE;
     }
+
+    // PUBLISHED ONLY HERE ON THE SUCCESS PATH — after Export has actually installed the body. Everything
+    // above this line is provisional.
+    LineProbeWeaveLog::Record(outcomes);
 
     Logger::Info("*** LineProbe_Rewrite() Finished: wove ", wovenCount, " of ", requests.size(),
                  " probe(s) into ", caller->type.name, ".", caller->name, "() in a single Import/Export.");

@@ -15,8 +15,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   redeploying. Requires the target assembly's portable or embedded PDB to be deployed alongside it, and
   a native profiler built from the vendored source (currently linux-x64 only; other runtime identifiers
   ship the upstream profiler, on which line-level probes report an error and function-level probes are
-  unaffected). See [docs/dynamic-instrumentation.md](docs/dynamic-instrumentation.md) for the supported
-  targets and limits.
+  unaffected). A probe reports READY once its location resolves and changes to ERROR if the profiler later
+  refuses that location, so a probe can move from READY to ERROR up to a minute after it was created. See
+  [docs/dynamic-instrumentation.md](docs/dynamic-instrumentation.md) for the supported targets and limits.
   ([#TBD](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/TBD))
 
 - Attribute presigned S3 URLs as `AWS::S3` dependencies in Application Signals, opt-in via

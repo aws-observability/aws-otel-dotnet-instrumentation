@@ -50,6 +50,78 @@ enum LineProbeEmissionMode : INT32
     LINE_EMIT_LOCAL_CAPTURE = 3,
 };
 
+// WHAT ACTUALLY HAPPENED TO ONE PROBE AT REJIT TIME.
+//
+// AddLineProbes returns void and returns EARLY: it enqueues a ReJIT request and waits at most 100ms for the
+// REQUEST to be accepted — not for the rewrite. The rewrite runs later, on a CLR ReJIT thread, when the target
+// method is next invoked. So the managed side cannot learn the weave outcome from the call that asked for it,
+// and until this existed it inferred success from its OWN resolution: a probe whose rewrite was skipped here
+// still reported READY to the operator and could never fire. That was not hypothetical — the callback
+// AssemblyRef gap silently skipped eleven probes in one measured run while every one reported READY.
+//
+// Hence a process-wide record the managed side polls. Only two outcomes are terminal-good: WOVEN, and PENDING
+// (no record yet, which is the normal state for a probe on a method nobody has called). Everything else names
+// the reason the rewriter declined, and each corresponds to exactly one `continue`/early-return in
+// LineProbeMethodRewriter::Rewrite.
+enum LineProbeWeaveOutcome : INT32
+{
+    // NOT STORED — the absence of a record. Named so the managed enum can round-trip a defaulted value, and so
+    // no reason code is ever 0 (a zeroed buffer element must not read as a real failure).
+    LINE_WEAVE_PENDING = 0,
+    LINE_WEAVE_WOVEN   = 1,
+
+    // Callback resolution: the target module could not be given a usable reference to the DI callback.
+    LINE_WEAVE_FAILED_CALLBACK_ASSEMBLY_REF = 2,
+    LINE_WEAVE_FAILED_CALLBACK_TYPE_REF     = 3,
+    LINE_WEAVE_FAILED_CALLBACK_MEMBER_REF   = 4,
+    LINE_WEAVE_FAILED_GATE_MEMBER_REF       = 5,
+
+    // The captured local's type cannot be named through the corlib AssemblyRef, so no `box` token exists.
+    LINE_WEAVE_FAILED_BOX_TYPE = 6,
+
+    // The requested local slot is outside the `ldloc` operand range (guards the exported ABI).
+    LINE_WEAVE_FAILED_LOCAL_SLOT_RANGE = 7,
+
+    // The requested IL offset cannot host an injection: not an instruction boundary, or the structural entry
+    // of a try/handler/filter. Both are properties of the LINE, not of the process.
+    LINE_WEAVE_FAILED_OFFSET_NOT_INSTR = 8,
+    LINE_WEAVE_FAILED_EH_BOUNDARY      = 9,
+
+    // Whole-method failures. Every probe on the method shares the verdict, because the body is all-or-nothing:
+    // one Import and one Export per ReJIT.
+    LINE_WEAVE_FAILED_IMPORT = 10,
+    LINE_WEAVE_FAILED_EXPORT = 11,
+};
+
+// One (probeId, outcome) pair, marshaled to the managed side. Flat and blittable ON PURPOSE: it crosses the
+// P/Invoke boundary as a raw array, so it must stay POD with no padding surprises (two INT32s = 8 bytes).
+typedef struct _LineProbeWeaveResult
+{
+    INT32 probeId;
+    INT32 outcome; // LineProbeWeaveOutcome
+} LineProbeWeaveResult;
+
+// The process-wide weave record. Static rather than a member of CorProfiler because the rewriter is a
+// Singleton reached without a profiler pointer, and because the managed query must work whether or not a
+// rewrite is in flight.
+class LineProbeWeaveLog
+{
+public:
+    // Publishes the outcomes for ONE method's rewrite, replacing any previous verdict for those probe ids.
+    // REPLACING IS CORRECT: a method is re-ReJIT-ed after a sibling probe is removed, and the fresh pass is
+    // the authoritative account of what its body now contains.
+    static void Record(const std::vector<LineProbeWeaveResult>& results);
+
+    // Drops one probe's record, so the log tracks live probes rather than growing for the process lifetime.
+    // Called from RemoveLineProbe — the same place the request itself is dropped.
+    static void Forget(INT32 probeId);
+
+    // Copies up to `capacity` records into `buffer` and returns the TOTAL number held, which may exceed
+    // `capacity`. Returning the total rather than the written count is what lets the caller size a second
+    // call correctly instead of silently reading a truncated view as complete.
+    static INT32 Snapshot(LineProbeWeaveResult* buffer, INT32 capacity);
+};
+
 // Flat C ABI marshaled from managed NativeLineProbeDefinition. Names-based (Q3): the target is
 // located by assembly/type/method(+signature-count), the callback MemberRef is built on the native
 // side from callbackAssembly/type/method. Plus the interior ilOffset and an opaque probeId.

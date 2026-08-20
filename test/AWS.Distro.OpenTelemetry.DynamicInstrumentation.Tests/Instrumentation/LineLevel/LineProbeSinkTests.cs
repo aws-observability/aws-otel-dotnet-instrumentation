@@ -321,6 +321,27 @@ public class LineProbeSinkTests : IDisposable
             LocalSlot: localName == null ? -1 : 0,
             LocalName: localName);
 
+    [Fact]
+    public void TryGetInstrumentationKey_ResolvesARegisteredProbeAndRefusesEverythingElse()
+    {
+        // The reverse direction of the hit path, and the only way a weave verdict read back from the native
+        // profiler — which carries nothing but the opaque probe id — can be attributed to a configuration.
+        var (sink, config) = CreateSinkWithProbe(localName: "total", probeId: out var probeId);
+
+        sink.TryGetInstrumentationKey(probeId, out var key).Should().BeTrue();
+        key.Should().Be(config.InstrumentationKey);
+
+        // An id from another lifetime, or one whose config was removed. FALSE, not a stale key: attributing a
+        // dead probe to whatever configuration next occupied that key would report a failure against the wrong
+        // probe entirely.
+        sink.TryGetInstrumentationKey(probeId + 1000, out var missing).Should().BeFalse();
+        missing.Should().BeEmpty();
+
+        sink.Unregister(config.InstrumentationKey, out _).Should().BeTrue();
+        sink.TryGetInstrumentationKey(probeId, out _).Should().BeFalse(
+            "removal must make the id unattributable, exactly as it makes hits undeliverable");
+    }
+
     private static (LineProbeSink Sink, InstrumentationConfiguration Config) CreateSinkWithProbe(
         string? localName, out int probeId)
     {

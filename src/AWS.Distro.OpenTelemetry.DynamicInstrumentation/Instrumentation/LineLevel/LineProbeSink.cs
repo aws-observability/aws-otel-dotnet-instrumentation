@@ -116,6 +116,28 @@ internal sealed class LineProbeSink : ILineProbeSink
     }
 
     /// <summary>
+    /// Resolves a probe id back to the configuration it was applied for.
+    /// </summary>
+    /// <param name="probeId">The id baked into the injected IL.</param>
+    /// <param name="instrumentationKey">The owning configuration's key, when the probe is registered.</param>
+    /// <returns>True when the probe id is registered.</returns>
+    // Exists so a weave verdict read back from the native profiler — which knows nothing but the opaque id —
+    // can be attributed to a configuration and reported. Returning false is the expected answer for a probe
+    // whose config has since been removed, NOT an error: the native log is forgotten on removal, but a verdict
+    // can still be in flight in a poll that started before it.
+    internal bool TryGetInstrumentationKey(int probeId, out string instrumentationKey)
+    {
+        if (this.probes.TryGetValue(probeId, out var probe))
+        {
+            instrumentationKey = probe.InstrumentationKey;
+            return true;
+        }
+
+        instrumentationKey = string.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// Forgets every probe applied for a configuration so their still-woven IL becomes a no-op.
     /// </summary>
     /// <param name="instrumentationKey">The configuration key being removed.</param>

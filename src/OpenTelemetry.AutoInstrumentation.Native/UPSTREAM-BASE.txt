@@ -31,20 +31,24 @@ answer to "what did upstream change under me."
 
 THE LOCAL DELTA (line-level line probes)
 ----------------------------------------
-MEASURED 2026-08-20 against b61301e, not estimated. Nine modified files (+275, -1) and two
-new source files (872 lines):
+RE-MEASURED 2026-08-20 against b61301e with the command below, not estimated and not adjusted by
+hand. Nine modified files (+289, -1) and two new source files (1104 lines):
 
-  NEW    line_probe.h                                  231 lines
-  NEW    line_probe.cpp                                641 lines
-  MOD    cor_profiler.cpp                             +107
+  NEW    line_probe.h                                  303 lines
+  NEW    line_probe.cpp                                801 lines
+  MOD    cor_profiler.cpp                             +112
   MOD    rejit_handler.cpp                             +84
   MOD    rejit_preprocessor.cpp                        +34 -1
+  MOD    interop.cpp                                  +18    (AddLineProbes / RemoveLineProbe /
+                                                              GetLineProbeWeaveResults exports)
   MOD    CMakeLists.txt                               +16    (source list + pthread, see below)
   MOD    rejit_handler.h                              +11
-  MOD    interop.cpp                                  +10    (AddLineProbes/RemoveLineProbe exports)
   MOD    cor_profiler.h                                +9
-  MOD    OpenTelemetry.AutoInstrumentation.Native.def   +2    (exported symbols)
+  MOD    OpenTelemetry.AutoInstrumentation.Native.def   +3    (exported symbols)
   MOD    OpenTelemetry.AutoInstrumentation.Native.vcxproj +2  (Windows source list)
+
+File counts at the same measurement: upstream 544, ours 548 (the four extra are line_probe.{h,cpp}
+plus this file and IMPLEMENTATION-STATUS.md; `build/` is gitignored and excluded).
 
 Reproduce (this is how the numbers above were obtained):
 
@@ -56,8 +60,10 @@ Reproduce (this is how the numbers above were obtained):
   git checkout FETCH_HEAD
   diff -ru /tmp/up/src/OpenTelemetry.AutoInstrumentation.Native <this directory>
 
-The figures previously recorded here (+297/-1, new files 193/464) were taken at vendoring time
-on 2026-08-03 and had drifted in BOTH directions: the new files grew as non-int local capture,
+The figures before this measurement (+275/-1, new files 231/641) were themselves measured, on
+2026-08-20, and went stale within the day when the per-probe weave log landed (line_probe.{h,cpp},
+cor_profiler.cpp, interop.cpp, the .def). The ones before THOSE (+297/-1, new files 193/464) were
+taken at vendoring time on 2026-08-03 and had drifted in BOTH directions: the new files grew as non-int local capture,
 async hoisted-field reads and multi-local capture landed, while the modified-file total came
 DOWN as review moved logic out of upstream's files into line_probe.cpp. Re-measure with the
 command above rather than adjusting by hand — a stale number here is worse than no number,

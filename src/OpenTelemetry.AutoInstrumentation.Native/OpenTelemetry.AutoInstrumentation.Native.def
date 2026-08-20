@@ -9,6 +9,7 @@ EXPORTS
     AddDerivedInstrumentations
     AddLineProbes
     RemoveLineProbe
+    GetLineProbeWeaveResults
     SetSqlClientNetFxILRewriteEnabled
     InitializeTraceMethods
     ConfigureContinuousProfiler

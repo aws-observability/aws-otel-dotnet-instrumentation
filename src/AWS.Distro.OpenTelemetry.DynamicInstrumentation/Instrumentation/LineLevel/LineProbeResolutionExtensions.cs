@@ -61,4 +61,35 @@ internal static class LineProbeResolutionExtensions
 
         _ => "RUNTIME_ERROR",
     };
+
+    /// <summary>
+    /// True when a weave outcome means the probe is NOT live and the operator should be told.
+    /// </summary>
+    /// <param name="outcome">The outcome read back from the native profiler.</param>
+    /// <returns>True for a real failure; false for Woven and Pending.</returns>
+    // PENDING IS NOT A FAILURE and this is the only place that says so. A probe on a method nobody has called
+    // yet has no verdict, which is the normal state for most probes most of the time — reporting it would turn
+    // every idle code path into an error in the operator's console.
+    public static bool IsWeaveFailure(this LineProbeWeaveOutcome outcome) =>
+        outcome != LineProbeWeaveOutcome.Woven && outcome != LineProbeWeaveOutcome.Pending;
+
+    /// <summary>
+    /// Maps a native weave failure onto a backend InstrumentationErrorCause.
+    /// </summary>
+    /// <param name="outcome">The outcome read back from the native profiler.</param>
+    /// <returns>The error cause; RUNTIME_ERROR for anything not attributable to the requested line.</returns>
+    // Same fixed backend enum, and the same deliberately lossy collapse, as MapErrorCause above. The split
+    // that matters to an operator is "your LINE cannot be probed — move it" versus "something else went
+    // wrong", because only the first one has an action attached.
+    public static string MapErrorCause(this LineProbeWeaveOutcome outcome) => outcome switch
+    {
+        // Properties of the requested line: the offset is not an instruction start, or it is the structural
+        // entry of a try/handler/filter. The fix is to move the probe, which is what LINE_NOT_EXECUTABLE says.
+        LineProbeWeaveOutcome.OffsetNotInstructionBoundary => "LINE_NOT_EXECUTABLE",
+        LineProbeWeaveOutcome.EhClauseBoundary => "LINE_NOT_EXECUTABLE",
+
+        // Everything else — callback metadata, box tokens, slot range, import/export — is an agent-side or
+        // environment condition the operator cannot act on by editing the probe.
+        _ => "RUNTIME_ERROR",
+    };
 }

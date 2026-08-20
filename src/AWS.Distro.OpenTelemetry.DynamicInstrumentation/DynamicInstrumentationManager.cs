@@ -54,6 +54,12 @@ public sealed class DynamicInstrumentationManager : IDisposable
     private LineProbeTranslator? lineProbeTranslator;
     private LineProbeSink? lineProbeSink;
 
+    // Corrects an optimistic READY. A line probe reports READY on a successful managed resolution, but the
+    // native rewriter has not run yet at that point — it runs on a ReJIT thread when the target method is next
+    // invoked — so a probe it later declines would stay READY forever. This polls the rewriter's verdicts and
+    // reports an ERROR for anything it refused.
+    private LineProbeWeaveReporter? lineProbeWeaveReporter;
+
     // Output subsystems: drain the capture queue to OTLP, and report per-config status to the backend.
     private DISnapshotOtlpEmitter? snapshotEmitter;
     private DISnapshotCollector? snapshotCollector;
@@ -128,8 +134,26 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 this.snapshotCollector = new DISnapshotCollector(this.snapshotEmitter, this.cts.Token);
                 this.snapshotCollector.Start();
 
-                this.statusReporter = new StatusReporter(this.client, this.registry, this.cts.Token);
+                // The hook reads the FIELD rather than closing over a local, because the reporter it invokes
+                // does not exist yet — it needs this StatusReporter to report through. Reading the field at
+                // call time also makes the hook a no-op after Cleanup nulls it, which is what stops a
+                // still-in-flight timer callback from touching a torn-down translator.
+                this.statusReporter = new StatusReporter(
+                    this.client,
+                    this.registry,
+                    this.cts.Token,
+                    beforeReport: () => this.ReportLineProbeWeaveFailures());
                 this.statusReporter.Start();
+
+                var weaveTranslator = this.lineProbeTranslator;
+                var weaveSink = this.lineProbeSink;
+                var weaveRegistry = this.registry;
+                var weaveStatusReporter = this.statusReporter;
+                this.lineProbeWeaveReporter = new LineProbeWeaveReporter(
+                    () => weaveTranslator.GetWeaveResults(),
+                    probeId => weaveSink.TryGetInstrumentationKey(probeId, out var key) ? key : null,
+                    key => weaveRegistry.Get(key)?.Config,
+                    (config, cause) => weaveStatusReporter.ReportError(config, cause));
 
                 // Poller started last so its OnConfigurationsChanged dependencies are all live.
                 this.poller = new ConfigurationPoller(
@@ -190,6 +214,30 @@ public sealed class DynamicInstrumentationManager : IDisposable
             return this.OnConfigurationsChangedLocked(configs);
         }
     }
+
+    /// <summary>
+    /// Reports an ERROR for any line probe the native rewriter refused since the last check.
+    /// </summary>
+    /// <returns>
+    /// The number of configurations reported, or null when there is no reporter (before Initialize or after
+    /// Cleanup).
+    /// </returns>
+    // A NAMED METHOD rather than a lambda in the StatusReporter construction, so a test can drive the real
+    // wiring — the real translator, sink, registry and status reporter that Initialize built — instead of only
+    // the LineProbeWeaveReporter in isolation. The production caller is the status timer's beforeReport hook,
+    // which fires every 60s; that period is long enough that no E2E run reaches it, which is exactly why the
+    // wiring needs a test of its own.
+    //
+    // NULLABLE, NOT `?? 0`, and that distinction is the whole point of the return value. In a process with no
+    // profiler — every unit test — a correctly wired reporter and a MISSING one both find zero verdicts, so a
+    // plain int made the wiring test vacuous: it passed with the assignment in Initialize deleted (verified by
+    // mutation). Null means "no reporter to ask", 0 means "asked, nothing to report", and only the first is a
+    // wiring defect.
+    //
+    // Field-read, so it is a no-op after Cleanup. No lock: the fields it reads are reference assignments, and
+    // taking configChangeLock here would let a wedged poll thread stall the status timer — whose callback
+    // Dispose waits on.
+    internal int? ReportLineProbeWeaveFailures() => this.lineProbeWeaveReporter?.Report();
 
     /// <summary>
     /// A config is supported when it is line-level, or method-level and not an unsupported target
@@ -259,6 +307,10 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 {
                     this.lineProbeTranslator?.RemoveLineProbe(removedProbeId);
                 }
+
+                // Forget the weave verdicts too, or re-adding this probe after fixing whatever the rewriter
+                // objected to would be suppressed as already-reported and never recover to READY.
+                this.lineProbeWeaveReporter?.Forget(removedConfig.LocationHash, removedProbeIds);
             }
 
             // Clear the status-dedup state for this config so a later re-add reports READY again (matches
@@ -400,6 +452,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
             {
                 this.lineProbeTranslator?.RemoveLineProbe(retiredProbeId);
             }
+
+            this.lineProbeWeaveReporter?.Forget(appliedHash, retiredProbeIds);
         }
 
         // Forget the OLD identity's status state so the edited configuration is judged on its own: it has to
@@ -513,6 +567,13 @@ public sealed class DynamicInstrumentationManager : IDisposable
         // configChangeLock guards against interleaving with an in-flight callback (order: initLock -> configChangeLock).
         this.registry = null;
         this.profilerTranslator = null;
+
+        // BEFORE the translator is disposed. The status timer's beforeReport hook reads this field, and a
+        // reporter left in place would call GetWeaveResults on a translator whose PdbReader is already gone.
+        // StatusReporter.Dispose (above) has already waited out any in-flight callback, so nulling here cannot
+        // race one — but the order still has to be right for the failed-Initialize path, which reaches Cleanup
+        // with the timer never having started.
+        this.lineProbeWeaveReporter = null;
 
         // Dispose, not just null: the translator owns a PdbReader holding an open PE + .pdb FileStream per
         // resolved assembly. Nulling the field alone leaked them on every Initialize cycle.
