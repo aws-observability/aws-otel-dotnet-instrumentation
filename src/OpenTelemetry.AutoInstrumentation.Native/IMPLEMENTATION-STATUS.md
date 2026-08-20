@@ -189,7 +189,7 @@ covered by 116 tests in the mirrored test directory.
 | 8 | Async / iterator targets | DONE | Resolution follows `StateMachineAttribute` into `<Foo>d__N.MoveNext`, where the user's sequence points actually live; NO ABI change and NO wire-format change |
 | 9 | Manager wiring and status taxonomy | DONE | `ApplyLineProbe` branch, retryable vs permanent, `RetireAppliedConfiguration` on in-place edits |
 | 10 | Removal under load | DONE | Native `RemoveLineProbe` is best-effort (IL cannot be un-woven); dropping the sink registration is what guarantees no further capture |
-| 11 | Native request list thread-safety | CODE DONE, NOT RUNTIME-VERIFIED | `std::mutex` in `line_probe.h`; `GetLineProbeRequests()` returns BY VALUE; `RemoveLineProbeRequest` returns a removed-count. **Never exercised under concurrency at runtime** — see "Known-unverified" #5 |
+| 11 | Native request list thread-safety | DONE | `std::mutex` in `line_probe.h`; `GetLineProbeRequests()` returns BY VALUE; `RemoveLineProbeRequest` returns a removed-count. Exercised 2026-08-20 by `R9RemovalUnderLoadE2E` (22/22) — removal from the config thread while user threads are mid-call, with an inverted negative control proving the silencing is causally real |
 
 ### Two silent-wrong-value bugs this engine had, both found by measurement
 
@@ -238,9 +238,55 @@ real ARN for `Language: "Dotnet"` WITH a `LineNumber`, round-trips it through `l
 preserved, and accepts a READY status report for it. So line-level .NET can be tested against the real
 control plane today, without waiting on the enum rollout.
 
-**ALL of the above ran against a native profiler built on or before 2026-08-11.** The thread-safety fix
-(W4 #11) landed 2026-08-18 and the shipped distribution still carried the 2026-08-11 binary until
-2026-08-20, so none of these results covers the current native code. Re-running them is the next task.
+All of the above ran against a native profiler built on or before 2026-08-11, so none of it covered the
+thread-safety fix from 2026-08-18. **RE-VERIFIED 2026-08-20** against the current binary
+(`sha256 7896eaaf…`, byte-identical to `OpenTelemetryDistribution/osx-arm64/*.dylib`, carrying the
+post-fix out-of-line `RequestCount` symbol):
+
+| Harness | Result | What it covers |
+|---|---|---|
+| `DeployedAppDemo` (real agent, full lifecycle) | **19/19** | env-enable → poll → ReJIT weave → capture → OTLP export → status report; sync int, String/DateTime/Double, multi-local trio, async hoisted incl. non-int |
+| `R9RemovalUnderLoadE2E` | **22/22** | 3 then 4 co-located probes, incremental add to an already-woven method, removal while user threads are in-flight, exact-count drop/double-fire window, full teardown to a pristine body, mixed emission modes |
+| `R9` NEG-1 (`R9_NO_REMOVE=1`) | PASS | INVERTED control: with removal skipped the removed probe STILL fires, so the positive run's silencing is causally real rather than vacuous |
+| `R9` NEG-2 (`R9_BAD_OFFSETS=1`) | 3/3 | mid-instruction (operand-byte) offsets are refused, nothing fires, body intact — and it self-checks that the offsets really were mid-instruction |
+| `G1BranchEhE2E` | **10/10** | interior injection into real try/catch and branches — the highest remaining risk carried since the Phase-2 PoC |
+| `N2MultiProbeE2E` | 5/5 | N probes at N offsets in one method |
+| `AsyncLineProbeE2E` | 4/4 | hoisted local read across an `await`, from inside `MoveNext` |
+| `LineProbeE2E` | 3/3 | the original single-probe weave-and-fire |
+| `LineProbeGatedE2E` | 7/7 | `ShouldCapture` gate resolution and per-probe gating |
+| `LineProbeTimingE2E` | no assertions | timing/stop-the-world measurement only. Its embedded July "N2" block is STALE (hardcoded offsets; reported `distinct fired = 0` and then concluded "single-probe-per-method"). Nothing fired, so that verdict is meaningless and is contradicted by `N2MultiProbeE2E` and `R9` above. Do not cite it |
+
+That is 73 passing checks plus the two negative controls, on the current native code.
+
+### Four harness defects found while re-verifying — all staleness, none a product defect
+
+Recorded because each one initially LOOKED like a product regression, and three of the four were silent.
+
+1. **All seven harnesses pointed at a deleted path.** They computed `REPO_ROOT` from their old in-repo home
+   (`<repo>/poc/<Harness>/`) and loaded `poc/fork/otel-dotnet-fork/.../*.dylib`, which no longer exists now the
+   profiler is vendored in-tree. They fail loudly, so this one was cheap. Now they honour `DI_REPO_ROOT` /
+   `DI_PROFILER_OVERRIDE` and default to the in-tree build.
+2. **Stale 14-field interop struct → SIGBUS.** Each harness hand-rolls its own `NativeLineProbeDefinition`, and
+   they predate the `localTypeName`/`localIsValueType` fields (88 → 104 bytes). The native side read
+   `localTypeName` as a pointer past the end of the struct: `EXC_BAD_ACCESS / SIGBUS`,
+   `KERN_PROTECTION_FAILURE at 0x0000000a00000002`, inside `CorProfiler::AddLineProbes`.
+3. **`LocalIsValueType = 0` on an int local → `InvalidProgramException`.** Zero suppresses the `box` entirely,
+   but the callback is `void CaptureLocal(int, object)`, so handing it a raw int32 is invalid IL and the CLR
+   rejects the woven method. Must be 1 for a value-type local.
+4. **`AsyncLineProbeE2E` hardcoded the wrong hoisted-field token.** Its default `0x04000013` is
+   `<>t__builder` (an `AsyncTaskMethodBuilder<int>`), not `y`; the probe read the builder's first four bytes and
+   boxed them as Int32, giving `930373888` instead of `42`. Resolved by reflecting the built assembly:
+   `<y>5__1` is `0x04000015`. **This is a property of the spike, not the product** — the product resolves
+   hoisted fields by NAME via `PdbReader` plus the `StateMachineHoistedLocalScopes` CDI, which is precisely
+   why it survives a recompile that renumbers metadata. Default now pinned, with that reasoning in a comment.
+
+The general lesson, and the reason these harnesses are a liability as well as an asset: **a hand-rolled copy of
+a marshaled struct is a second source of truth that no compiler checks.** Defects 2–4 all produced either a
+crash or a plausible wrong number with no error, and defect 4 is the exact failure mode the product's
+fail-closed token resolution exists to prevent.
+
+**A pipeline hides the exit code.** `bash run.sh | tail -45` reports `tail`'s status, so a SIGBUS crash came
+back as exit 0 with output that merely looked truncated. Always capture to a file and read `$?` directly.
 
 ### Harness lessons that cost a debug cycle each
 
@@ -281,9 +327,9 @@ control plane today, without waiting on the enum rollout.
    two tests hardcoding Debug-only IL offsets, so Release must be run separately.
 4. **arm64 old-glibc container does not exist.** `ubuntu1604-native.dockerfile` installs an x86_64 CMake and
    cannot build arm64 as written. Upstream has no equivalent either, which is why their arm64 floor is 2.35.
-5. **The native request-list mutex has never run under concurrency.** W4 #11 is code-complete but every green
-   E2E in W6 predates it. `RemoveLineProbe` on a live, firing probe is the case it guards, and the harness for
-   it exists (`R9RemovalUnderLoadE2E`) but has not been re-run against the current binary.
+5. **CLOSED 2026-08-20.** The mutex now has runtime coverage: `R9RemovalUnderLoadE2E` 22/22 against the
+   current binary, including removal under load and a quiescent exact-count window that would catch a dropped
+   or double-fired probe. Note this is macOS-arm64 only; no other RID has run it.
 6. **Line-level has no contract test in CI.** The function-level suite (`test/contract-tests/tests/test/amazon/di/`)
    lives on the contract-tests branch and covers function-level only. Line-level is proven by an out-of-repo
    harness against real beta, which needs AWS credentials and therefore cannot run in CI.
