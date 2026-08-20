@@ -34,6 +34,16 @@ if [ $? = 1 ]; then
   exit 1
 fi
 
+# Create mock-di-api image — stands in for the local CloudWatch Agent that serves Dynamic Instrumentation
+# probe configurations and receives status reports. Built by name rather than by the applications/* loop
+# below, because it is a test double like mock-collector, not an instrumented application.
+cd ../mock-di-api
+docker build . -t aws-application-signals-mock-di-api
+if [ $? = 1 ]; then
+  echo "Docker build for mock DI api failed"
+  exit 1
+fi
+
 # Create application images
 cd ../../..
 for dir in contract-tests/images/applications/*
