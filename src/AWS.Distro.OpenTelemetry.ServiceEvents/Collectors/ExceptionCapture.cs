@@ -33,8 +33,9 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// <para>
 /// The captured text is <b>not</b> redacted or length-capped, matching Java and Python, which store
 /// the full message and formatted trace. Unbounded content is a deliberate parity choice rather than
-/// an oversight, and the payload-capture redaction list is a separate, still-open deliverable
-/// (design doc M4) that has to be settled before this data ships.
+/// an oversight. A redaction policy for this text is a separate, still-open deliverable; the length
+/// bound that <b>is</b> applied lives at <c>IncidentSnapshotCollector.BuildExceptionInfo</c>, the
+/// single point both exception sources converge on.
 /// </para>
 /// </remarks>
 internal static class ExceptionCapture

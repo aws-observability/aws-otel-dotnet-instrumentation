@@ -150,11 +150,11 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             return;
         }
 
-        // M2: emit DeploymentEvent at process start and schedule the 24h re-emission timer.
-        // This is the first signal that flows end-to-end.
+        // DeploymentEvent: emit at process start and schedule the 24h re-emission timer.
         this.deploymentEventEmitter = DeploymentEventEmitter.StartAndEmit(this.emitter!, this.config);
 
-        // M3: start the endpoint metric collector. Fed by EndpointActivityProcessor,
+        // EndpointSummary / EndpointErrorMetrics: start the endpoint metric collector. Fed by
+        // EndpointActivityProcessor,
         // which is registered on the customer's TracerProvider via the plugin's
         // AfterConfigureTracerProvider hook (see RegisterTracerProcessors).
         // EndpointSummary is suppressed under Application Signals (it carries equivalent
@@ -168,7 +168,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             suppressEndpointSummary: this.config.ApplicationSignalsEnabled);
         this.endpointCollector.Start();
 
-        // M5: create the FunctionCall sampler when function instrumentation is enabled
+        // FunctionCall: create the sampler when function instrumentation is enabled
         // AND an allowlist is set (the spec gate — empty allowlist instruments nothing).
         // The FunctionCallProcessor is registered on the TracerProvider in
         // RegisterTracerProcessors; the sampler is shared with the incident collector so
@@ -178,7 +178,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             this.functionCallSampler = new FunctionCallSampler(this.config);
         }
 
-        // M4: start the incident snapshot collector and register it for dynamic (WATCHER)
+        // IncidentSnapshot: start the incident snapshot collector and register it for dynamic (WATCHER)
         // config updates. It's fed by the EndpointActivityProcessor's incident trigger
         // seam (see RegisterTracerProcessors).
         this.incidentSnapshotCollector = new IncidentSnapshotCollector(
@@ -223,7 +223,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
                 this.incidentSnapshotCollector));
         }
 
-        // M5: FunctionCall. Present only when function instrumentation is enabled with a
+        // FunctionCall. Present only when function instrumentation is enabled with a
         // non-empty allowlist (the sampler is created under that gate in Initialize).
         if (this.functionCallSampler is not null)
         {

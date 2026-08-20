@@ -19,7 +19,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// <remarks>
 /// <para>
 /// <see cref="ActivityKind.Server" /> spans are skipped: the root server span is the
-/// endpoint itself, already captured by EndpointSummary/Metrics (M3) — recording it here
+/// endpoint itself, already captured by the EndpointSummary and EndpointErrorMetrics
+/// signals — recording it here
 /// would double-count. FunctionCall therefore covers downstream calls (HttpClient, AWS
 /// SDK, internal spans) made while handling a request.
 /// </para>
@@ -64,7 +65,8 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
     {
         try
         {
-            // Skip the endpoint's own server span (already covered by M3) — decision #6.
+            // Skip the endpoint's own server span — the endpoint signals already cover it, and
+            // recording it here would double-count the request as one of its own function calls.
             if (activity.Kind == ActivityKind.Server)
             {
                 return;

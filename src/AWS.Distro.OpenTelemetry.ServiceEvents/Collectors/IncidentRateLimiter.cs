@@ -132,10 +132,17 @@ internal sealed class IncidentRateLimiter
     /// </summary>
     /// <remarks>
     /// Callers check this before <see cref="CheckRateLimit" /> so that duplicates do not consume
-    /// global slots. The cost of that order is the mirror image: an occurrence counted here still
-    /// counts if the global cap then rejects the incident, so a burst that exhausts the global cap
-    /// also spends per-error budget on snapshots that were never emitted. Both counters reset on the
-    /// same window boundary, which bounds the effect to one minute. Matches Java's ordering.
+    /// global slots. This matches the Python and JS distros, which both order the gates this way and
+    /// record why: running the rate limit first caused dedup-blocked requests to burn global slots
+    /// without producing a snapshot. It is deliberately <b>not</b> Java's order — Java checks the
+    /// global rate limit first and dedups second.
+    /// <para>
+    /// The cost of this order is the mirror image: an occurrence counted here still counts if the
+    /// global cap then rejects the incident, so a burst that exhausts the global cap also spends
+    /// per-error budget on snapshots that were never emitted. Python pays the same cost for the same
+    /// reason — its dedup check records the occurrence before the rate slot is reserved. Both
+    /// counters here reset on the same window boundary, which bounds the effect to one minute.
+    /// </para>
     /// </remarks>
     /// <param name="errorHash">Hash from <see cref="GenerateErrorHash" />.</param>
     /// <returns><c>true</c> when this error is still under its per-minute ceiling.</returns>
