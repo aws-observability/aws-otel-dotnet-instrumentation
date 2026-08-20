@@ -44,8 +44,28 @@ internal static class HttpOperationResolver
             return null;
         }
 
-        return $"{method.ToUpperInvariant()} {ResolveRoute(serverSpan)}";
+        return ResolveOperation(method, ResolveRoute(serverSpan));
     }
+
+    /// <summary>
+    /// Compose the <c>"METHOD /route"</c> operation key from an already-resolved method and route.
+    /// </summary>
+    /// <remarks>
+    /// Every signal keyed on the operation composes it here, so the key is identical by construction
+    /// rather than by coincidence. The endpoint and incident paths receive the method and route as
+    /// values (they run off <c>EndpointActivityProcessor</c>'s already-extracted tags, not the
+    /// <see cref="Activity" />), which is why this overload exists alongside the span one.
+    /// <para>
+    /// Uppercasing is a no-op on any conforming input and is kept only so the composition is
+    /// single-sourced: the HTTP semantic conventions require <c>http.request.method</c> to match a
+    /// known method name exactly — all of which are uppercase — or else be <c>_OTHER</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="method">HTTP method, normally from <see cref="HttpRequestMethodTag" />.</param>
+    /// <param name="route">Route template or collapsed path, normally from <see cref="ResolveRoute" />.</param>
+    /// <returns>The operation key.</returns>
+    public static string ResolveOperation(string method, string route)
+        => $"{method.ToUpperInvariant()} {route}";
 
     /// <summary>
     /// Resolve the route template for an HTTP server span.

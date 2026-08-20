@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 
@@ -440,7 +441,7 @@ public sealed record ServiceEventsConfig
     /// <returns><c>true</c> if the endpoint should be tracked.</returns>
     public bool ShouldTrackEndpoint(string route, string method)
     {
-        var endpointStr = $"{method.ToUpperInvariant()} {route}";
+        var endpointStr = HttpOperationResolver.ResolveOperation(method, route);
 
         if (this.EndpointIncludePatterns.Count > 0)
         {

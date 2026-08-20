@@ -27,7 +27,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// When <see cref="suppressEndpointSummary" /> is set (Application Signals is on),
 /// the <c>EndpointSummary</c> LogRecord is skipped — App Signals already carries
 /// equivalent per-endpoint data — but the collector keeps running so its latency
-/// histogram can feed IncidentSnapshot's threshold triggers (M4). The
+/// histogram can feed the IncidentSnapshot latency threshold triggers. The
 /// <c>EndpointErrorMetrics</c> per-exception breakdown still emits (App Signals
 /// doesn't carry it).
 /// </para>
@@ -90,7 +90,7 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
 
         try
         {
-            var operation = $"{method} {route}";
+            var operation = HttpOperationResolver.ResolveOperation(method, route);
             var agg = this.aggregations.GetOrAdd(operation, _ => new EndpointAggregation(route, method));
 
             agg.RecordDuration(durationNs);
@@ -123,7 +123,7 @@ internal sealed class EndpointMetricCollector : CollectorBase, IEndpointRecorder
 
     /// <summary>
     /// Attach an incident exemplar to an operation's window. Called by the
-    /// IncidentSnapshot collector (M4) when it produces a snapshot.
+    /// incident-snapshot collector when it produces a snapshot.
     /// </summary>
     public void RecordIncidentExemplar(string operation, string snapshotId, string triggerType, string severity, long timestamp)
     {

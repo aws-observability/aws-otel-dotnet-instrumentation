@@ -28,13 +28,34 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// (matching the Python distro's deliberate ordering).
 /// </para>
 /// <para>
-/// <c>is_partial</c> is computed as <c>any(call_path[].duration_ns == 0)</c>;
-/// an empty call path is not partial. v1 emits no call-path frames, so snapshots report
-/// <c>is_partial: false</c>.
+/// <c>is_partial</c> is computed as <c>any(call_path[].duration_ns == 0)</c>; an empty call path is
+/// not partial. The two trigger types therefore report it differently, and both are correct.
+/// Exception incidents derive their call path from the captured stack trace, which carries no
+/// per-frame timing, so every frame has <c>duration_ns == 0</c> and the snapshot reports
+/// <c>is_partial: true</c>. Latency incidents use timed span frames, so they report
+/// <c>is_partial: false</c> unless the frame buffer overflowed. See <c>BuildExceptionInfo</c>.
 /// </para>
 /// </remarks>
 internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapshotConfigSink, IIncidentTrigger
 {
+    /// <summary>
+    /// Cap on the emitted <c>exception_message</c>. Generous against real messages, which are
+    /// typically well under a few hundred characters; it exists to stop a message that has had a
+    /// serialized payload interpolated into it from dominating the record.
+    /// </summary>
+    internal const int MaxExceptionMessageChars = 4096;
+
+    /// <summary>
+    /// Cap on the emitted <c>stack_trace</c>. Sized to preserve realistic traces intact — a typical
+    /// ASP.NET Core trace with middleware runs a few KB, a deep async one tens of KB — while bounding
+    /// pathological ones. Truncating the tail is the safe direction: the frames that identify the
+    /// failure are at the top, and <c>call_path</c> is derived from the untruncated text.
+    /// </summary>
+    internal const int MaxStackTraceChars = 32768;
+
+    /// <summary>Appended in place of the removed tail, mirroring <see cref="CallPathCapture.TruncatedSentinel" />.</summary>
+    internal const string TruncatedSuffix = "<truncated>";
+
     /// <summary>
     /// The <c>trigger_type</c> values, named because two methods here have to agree on them:
     /// <c>DetermineTriggerType</c> produces the value and <c>DetermineSeverity</c> branches on it, so
@@ -110,7 +131,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
     {
         spanFrames ??= Array.Empty<CallPathEntry>();
 
-        var operation = $"{method} {route}";
+        var operation = HttpOperationResolver.ResolveOperation(method, route);
 
         var triggerType = this.DetermineTriggerType(statusCode, durationMs, exceptionType, operation);
         if (triggerType is null)
@@ -120,13 +141,25 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
 
         var errorHash = IncidentRateLimiter.GenerateErrorHash(operation, exceptionType);
 
-        // Batch dedup: one snapshot per error hash per flush cycle. Checked without claiming the hash
-        // yet — claiming here would mark an error as "handled this cycle" even when a limiter below
-        // then drops it, suppressing every later occurrence in the same cycle on behalf of a snapshot
-        // that was never emitted.
+        // Batch dedup: one snapshot per error hash per flush cycle. The check and the claim are a
+        // single atomic step, which makes this the serialization point for concurrent same-hash
+        // requests: exactly one wins the Add and reaches the limiters, so the losers cannot spend
+        // limiter budget on a snapshot they were never going to produce.
+        //
+        // The claim has to be released if a limiter then rejects this request, or the error would be
+        // marked "handled this cycle" on behalf of a snapshot that was never emitted, suppressing
+        // every later occurrence in the same cycle. Both rejection paths below therefore unclaim.
+        // Note this is deliberately not what the other distros do: Python and JS both claim the batch
+        // hash up front and never release it, so a limiter rejection there silently suppresses the
+        // error for the rest of the interval, and Java has no batch dedup at all.
+        // The set this claim landed in is captured so the release below targets the same one. Collect()
+        // replaces the set on a flush, so without this a claim made just before a flush would be
+        // released out of the *new* set — cancelling a different request's legitimate claim.
+        HashSet<string> claimedIn;
         lock (this.batchLock)
         {
-            if (this.currentBatchHashes.Contains(errorHash))
+            claimedIn = this.currentBatchHashes;
+            if (!claimedIn.Add(errorHash))
             {
                 return null;
             }
@@ -136,23 +169,14 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         // don't burn rate-limit slots).
         if (!this.rateLimiter.CheckDeduplication(errorHash))
         {
+            this.UnclaimBatchHash(claimedIn, errorHash);
             return null;
         }
 
         if (!this.rateLimiter.CheckRateLimit())
         {
+            this.UnclaimBatchHash(claimedIn, errorHash);
             return null;
-        }
-
-        // Every gate passed, so this request is producing a snapshot: claim the hash for this cycle.
-        // Re-checked under the lock because the Contains above released it — two requests with the
-        // same hash can both reach here, and only one may proceed.
-        lock (this.batchLock)
-        {
-            if (!this.currentBatchHashes.Add(errorHash))
-            {
-                return null;
-            }
         }
 
         var severity = DetermineSeverity(statusCode, triggerType);
@@ -163,7 +187,6 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         var snapshot = new IncidentSnapshot
         {
             SnapshotId = snapshotId,
-            Timestamp = requestTimestampMs,
             TriggerType = triggerType,
             Operation = operation,
             Method = method,
@@ -188,7 +211,17 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
 
         this.pending.Enqueue(snapshot);
 
-        return new IncidentTriggerResult(operation, snapshotId, triggerType, severity, requestTimestampMs);
+        // The exemplar carries when the incident *occurred*, which is when the request finished and
+        // the error or the latency breach became true — not when it started. Derived from the request
+        // start plus its duration rather than a fresh clock read, so it stays exactly consistent with
+        // the emitted duration_ms and needs no second timestamp source. Java and Python both stamp
+        // incident time at this point in the flow; for a latency incident, whose threshold defaults to
+        // five seconds, request start would put the exemplar at least that far in the past.
+        // request_context.timestamp deliberately stays at request start — that is what the wire format
+        // defines it as, and it is what makes it useful next to duration_ms.
+        var incidentTimestampMs = requestTimestampMs + (long)durationMs;
+
+        return new IncidentTriggerResult(operation, snapshotId, triggerType, severity, incidentTimestampMs);
     }
 
     /// <inheritdoc />
@@ -279,6 +312,23 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         }
     }
 
+    /// <summary>
+    /// Bound a field to <paramref name="maxChars" />, marking the result when the tail was removed so
+    /// a consumer can tell a truncated value from a naturally short one.
+    /// </summary>
+    /// <param name="value">The text to bound; null becomes empty.</param>
+    /// <param name="maxChars">Maximum characters retained before the marker.</param>
+    /// <returns>The original text, or its first <paramref name="maxChars" /> characters plus the marker.</returns>
+    private static string Truncate(string? value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value) || value!.Length <= maxChars)
+        {
+            return value ?? string.Empty;
+        }
+
+        return string.Concat(value.AsSpan(0, maxChars), TruncatedSuffix);
+    }
+
     private static string DetermineSeverity(int statusCode, string triggerType)
     {
         if (statusCode >= 500 && statusCode <= 503)
@@ -300,9 +350,19 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
     /// <remarks>
     /// <para>
     /// This is the one place where an exception message and stack trace enter a record that reaches
-    /// the wire, and it is worth naming as such: both are emitted verbatim, with no redaction and no
-    /// length bound. A redaction policy is still an open deliverable, and when it lands this method is
-    /// where it belongs.
+    /// the wire, and it is worth naming as such. Both are length-bounded here — see
+    /// <see cref="MaxExceptionMessageChars" /> and <see cref="MaxStackTraceChars" /> — but they are
+    /// <b>not</b> redacted. A redaction policy is still an open deliverable, and when it lands this
+    /// method is where it belongs.
+    /// </para>
+    /// <para>
+    /// The bound exists independently of redaction, because size alone can lose data: these two
+    /// fields were the only unbounded contributors to an incident record, so a single deep recursion
+    /// or long inner-exception chain could push the record past the backend's per-event ceiling and
+    /// drop the <i>whole</i> incident rather than just the oversized field. With them capped the
+    /// record is bounded by construction — this method always returns exactly one entry,
+    /// <c>call_path</c> is capped at <see cref="CallPathCapture.MaxFrames" />, the attribute set is
+    /// fixed, and no request payload is ever captured.
     /// </para>
     /// <para>
     /// Specifically not <c>ExceptionCapture.Stash</c>, which is the tempting place to put it. Stash
@@ -324,7 +384,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         string? stackTrace,
         IReadOnlyList<CallPathEntry> spanFrames)
     {
-        // Exception incident (C1): derive the call_path from the captured stack trace so the real
+        // Exception incident: derive the call_path from the captured stack trace so the real
         // throwing method (e.g. AdoptionController.CalculateAdoptionFee) surfaces as call_path[0].
         // Stack frames carry no per-frame timing, so duration_ns == 0 (→ is_partial: true).
         if (!string.IsNullOrEmpty(exceptionType))
@@ -333,13 +393,13 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
             {
                 new ExceptionInfo(
                     ExceptionType: exceptionType!,
-                    ExceptionMessage: exceptionMessage ?? string.Empty,
-                    StackTrace: stackTrace ?? string.Empty,
+                    ExceptionMessage: Truncate(exceptionMessage, MaxExceptionMessageChars),
+                    StackTrace: Truncate(stackTrace, MaxStackTraceChars),
                     CallPath: ParseStackTrace(stackTrace)),
             };
         }
 
-        // Latency incident (Option A): no exception/stack — use the per-request span frames.
+        // Latency incident: no exception or stack — use the per-request span frames.
         // Matches Java's latency shape: one exception_info entry with empty exception fields and a
         // call_path.
         //
@@ -357,6 +417,26 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
                 StackTrace: string.Empty,
                 CallPath: spanFrames),
         };
+    }
+
+    /// <summary>
+    /// Release a batch-dedup claim after a limiter rejected the request, so the error is not treated
+    /// as already handled for the rest of this flush cycle.
+    /// </summary>
+    /// <remarks>
+    /// Takes the set the claim was made in rather than reading <c>currentBatchHashes</c>, because a
+    /// flush may have replaced it in between; removing from the retired set is then a harmless no-op
+    /// on state that is about to be discarded. Still taken under the lock, since concurrent requests
+    /// may be adding to that same set.
+    /// </remarks>
+    /// <param name="claimedIn">The set the claim was added to.</param>
+    /// <param name="errorHash">The hash to release.</param>
+    private void UnclaimBatchHash(HashSet<string> claimedIn, string errorHash)
+    {
+        lock (this.batchLock)
+        {
+            claimedIn.Remove(errorHash);
+        }
     }
 
     /// <summary>

@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Collectors;
@@ -31,6 +33,86 @@ public class IncidentSnapshotCollectorTests
             gitRepoUrl: "repo");
 
         return new IncidentSnapshotCollector(flushIntervalMs: 60_000, emitter, config ?? new ServiceEventsConfig());
+    }
+
+    /// <summary>
+    /// A collector wired to a logger that captures what the emitter actually produces, so tests can
+    /// assert on the emitted record rather than on the collector's return value.
+    /// </summary>
+    private static (IncidentSnapshotCollector Collector, CapturingLogger Logger) NewCapturingCollector(
+        ServiceEventsConfig? config = null)
+    {
+        var logger = new CapturingLogger();
+        var emitter = new ServiceEventsOtlpEmitter(
+            logger,
+            new Meter("test-" + Guid.NewGuid().ToString("N")),
+            deploymentId: "dep",
+            gitCommitSha: "sha",
+            gitRepoUrl: "repo");
+
+        return (new IncidentSnapshotCollector(flushIntervalMs: 60_000, emitter, config ?? new ServiceEventsConfig()), logger);
+    }
+
+    /// <summary>
+    /// Force the collector's final flush and return <c>exception_info[0]</c> from the emitted
+    /// IncidentSnapshot record's body.
+    /// </summary>
+    private static JsonElement EmittedExceptionInfo(IncidentSnapshotCollector collector, CapturingLogger logger)
+    {
+        // Dispose runs the final Collect, which drains the queue through the emitter.
+        collector.Dispose();
+
+        var record = logger.Records.Should().ContainSingle(
+            r => r.Any(kv => kv.Key == "event.name"
+                             && (kv.Value as string) == "aws.service_events.incident_snapshot"))
+            .Subject;
+
+        var body = record.Single(kv => kv.Key == "body").Value as string;
+        body.Should().NotBeNull("the incident record carries exception_info in its body");
+
+        using var parsed = JsonDocument.Parse(body!);
+        var info = parsed.RootElement.GetProperty("exception_info");
+        info.GetArrayLength().Should().Be(1, "BuildExceptionInfo always returns exactly one entry");
+
+        // Cloned because the JsonDocument is disposed on return.
+        return info[0].Clone();
+    }
+
+    /// <summary>
+    /// Captures the attribute lists the emitter passes to the logging bridge. The emitter's state type
+    /// is private, but it implements <see cref="IReadOnlyList{T}" /> over its attributes, which is all
+    /// this needs.
+    /// </summary>
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<IReadOnlyList<KeyValuePair<string, object?>>> Records { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull => NoopScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is IReadOnlyList<KeyValuePair<string, object?>> attributes)
+            {
+                this.Records.Add(attributes.ToList());
+            }
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            internal static readonly NoopScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 
     /// <summary>
@@ -178,6 +260,244 @@ public class IncidentSnapshotCollectorTests
         result.Should().NotBeNull();
         result!.TriggerType.Should().Be("latency");
         result.Severity.Should().Be("medium");
+    }
+
+    /// <summary>
+    /// The exemplar timestamp is the incident time — when the request finished and the breach became
+    /// true — not when the request started. It is derived from request start plus duration, so it
+    /// stays consistent with the emitted <c>duration_ms</c> without a second clock read.
+    /// </summary>
+    /// <remarks>
+    /// This matters most for latency incidents, which by definition ran past the threshold: anchoring
+    /// on request start would place the exemplar at least a threshold's worth of time in the past.
+    /// Asserted with a duration far larger than any plausible clock jitter so the two candidate
+    /// anchors cannot be confused.
+    /// </remarks>
+    [Fact]
+    public void OnTrigger_ExemplarTimestampIsRequestEnd_NotRequestStart()
+    {
+        var collector = NewCollector();
+
+        var result = collector.ProcessPotentialIncident(
+            route: "/slow", method: "GET", statusCode: 200, durationMs: 6000,
+            exceptionType: null, exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 1_000_000);
+
+        result.Should().NotBeNull();
+        result!.Timestamp.Should().Be(1_006_000, "request start (1_000_000) plus the 6000ms duration");
+    }
+
+    /// <summary>
+    /// A rejected request must release its batch-dedup claim, or the error is treated as already
+    /// handled for the rest of the flush cycle and every later occurrence is silently suppressed —
+    /// on behalf of a snapshot that was never emitted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scope stated precisely: this covers the <b>rate-limit</b> rejection path. That is the reachable
+    /// claim-then-reject ordering — a request cannot be rejected by per-error dedup on its own hash's
+    /// first appearance in a cycle, because the ceiling is clamped to at least one, and any later
+    /// same-hash request in the same cycle is stopped by batch dedup before a limiter is consulted.
+    /// The two release calls are otherwise identical.
+    /// </para>
+    /// <para>
+    /// Mutation-verified: deleting the <c>UnclaimBatchHash</c> call on the rate-limit path makes the
+    /// final assertion fail, because the leaked claim then makes batch dedup reject the retry.
+    /// </para>
+    /// <para>
+    /// The two requests use <i>different</i> error signatures on purpose. If the rejected request
+    /// shared a hash with the admitted one, the admitted request would legitimately still hold that
+    /// claim for the rest of the cycle and the test would prove nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void RateLimitedRequest_ReleasesItsBatchClaim_SoARetryInTheSameCycleStillEmits()
+    {
+        var collector = NewCollector(new ServiceEventsConfig
+        {
+            IncidentSnapshotMaxPerMinute = 1,
+            IncidentSnapshotMaxSameError = int.MaxValue,
+        });
+
+        // Burn the single global slot on one signature. Admitted, and legitimately keeps its claim.
+        var first = collector.ProcessPotentialIncident(
+            route: "/a", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "ExA", exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 1000);
+        first.Should().NotBeNull();
+
+        // A different signature: claims its own hash, passes per-error dedup, then is rejected by the
+        // exhausted global cap — the one ordering where a claim must be given back.
+        var rejected = collector.ProcessPotentialIncident(
+            route: "/b", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "ExB", exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 1001);
+        rejected.Should().BeNull("the global cap of 1 was already spent by the first request");
+
+        // Same flush cycle, same signature as the rejected one. With the cap raised this must be
+        // admitted; if the rejected request had left "/b + ExB" claimed, batch dedup would reject it.
+        collector.UpdateIncidentConfig(maxPerMinute: 100, maxSameError: int.MaxValue);
+
+        var retried = collector.ProcessPotentialIncident(
+            route: "/b", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "ExB", exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 1002);
+
+        retried.Should().NotBeNull("the rate-limited request released its batch claim");
+    }
+
+    /// <summary>
+    /// Concurrent same-hash requests are serialized by the atomic claim, so only one of them reaches
+    /// the limiters and spends global budget — the rest are stopped at the claim and cost nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The observable is deliberately <b>not</b> the number of snapshots admitted for the contended
+    /// hash. That number is one under either design, because a per-error ceiling would reject the
+    /// duplicates anyway; a test asserting it proves nothing about the claim. Verified: an earlier
+    /// version of this test did exactly that and passed under the mutation below.
+    /// </para>
+    /// <para>
+    /// What distinguishes the designs is what the losers <i>consume</i>. With a non-claiming check,
+    /// every racing thread reaches <c>CheckRateLimit</c>, and each one increments the global counter
+    /// whether or not it goes on to produce a snapshot — so a modest global cap is exhausted by a
+    /// single hot error, and an unrelated error later in the same window is silenced. With the atomic
+    /// claim, exactly one request per hash is ever counted.
+    /// </para>
+    /// <para>
+    /// Mutation-verified: reverting the claim to a non-claiming <c>Contains</c> check fails this test,
+    /// because the global cap is spent by the contended hash and the unrelated error is rejected.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ConcurrentSameHashRequests_DoNotExhaustTheGlobalCapForOtherErrors()
+    {
+        const int threads = 32;
+        const int callsPerThread = 200;
+        const int maxPerMinute = 10;
+
+        var collector = NewCollector(new ServiceEventsConfig
+        {
+            IncidentSnapshotMaxPerMinute = maxPerMinute,
+
+            // Isolate the batch claim as the only thing that can stop the duplicates: with a low
+            // per-error ceiling the dedup gate would reject them first and mask the difference.
+            IncidentSnapshotMaxSameError = int.MaxValue,
+        });
+
+        var admitted = 0;
+        var workers = new Thread[threads];
+        using var start = new ManualResetEventSlim(false);
+
+        for (var t = 0; t < threads; t++)
+        {
+            workers[t] = new Thread(() =>
+            {
+                start.Wait();
+                for (var i = 0; i < callsPerThread; i++)
+                {
+                    var r = collector.ProcessPotentialIncident(
+                        route: "/hot", method: "GET", statusCode: 500, durationMs: 1,
+                        exceptionType: "TheSameError", exceptionMessage: null, stackTrace: null,
+                        traceId: null, spanId: null, requestTimestampMs: 1000 + i);
+
+                    if (r is not null)
+                    {
+                        Interlocked.Increment(ref admitted);
+                    }
+                }
+            });
+            workers[t].Start();
+        }
+
+        start.Set();
+        foreach (var w in workers)
+        {
+            w.Join();
+        }
+
+        admitted.Should().Be(1, "one hash yields one snapshot per flush cycle");
+
+        // The real assertion: the contended hash consumed one global slot, not thousands, so an
+        // unrelated error in the same window still has budget.
+        var unrelated = collector.ProcessPotentialIncident(
+            route: "/elsewhere", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "ADifferentError", exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 2000);
+
+        unrelated.Should().NotBeNull(
+            "{0} racing duplicates of one hash must spend one global slot between them, not one each",
+            threads * callsPerThread);
+    }
+
+    /// <summary>
+    /// The emitted exception message and stack trace are length-bounded, and the bound is marked so a
+    /// consumer can distinguish a truncated value from a naturally short one.
+    /// </summary>
+    /// <remarks>
+    /// <c>call_path</c> is deliberately derived from the <i>untruncated</i> stack trace, so capping the
+    /// emitted string does not cost frames. Asserted here by building a trace whose frames sit beyond
+    /// the character cap and checking they still parse.
+    /// </remarks>
+    [Fact]
+    public void OverlongExceptionText_IsTruncatedWithAMarker_AndCallPathIsUnaffected()
+    {
+        var (collector, logger) = NewCapturingCollector();
+
+        var hugeMessage = new string('m', IncidentSnapshotCollector.MaxExceptionMessageChars + 500);
+
+        // A trace long enough to pass the cap, with real frames spread throughout so parsing is
+        // exercised on text that extends past the truncation point.
+        var frame = "   at Contoso.Service.Layer.Handle(System.String arg) in /src/Layer.cs:line 42\n";
+        var repeats = (IncidentSnapshotCollector.MaxStackTraceChars / frame.Length) + 50;
+        var hugeStack = string.Concat(Enumerable.Range(0, repeats).Select(i =>
+            frame.Replace("Layer.Handle", "Layer" + i + ".Handle", StringComparison.Ordinal)));
+        hugeStack.Length.Should().BeGreaterThan(IncidentSnapshotCollector.MaxStackTraceChars);
+
+        var result = collector.ProcessPotentialIncident(
+            route: "/x", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "BoomException", exceptionMessage: hugeMessage, stackTrace: hugeStack,
+            traceId: null, spanId: null, requestTimestampMs: 1000);
+
+        result.Should().NotBeNull();
+
+        var info = EmittedExceptionInfo(collector, logger);
+
+        var message = info.GetProperty("exception_message").GetString()!;
+        message.Should().HaveLength(
+            IncidentSnapshotCollector.MaxExceptionMessageChars + IncidentSnapshotCollector.TruncatedSuffix.Length);
+        message.Should().EndWith(IncidentSnapshotCollector.TruncatedSuffix);
+
+        var stack = info.GetProperty("stack_trace").GetString()!;
+        stack.Should().HaveLength(
+            IncidentSnapshotCollector.MaxStackTraceChars + IncidentSnapshotCollector.TruncatedSuffix.Length);
+        stack.Should().EndWith(IncidentSnapshotCollector.TruncatedSuffix);
+
+        // Frames come from the untruncated text, so capping the emitted string costs no frames:
+        // the 100-frame cap is still reached and the sentinel appended.
+        var callPath = info.GetProperty("call_path");
+        callPath.GetArrayLength().Should().Be(CallPathCapture.MaxFrames + 1);
+        callPath[0].GetProperty("function_name").GetString().Should().Be("Contoso.Service.Layer0.Handle");
+    }
+
+    /// <summary>Exception text at or under the cap is emitted unchanged, with no marker.</summary>
+    [Fact]
+    public void ShortExceptionText_IsEmittedUnchanged()
+    {
+        var (collector, logger) = NewCapturingCollector();
+
+        var result = collector.ProcessPotentialIncident(
+            route: "/x", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "BoomException", exceptionMessage: "a short message",
+            stackTrace: "   at Contoso.Api.Do() in /src/Api.cs:line 7",
+            traceId: null, spanId: null, requestTimestampMs: 1000);
+
+        result.Should().NotBeNull();
+
+        var info = EmittedExceptionInfo(collector, logger);
+        info.GetProperty("exception_message").GetString().Should().Be("a short message");
+        info.GetProperty("stack_trace").GetString().Should()
+            .NotContain(IncidentSnapshotCollector.TruncatedSuffix);
     }
 
     [Fact]

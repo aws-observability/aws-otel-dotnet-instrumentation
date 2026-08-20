@@ -16,8 +16,11 @@ public sealed record IncidentSnapshot
     /// <summary>Gets the unique identifier, e.g. <c>"snap_abc123"</c>.</summary>
     public required string SnapshotId { get; init; }
 
-    /// <summary>Gets the epoch milliseconds when the snapshot was captured.</summary>
-    public required long Timestamp { get; init; }
+    // No top-level Timestamp here on purpose, for the same reason as Severity below. The wire format
+    // defines no top-level timestamp attribute on IncidentSnapshot — the incident time travels on the
+    // EndpointSummary's IncidentExemplar, and the request's own start time on RequestContext.Timestamp
+    // in the body. Carrying one here as well made it a required field that every construction had to
+    // supply and nothing ever read.
 
     // No Severity here on purpose. The wire format defines no severity attribute on
     // IncidentSnapshot, so it must not be emitted; severity instead travels on the EndpointSummary's
