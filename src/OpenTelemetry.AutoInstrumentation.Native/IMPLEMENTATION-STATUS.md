@@ -238,8 +238,8 @@ real ARN for `Language: "Dotnet"` WITH a `LineNumber`, round-trips it through `l
 preserved, and accepts a READY status report for it. So line-level .NET can be tested against the real
 control plane today, without waiting on the enum rollout.
 
-All of the above ran against a native profiler built on or before 2026-08-11, so none of it covered the
-thread-safety fix from 2026-08-18. **RE-VERIFIED 2026-08-20** against the current binary
+All of the earlier runs used a native profiler built on or before 2026-08-11, so none of them covered the
+thread-safety fix from 2026-08-18. **RE-VERIFIED 2026-08-20, locally AND against real beta**, on the current binary
 (`sha256 7896eaaf…`, byte-identical to `OpenTelemetryDistribution/osx-arm64/*.dylib`, carrying the
 post-fix out-of-line `RequestCount` symbol):
 
@@ -257,6 +257,57 @@ post-fix out-of-line `RequestCount` symbol):
 | `LineProbeTimingE2E` | no assertions | timing/stop-the-world measurement only. Its embedded July "N2" block is STALE (hardcoded offsets; reported `distinct fired = 0` and then concluded "single-probe-per-method"). Nothing fired, so that verdict is meaningless and is contradicted by `N2MultiProbeE2E` and `R9` above. Do not cite it |
 
 That is 73 passing checks plus the two negative controls, on the current native code.
+
+### Re-verified against REAL beta, 2026-08-20
+
+`DI_BETA_ENDPOINT=https://application-signals-beta.us-west-2.api.aws`, run from the operator's terminal (this
+leg needs credentials CI does not have). Every config-API call returned HTTP 200; each snapshot below is
+tagged with **beta's own** `LocationHash`, so the loop closed through real AWS rather than the local mock.
+
+| Config / LocationHash | Line | Captured | Type |
+|---|---|---|---|
+| `Reserve` `2dfa7964ec88e050` | 145 | `total` 77 | Int32 |
+| `DescribeNote` `f6879fb3a9027ef7` | 169 | `note` "item-11", "item-14" | String, no box |
+| `DescribeStamp` `2336de64e18d1042` | 176 | `stamp` 1/12/2026, 1/15/2026 | DateTime |
+| `DescribeRatio` `24c5024385ef63d6` | 183 | `ratio` 16.5, 21 | Double |
+| `DescribeAll` `1c3f4de6e937129e` | 200 | `count` 33/42, `label` all-11/all-14, `weight` 2.75/3.5 | ONE config, three locals, one line |
+| `ReserveAsync` `b87bdbf8cb494230` | 226 | `total` 99, 126 | Int32, hoisted |
+| `DescribeAsync` `ae072e2bbe2c2aa1` | 251 | `note` "async-item-14", `count` 154, `ratio` **27.5 / 30 / 32.5 / 35** | ONE config, three hoisted locals |
+
+The async `ratio` series is the load-bearing one: 27.5 and 32.5 are exactly what the boxed-as-`Int32` defect
+destroyed (it would yield 27 and 32 — truncated, plausible, no error). Asserting only on the i=14 sample would
+have proved nothing, because 35 is integral.
+
+Also confirmed on this run: beta accepted `Language: "Dotnet"` WITH a `LineNumber` on all seven line configs
+and returned real ARNs; `CaptureLocals` round-tripped through `list`; eight configs reported READY with
+`UnprocessedStatusEvents: []`. The GA language gate is still not enforced in beta.
+
+Two things this run also showed, neither a line-level defect:
+
+- Beta returns `SyncInterval` (300 for PROBE, 60 for BREAKPOINT) and the agent **ignores it** — the TODO at
+  `DynamicInstrumentationClient.cs:229`, now confirmed against the real backend rather than inferred.
+- `create` on the method-level `OrderService.Process` config returned **409** ("already exists for this
+  service, environment, signalType and location"). Expected: beta persists configs ~24 h and a config with no
+  line number is stable across source edits, so it survives from a previous run.
+
+CAVEAT ON WHAT WAS CAPTURED: the harness's aggregate `STEP 4` tally for this run was not preserved (it goes to
+stdout, not to `logs/mock-backend.out`, and scrolled away). The evidence above is read directly off the wire
+log, which is the primary source; the pass count is not independently recorded.
+
+A PRIOR RUN THE SAME DAY FAILED 20 CHECKS ON EXPIRED CREDENTIALS, not a regression. The tell is
+`[BETA-CREDS] using default chain` (rather than `using AWS_* env vars`) plus every call returning
+`403 "The security token included in the request is invalid"`. With no configs delivered nothing weaves and
+every downstream check cascades. Four checks "passed" in that run, all vacuously — see the empty-set defect
+below.
+
+### A vacuous check found and fixed in the harness
+
+`every Reserve line config points at the CURRENT source line` reported **PASS with "saw: none"** on the
+expired-credential run. `LINES_CURRENT` was seeded from `BOUNDARY_OK` and the comparison loop only ever
+downgrades, so an empty result set skipped the body and left it green. That is the one assertion whose whole
+purpose is catching a stale absolute line number, and it could not fail when nothing was fetched. Now guarded
+on an empty set; logic exercised across all three branches (empty → FAIL, correct-only → PASS, stale-mixed →
+FAIL). Note the guard itself has NOT run inside a real beta run — that block only executes in beta mode.
 
 ### Four harness defects found while re-verifying — all staleness, none a product defect
 
