@@ -542,6 +542,29 @@ otherwise assume the DI agent is complete.
 | Client-side `AttributeFilters` (fleet-subset targeting) | absent; every config applies to every instance |
 | Serialization wall-clock budget | `ValueSerializer` is bounded by depth/count/size but has no deadline |
 
+## Where the demo and the E2E harnesses live
+
+**NOT IN THIS REPO.** `poc/` was deleted, so the seven line-level harnesses and the deployed-app demo live at
+`~/Desktop/DI-DOTNET-CONTEXT/harnesses/`. Editing them does not change the PR, and they will not survive a
+fresh clone — that is a known cost of removing `poc/`, accepted because shipping a spike tree was worse.
+
+`DeployedAppDemo/RUNBOOK.md` is the presenter script for the demo, rewritten 2026-08-20 to cover line-level
+(it previously described only the function-level PR3-era run and still pointed at `poc/`). Validated by
+following it literally, including the interactive pause path that every automated run had been skipping with
+`DEMO_NOPAUSE=1`: **19/19, exit 0, all four steps reached**. Every check name quoted in it was verified verbatim
+against the real output rather than paraphrased.
+
+Run it with:
+
+```
+cd ~/Desktop/DI-DOTNET-CONTEXT/harnesses/DeployedAppDemo
+DI_REPO_ROOT=<repo> RESOURCE_DETECTORS_ENABLED=false bash run-demo.sh
+```
+
+The profiler it loads comes from `OpenTelemetryDistribution/<rid>/`, so rebuild AND swap before demoing, or
+old native code is silently under test:
+`./build.sh CompileNativeProfiler ReplaceNativeProfilerInDistribution AssertShippedNativeProfilerLoads`.
+
 ## Local reproduction note
 
 On Apple Silicon, building the 16.04 image under QEMU fails: the `ca-certificates` post-install script
