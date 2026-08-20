@@ -258,6 +258,34 @@ post-fix out-of-line `RequestCount` symbol):
 
 That is 73 passing checks plus the two negative controls, on the current native code.
 
+### DEMO_LINE_ONLY — the define-if-absent AssemblyRef branch, proven both ways
+
+`DEMO_LINE_ONLY=1 bash run-demo.sh` creates NO method-level configuration, which is what makes the
+line-probe path observable in isolation. Every other run masks it: a customer assembly has no compile-time
+reference to the DI assembly (measured — the demo's `SampleApp.dll` references only System.Runtime,
+System.Console and System.Threading.Thread), but the method-level CallTarget weave on the SAME module emits a
+TypeRef to `DiIntegrationN`, which drags the AssemblyRef into that module's metadata as a side effect. The line
+probe then "found" a reference it did nothing to create.
+
+| Native code | Result | Native log |
+|---|---|---|
+| **pre-fix** (`HEAD~1`, both sides reverted) | **5 of 6 FAIL** | `callback AssemblyRef not found` **× 11**, `wove probeId` **× 0** |
+| **with the fix** | **6 of 6 PASS** | `defined a new callback AssemblyRef`, probes welded, real value captured |
+
+So on a module carrying only line probes, ALL ELEVEN probes were silently skipped while the managed side
+reported READY — resolved, applied, status green, and physically unable to fire. That is the defect the fix
+closes, and the pre-fix column is what makes the green column mean something.
+
+The first check in that mode is the ISOLATION check — that NO CallTarget weave happened in the run. It passes
+in both columns, and without it the whole scenario proves nothing: if anything else had woven the module, the
+AssemblyRef would have been present and the define branch untested again.
+
+Weaving is deliberately NOT the last assertion. A defined-but-WRONG reference does not fail loudly — it binds
+to nothing and the woven call resolves to no method — so the mode also requires a real non-zero captured value
+to arrive over OTLP. That is what proves the emitted reference actually bound.
+
+Normal mode re-run after restoring the fix: 19/19, so the find path is unaffected.
+
 ### Re-verified against REAL beta, 2026-08-20
 
 `DI_BETA_ENDPOINT=https://application-signals-beta.us-west-2.api.aws`, run from the operator's terminal (this
