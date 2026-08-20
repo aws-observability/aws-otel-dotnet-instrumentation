@@ -59,24 +59,27 @@ public class IlBoundaryScannerTests
     }
 
     [Fact]
-    public void Scan_StraightLineMethod_DecodesEntireBodyAndFindsTheDebugReturnBranch()
+    public void Scan_StraightLineMethod_DecodesEntireBodyAndItsBranchTargetsAreInstructionStarts()
     {
-        var il = IlOf(nameof(StraightLine));
+        // Was: an exact-equality assertion on `BranchTargets == [14]`, which is Roslyn's DEBUG `br.s +0` for
+        // `return b;`. Release elides that branch, so the test was red in Release and CI only stayed green
+        // because `dotnet test` defaults to Debug while the product ships Release. Asserting the INVARIANT
+        // holds in both: every branch target must be a decoded instruction start, or the scan mis-walked.
+        var result = IlBoundaryScanner.Scan(IlOf(nameof(StraightLine)));
 
-        var result = IlBoundaryScanner.Scan(il);
+        result.Complete.Should().BeTrue("a straight-line body must decode end to end");
+        result.InstructionStarts.Should().NotBeEmpty();
+        // Plain predicates, not OnlyContain: Release emits NO branch here, and the invariant is "nothing
+        // outside the instruction starts", which holds vacuously for an empty set. OnlyContain treats empty as
+        // a failure, which would just re-create the configuration-specific test this replaced.
+        result.BranchTargets.All(t => result.InstructionStarts.Contains(t)).Should().BeTrue(
+            "a target that is not an instruction start means the walk lost alignment");
+        result.Branches.All(b => result.InstructionStarts.Contains(b.Source)
+                && result.InstructionStarts.Contains(b.Target))
+            .Should().BeTrue("both ends of every decoded branch must be instruction starts");
+        result.Branches.Select(b => b.Target).Should().BeSubsetOf(
+            result.BranchTargets, "every decoded branch's target must also appear in the target set");
 
-        result.Complete.Should().BeTrue("a simple method must decode end-to-end");
-        result.InstructionStarts.Should().Contain(0u);
-
-        // NOT empty — and this surprised the first version of this test, which asserted no branch
-        // targets on the grounds that the method has no control flow. Verified IL (Debug, net8.0):
-        //   0:nop 1:ldarg.0 2:ldc.i4.1 3:add 4:stloc.0 5:ldloc.0 6:ldc.i4.s 7:(10) 8:add 9:stloc.1
-        //   10:ldloc.1 11:stloc.2 12:br.s 13:(+0) 14:ldloc.2 15:ret
-        // The Debug compiler emits `br.s +0` for `return b;`, making offset 14 a branch target.
-        // CONSEQUENCE FOR P3a: even a method with no user-visible control flow has an unsafe
-        // injection point, and it sits exactly at the `return` — a very likely place to set a probe.
-        // Branch-target rejection is therefore load-bearing for ordinary code, not just loops.
-        result.BranchTargets.Should().BeEquivalentTo(new[] { 14u });
     }
 
     [Fact]

@@ -39,6 +39,16 @@ internal enum LineProbeResolutionStatus
     LocalOutOfScope,
 
     /// <summary>
+    /// The local is in scope but its TYPE cannot be captured — a by-ref local or a pointer, which is a
+    /// managed/unmanaged pointer rather than a value.
+    /// </summary>
+    // Distinct from LocalOutOfScope because the operator action differs: out-of-scope means "move the
+    // probe", not-capturable means "this variable can never be captured, pick another". Refused before
+    // emission because `box` on a by-ref is invalid IL — the verifier would reject the whole rewritten
+    // method body, taking the customer's method down with it rather than just losing a snapshot.
+    LocalNotCapturable,
+
+    /// <summary>
     /// The loaded native profiler does not export the line-probe API, i.e. we are running against the
     /// STOCK upstream profiler rather than our fork. Everything managed-side resolved correctly.
     /// </summary>

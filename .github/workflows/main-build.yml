@@ -129,9 +129,12 @@ jobs:
           name: native-profiler-linux-glibc-x64
           path: src/OpenTelemetry.AutoInstrumentation.Native/build/bin
 
+      # --build-native-profiler declares that this job's output MUST support line-level, so a missing
+      # native artifact fails the build instead of silently packing the stock upstream profiler (whose
+      # absent AddLineProbes export is a normal runtime condition the managed side tolerates).
       - name: Build on Linux
         if: runner.os == 'Linux'
-        run: bash build.sh
+        run: bash build.sh --build-native-profiler
 
       - name: Build on Windows
         if: runner.os == 'Windows'

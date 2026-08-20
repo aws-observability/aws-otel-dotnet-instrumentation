@@ -280,6 +280,44 @@ internal partial class Build
     }
 
     /// <summary>
+    /// Whether the native swap and its load gate should run, failing the build when line-level was REQUESTED
+    /// but no native library is present to ship.
+    /// </summary>
+    /// <returns>True when a built native profiler exists and should be swapped in.</returns>
+    /// <exception cref="Exception">
+    /// Thrown when <c>--build-native-profiler</c> was passed but nothing was built, rather than quietly
+    /// packing the stock upstream binary.
+    /// </exception>
+    // WHY THE DISK CHECK ALONE WAS NOT ENOUGH. The swap and the gate that verifies it shared one predicate,
+    // so "no native library on disk" skipped BOTH: the distribution kept the stock upstream profiler (no
+    // AddLineProbes), the gate that would have caught it skipped for the same reason, and the build went
+    // green. Since a missing export is a normal RUNTIME condition for the managed side
+    // (ProfilerMissingLineProbeSupport), nothing downstream complained either — a job that was supposed to
+    // ship line-level and shipped a profiler without it was indistinguishable from a RID that legitimately
+    // ships upstream's binary.
+    //
+    // The flag is what separates those two: pass --build-native-profiler in any job whose output is meant to
+    // support line-level, and a missing artifact becomes a build failure instead of a silent downgrade.
+    // Without the flag the old behavior is kept, so a local `build.sh` still works with no cmake.
+    private bool ShouldShipBuiltNativeProfiler()
+    {
+        var exists = this.BuiltNativeProfilerExists();
+
+        if (this.buildNativeProfiler && !exists)
+        {
+            var expected = this.nativeProfilerProjectFolder / "build" / "bin" / NativeProfilerLibraryFileName();
+            throw new Exception(
+                $"--build-native-profiler was requested but no built native profiler exists at {expected}. " +
+                "The distribution would have shipped the STOCK upstream binary, which does not export " +
+                "AddLineProbes, so line-level Dynamic Instrumentation would silently never fire. Run the " +
+                "CompileNativeProfiler target first, or download the native-profiler artifact into that " +
+                "folder before building.");
+        }
+
+        return exists;
+    }
+
+    /// <summary>
     /// Replaces the stock upstream native profiler in the unpacked distribution with the one built from
     /// our vendored source.
     /// </summary>
@@ -307,7 +345,7 @@ internal partial class Build
         // can be forgotten, and the failure would be silent in the worst way: a job that compiled the native
         // profiler, skipped the swap, and shipped the stock binary anyway — which is precisely the bug that
         // bit me during development. Keying on the artifact means the swap happens exactly when it can.
-        .OnlyWhenDynamic(() => this.BuiltNativeProfilerExists())
+        .OnlyWhenDynamic(() => this.ShouldShipBuiltNativeProfiler())
         .Executes(() =>
         {
             var fileName = NativeProfilerLibraryFileName();
@@ -376,7 +414,7 @@ internal partial class Build
         // Note what this means: a job that does not build native code gets no load gate at all. That is
         // acceptable only because such a job ships a binary upstream already tested. The moment a RID starts
         // building its own, this gate starts guarding it — automatically, by the same disk check.
-        .OnlyWhenDynamic(() => this.BuiltNativeProfilerExists())
+        .OnlyWhenDynamic(() => this.ShouldShipBuiltNativeProfiler())
         .Executes(() =>
         {
             var fileName = NativeProfilerLibraryFileName();

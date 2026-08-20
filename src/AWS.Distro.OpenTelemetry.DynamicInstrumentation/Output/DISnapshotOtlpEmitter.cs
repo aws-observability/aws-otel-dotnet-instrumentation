@@ -5,6 +5,7 @@ using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
@@ -44,6 +45,14 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
 
+                // BEFORE AddOtlpExporter, and the order is load-bearing: processors run in registration
+                // order, and the exporter is itself the last processor in that chain. Registered after it,
+                // this would stamp records the exporter had already serialized.
+                //
+                // Also note ParseStateValues is left at its default (false), which is what keeps the log state
+                // reachable as SnapshotLogState in the processor instead of a flattened attribute list.
+                options.AddProcessor(new DISnapshotTraceContextProcessor());
+
                 // No endpoint => no exporter => snapshots are dropped (not buffered). Documented operator
                 // trap; see "Snapshots require OTEL_AWS_OTLP_LOGS_ENDPOINT" in docs/dynamic-instrumentation.md.
                 if (!string.IsNullOrEmpty(logsEndpoint))
@@ -51,6 +60,27 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                     options.AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = new Uri(logsEndpoint);
+
+                        // PINNED, and deliberately NOT read from OTEL_EXPORTER_OTLP_PROTOCOL or
+                        // OTEL_EXPORTER_OTLP_LOGS_PROTOCOL.
+                        //
+                        // The other DI SDKs pin the transport by CHOOSING THE HTTP EXPORTER TYPE, so none of
+                        // them exposes a protocol knob for snapshots: Java builds
+                        // OtlpHttpLogRecordExporter.builder().setEndpoint(...) in
+                        // DynamicInstrumentationManager, Python imports OTLPLogExporter from
+                        // opentelemetry.exporter.otlp.proto.http._log_exporter in _snapshot_otlp_emitter.py,
+                        // and JS imports it from @opentelemetry/exporter-logs-otlp-http. Reading the variable
+                        // here would make .NET the only SDK where a generic distro-wide setting — set for
+                        // traces and metrics — silently redirects snapshots onto a transport the snapshot
+                        // consumer does not accept.
+                        //
+                        // Setting it explicitly is required regardless, because unlike those three we get the
+                        // protocol from an options object rather than from the exporter type, and the SDK's own
+                        // default is OTLP/gRPC. Measured with no protocol set, exporting to
+                        // http://127.0.0.1:PORT/v1/logs put "PRI * HTTP/2.0" (the HTTP/2 preface for gRPC) on
+                        // the wire against the HTTP endpoint the docs tell operators to configure, and every
+                        // snapshot was silently lost.
+                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
 
                         // Bound each export so a wedged endpoint can't block the drain thread and grow the
                         // queue unboundedly. 10s matches the OTLP/HTTP spec default.

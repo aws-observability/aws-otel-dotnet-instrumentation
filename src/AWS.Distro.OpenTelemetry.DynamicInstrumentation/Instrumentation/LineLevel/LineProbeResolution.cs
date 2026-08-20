@@ -16,6 +16,16 @@ internal sealed record LineProbeResolution(
     LineProbeLocation? Location = null,
     string? Detail = null)
 {
+    /// <summary>
+    /// Gets every probe applied for this configuration, one per captured local. Empty for a failure, and
+    /// for a resolution that has not been applied yet.
+    /// </summary>
+    // Multi-local capture applies N probes at one offset, each with its OWN id — and the woven callback
+    // carries nothing but that id, so the caller must register all of them to attribute a hit to a variable.
+    // `Location` remains the FIRST applied probe so single-local callers and existing tests are unaffected.
+    public IReadOnlyList<LineProbeProbeLocation> Locations { get; init; } =
+        Array.Empty<LineProbeProbeLocation>();
+
     /// <summary>Gets a value indicating whether the resolution succeeded.</summary>
     public bool IsResolved => this.Status == LineProbeResolutionStatus.Resolved && this.Location != null;
 
@@ -24,6 +34,14 @@ internal sealed record LineProbeResolution(
     /// <returns>A resolved outcome.</returns>
     public static LineProbeResolution Success(LineProbeLocation location) =>
         new(LineProbeResolutionStatus.Resolved, location);
+
+    /// <summary>Creates a successful resolution carrying every applied probe.</summary>
+    /// <param name="location">The first applied probe's location.</param>
+    /// <param name="locations">All applied probes, in emission order.</param>
+    /// <returns>A resolved outcome.</returns>
+    public static LineProbeResolution Success(
+        LineProbeLocation location, IReadOnlyList<LineProbeProbeLocation> locations) =>
+        new(LineProbeResolutionStatus.Resolved, location) { Locations = locations };
 
     /// <summary>Creates a failed resolution.</summary>
     /// <param name="status">The failure status.</param>

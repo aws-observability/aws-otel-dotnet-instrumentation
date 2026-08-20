@@ -15,15 +15,76 @@ public class DynamicInstrumentationManagerTests : IDisposable
     // with other global-state suites for the shared queue.
     public void Dispose() => DynamicInstrumentationManager.Instance.Shutdown();
 
-    private static DynamicInstrumentationConfig CreateConfig(bool enabled = true) =>
+    private static DynamicInstrumentationConfig CreateConfig(bool enabled = true, string apiUrl = "http://localhost:2000") =>
         new(
             Enabled: enabled,
-            ApiUrl: "http://localhost:2000",
+            ApiUrl: apiUrl,
             ProbePollIntervalSeconds: 600,
             BreakpointPollIntervalSeconds: 60,
             LogsEndpoint: "http://localhost:4317/v1/logs",
             ServiceName: "test-service",
             Environment: "test-env");
+
+    [Fact]
+    public void OnConfigurationsChanged_ConfigThatCouldNotBeApplied_IsNeverReportedReady()
+    {
+        // End-to-end through the REAL manager, with a real HTTP server standing in for the CloudWatch Agent,
+        // so the status wiring is exercised rather than mocked. This test environment has no native profiler
+        // and no such target type, so every apply comes back TypeNotLoaded — the manager deliberately reports
+        // no ERROR for that (it retries on a later poll), but it used to end the apply pass with a
+        // registry-driven READY. The backend was told a probe was instrumented and waiting when nothing had
+        // been woven at all.
+        var statusBodies = new List<string>();
+        using var server = StatusCapturingApiServer.Start(statusBodies);
+
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(apiUrl: server.Url));
+
+        var configs = new List<InstrumentationConfiguration>
+        {
+            // Positive control: an unsupported target (constructor) is refused up front and DOES report an
+            // ERROR. Its arrival proves statuses really reach this server, so the "no READY" assertion below
+            // is about READY being suppressed — not about a status channel that was silently broken.
+            new()
+            {
+                Type = InstrumentationType.PROBE,
+                CodeUnit = "MyApp",
+                ClassName = "OrderService",
+                MethodName = ".ctor",
+                LocationHash = "hash-unsupported",
+                Capture = CaptureConfiguration.Default,
+            },
+
+            // The subject: supported, so it is registered, but its type cannot be loaded here.
+            new()
+            {
+                Type = InstrumentationType.PROBE,
+                CodeUnit = "MyApp",
+                ClassName = "OrderService",
+                MethodName = "Process",
+                LocationHash = "hash-not-applied",
+                Capture = CaptureConfiguration.Default,
+            },
+        };
+
+        manager.OnConfigurationsChanged(configs);
+
+        // Status sends are asynchronous (handed to the reporter's worker), so wait for the control to land.
+        server.WaitForStatusContaining("UNSUPPORTED_TARGET", TimeSpan.FromSeconds(10))
+            .Should().BeTrue("the unsupported target must report an ERROR, which proves statuses reach the API");
+
+        // Grace period: a READY, if one were produced, would follow the ERROR immediately.
+        Thread.Sleep(500);
+
+        var allStatuses = string.Join("\n", statusBodies);
+        allStatuses.Should().NotContain(
+            "READY",
+            "a config whose apply returned TypeNotLoaded was never instrumented, so it must not be reported READY");
+        allStatuses.Should().NotContain("hash-not-applied", "an unapplied config has no status to report yet");
+
+        manager.Shutdown();
+    }
 
     [Fact]
     public void Instance_ReturnsSameSingleton()
@@ -251,6 +312,122 @@ public class DynamicInstrumentationManagerTests : IDisposable
         // Whichever thread wrote last, the registry must hold exactly that thread's set (40 configs) —
         // never a torn mix or a diverged count. RemoveStale drops the other thread's keys.
         manager.Registry!.Count.Should().Be(40);
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void OnConfigurationsChanged_RegistersLineLevelConfigs()
+    {
+        // REGRESSION FOR THE REJECT SITES. Line-level configs used to be dropped by IsSupported before ever
+        // reaching the registry — which is what made the entire (built, tested) line-level stack inert in
+        // production. A line config must now get a key, a HitState, and an apply attempt.
+        //
+        // Applying cannot SUCCEED here: resolution needs a loaded target type and a readable PDB for
+        // "MyApp.OrderService", which does not exist in the test process. That is the point — this asserts
+        // the config is routed and registered, not that a probe wove. The apply failure is permanent
+        // (TypeNotLoaded is the retryable one), so registration is what is observable.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig());
+
+        var configs = new List<InstrumentationConfiguration>
+        {
+            new()
+            {
+                Type = InstrumentationType.BREAKPOINT,
+                CodeUnit = "MyApp",
+                ClassName = "OrderService",
+                MethodName = "Process",
+                LineNumber = 42,
+                LocationHash = "line-hash",
+                Capture = CaptureConfiguration.Default
+            }
+        };
+
+        manager.OnConfigurationsChanged(configs);
+
+        manager.Registry.Should().NotBeNull();
+        manager.Registry!.Count.Should().Be(1);
+
+        // Keyed WITH the line number, so two probes on different lines of one method stay distinct.
+        manager.Registry.Get("MyApp.OrderService.Process:42").Should().NotBeNull();
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void OnConfigurationsChanged_LineAndMethodLevelOnSameMethod_Coexist()
+    {
+        // A line probe and a method probe on the SAME method must not collide: InstrumentationKey appends
+        // ":line" for line-level, so both occupy the registry simultaneously. If the keys collided, adding a
+        // line probe would silently displace the function-level capture already running on that method.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig());
+
+        var configs = new List<InstrumentationConfiguration>
+        {
+            new()
+            {
+                Type = InstrumentationType.PROBE,
+                CodeUnit = "MyApp",
+                ClassName = "OrderService",
+                MethodName = "Process",
+                LocationHash = "method-hash",
+                Capture = CaptureConfiguration.Default
+            },
+            new()
+            {
+                Type = InstrumentationType.BREAKPOINT,
+                CodeUnit = "MyApp",
+                ClassName = "OrderService",
+                MethodName = "Process",
+                LineNumber = 42,
+                LocationHash = "line-hash",
+                Capture = CaptureConfiguration.Default
+            }
+        };
+
+        manager.OnConfigurationsChanged(configs);
+
+        manager.Registry!.Count.Should().Be(2);
+        manager.Registry.Get("MyApp.OrderService.Process").Should().NotBeNull();
+        manager.Registry.Get("MyApp.OrderService.Process:42").Should().NotBeNull();
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void OnConfigurationsChanged_RemovesStaleLineLevelConfigs()
+    {
+        // Line-level removal goes through the sink's Unregister plus a best-effort native RemoveLineProbe.
+        // The registry drop is what actually stops captures (the IL cannot be un-rewritten), so that is what
+        // is asserted.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig());
+
+        var lineConfig = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = "MyApp",
+            ClassName = "OrderService",
+            MethodName = "Process",
+            LineNumber = 42,
+            LocationHash = "line-hash",
+            Capture = CaptureConfiguration.Default
+        };
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { lineConfig });
+        manager.Registry!.Count.Should().Be(1);
+
+        var act = () => manager.OnConfigurationsChanged(new List<InstrumentationConfiguration>());
+
+        // Must not throw even though no native profiler is present — RemoveLineProbe is best-effort.
+        act.Should().NotThrow();
+        manager.Registry.Count.Should().Be(0);
+        manager.Registry.Get("MyApp.OrderService.Process:42").Should().BeNull();
 
         manager.Shutdown();
     }

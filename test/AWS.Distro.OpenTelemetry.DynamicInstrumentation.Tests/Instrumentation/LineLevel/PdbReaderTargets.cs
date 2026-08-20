@@ -80,6 +80,173 @@ internal static class PdbReaderTargets
         return outer;
     }
 
+    /// <summary>
+    /// Declares locals of several type families so resolution can be asserted to report the right declared
+    /// type and value-ness per slot.
+    /// </summary>
+    /// <param name="x">Seed value.</param>
+    /// <returns>A string built from every local.</returns>
+    // Type resolution decides whether the native side emits a `box` and against WHICH token. Reference
+    // types must get no box at all; value types must get their own. So the fixture needs at least one of
+    // each, plus a non-Int32 value type — otherwise a resolver that always answered "System.Int32,
+    // isValueType=true" would pass.
+    public static string MixedLocalTypes(int x)
+    {
+        int number = x + 1; // @marker:mixedNumber
+        string text = $"v{number}"; // @marker:mixedText
+        double ratio = number * 1.5; // @marker:mixedRatio
+        DateTime stamp = new DateTime(2026, 1, 1).AddDays(number); // @marker:mixedStamp
+        object boxed = text; // @marker:mixedBoxed
+        int[] items = new[] { number }; // @marker:mixedItems
+        return $"{number}{text}{ratio}{stamp:O}{boxed}{items.Length}";
+    }
+
+    /// <summary>
+    /// Declares a by-ref local, which cannot be boxed and therefore cannot be captured.
+    /// </summary>
+    /// <param name="value">A value to alias.</param>
+    /// <returns>The aliased value.</returns>
+    // `box` on a managed pointer is invalid IL — the verifier would reject the ENTIRE rewritten method
+    // body, taking the customer's method down rather than merely losing a snapshot. So this must be
+    // refused during resolution, before anything is emitted.
+    public static int HasByRefLocal(int value)
+    {
+        ref int alias = ref value;
+        alias = alias + 1; // @marker:byRefAssigned
+        return alias;
+    }
+
+    /// <summary>
+    /// Declares value-type locals that live OUTSIDE corlib or need more than a name to denote, which the
+    /// native rewriter cannot express as a box token.
+    /// </summary>
+    /// <param name="seed">Seed value.</param>
+    /// <returns>A label built from the locals.</returns>
+    // The native side names a box token with DefineTypeRefByName against the CORLIB AssemblyRef, and that API
+    // validates nothing — it appends a TypeRef row for any name. So a customer enum emitted
+    // `box [corlib]...+Severity` and the JIT killed the customer's method with TypeLoadException when it
+    // compiled the rewritten body. Each local here is one shape that has to be refused during resolution:
+    // a customer enum, a customer struct, and a generic value type (Nullable<int>, which needs a TypeSpec).
+    public static string UncapturableValueTypes(int seed)
+    {
+        Severity level = seed > 0 ? Severity.High : Severity.Low; // @marker:enumLocal
+        Point point = new Point(seed, seed + 1); // @marker:structLocal
+        int? maybe = seed > 0 ? seed : null; // @marker:nullableLocal
+        long plain = seed + 3L; // @marker:corlibLocal
+        return $"{level}{point.X}{maybe}{plain}";
+    }
+
+    /// <summary>
+    /// An async method whose captured local crosses an <c>await</c>, so the compiler hoists it into a field
+    /// of the generated state machine.
+    /// </summary>
+    /// <param name="quantity">Seed value.</param>
+    /// <returns>A label built from the hoisted local.</returns>
+    // The lines an operator names in an async method DO NOT EXIST in this method's body — it compiles to a
+    // state-machine launcher. They exist in `<ReserveAsync>d__N.MoveNext()`, and `total` is not a local there
+    // but a field `<total>5__N`, so `ldloc` cannot reach it. Both facts have to hold for resolution to be
+    // right, and neither is visible from the source.
+    public static async Task<string> ReserveAsync(int quantity)
+    {
+        var unitCost = 7; // @marker:asyncUnitCost
+        var total = quantity * unitCost; // @marker:asyncTotalAssigned
+        await Task.Yield();
+        var label = $"reserved:{total}"; // @marker:asyncAfterAwait
+        return label;
+    }
+
+    /// <summary>
+    /// An async method hoisting locals of three different type families, so a hardcoded box token cannot pass.
+    /// </summary>
+    /// <param name="id">Seed value.</param>
+    /// <returns>A summary of every hoisted local.</returns>
+    public static async Task<string> MixedAsync(int id)
+    {
+        var note = $"item-{id}";
+        var stamp = new DateTime(2026, 1, 1).AddDays(id);
+        var ratio = id * 1.5; // @marker:asyncMixedRatioAssigned
+        await Task.Yield();
+        var summary = $"{note}/{stamp:yyyy-MM-dd}/{ratio}"; // @marker:asyncMixedAfterAwait
+        return summary;
+    }
+
+    /// <summary>
+    /// An async method declaring TWO locals that share a source name but differ in type, in disjoint scopes.
+    /// </summary>
+    /// <param name="seed">Seed value.</param>
+    /// <returns>Both values concatenated.</returns>
+    // THE AMBIGUITY CASE. Measured on net8.0, this produces two hoisted fields — `<y>5__3` (Int32) and
+    // `<y>5__4` (String) in Release — so choosing by NAME alone picks a variable at random, of the wrong
+    // type, and boxes it against the wrong token. Only the StateMachineHoistedLocalScopes IL ranges tell the
+    // two apart, which is what these markers let the tests assert per-scope.
+    // Each block has a statement AFTER the probed one, deliberately: R-A reads the local at the NEXT
+    // statement boundary, so a marker on a block's LAST statement would put the read past the block's scope.
+    // The end-of-scope case is covered separately by EndOfScopeAsync, where it is the point of the test.
+    public static async Task<string> SameNameDifferentTypesAsync(int seed)
+    {
+        string acc = string.Empty;
+        {
+            var y = seed + 1;
+            await Task.Yield();
+            acc += y; // @marker:asyncFirstY
+            acc += "|";
+        }
+
+        {
+            var y = $"s{seed}";
+            await Task.Yield();
+            acc += y; // @marker:asyncSecondY
+            acc += "|";
+        }
+
+        return acc;
+    }
+
+    /// <summary>
+    /// An async method where the probed local goes out of scope at the very next statement boundary.
+    /// </summary>
+    /// <param name="seed">Seed value.</param>
+    /// <returns>The accumulated string.</returns>
+    // THE SUBSTITUTION HAZARD. `inner` is the last statement of its block, so R-A's next boundary lies in the
+    // FOLLOWING block, where a different variable of the same name is live. Resolution must refuse rather
+    // than read that one — the operator asked about the first `inner`, and answering with the second is a
+    // wrong value that looks entirely plausible.
+    public static async Task<string> EndOfScopeAsync(int seed)
+    {
+        var acc = string.Empty;
+        {
+            var inner = seed + 1;
+            await Task.Yield();
+            acc += inner; // @marker:asyncEndOfScope
+        }
+
+        {
+            var inner = $"s{seed}";
+            await Task.Yield();
+            acc += inner;
+        }
+
+        return acc;
+    }
+
+    /// <summary>
+    /// An iterator block, which compiles to a state machine exactly as an async method does.
+    /// </summary>
+    /// <param name="count">How many values to yield.</param>
+    /// <returns>A sequence of running totals.</returns>
+    // Iterators carry IteratorStateMachineAttribute rather than AsyncStateMachineAttribute. Both derive from
+    // StateMachineAttribute, which is what resolution keys on — so this asserts the shared path really is
+    // shared, rather than async-only.
+    public static IEnumerable<int> CountUp(int count)
+    {
+        var running = 0;
+        for (int i = 0; i < count; i++)
+        {
+            running += i; // @marker:iteratorAccumulate
+            yield return running; // @marker:iteratorYield
+        }
+    }
+
     private static Dictionary<string, int> LoadMarkers([CallerFilePath] string? path = null)
     {
         if (path == null || !File.Exists(path))
@@ -114,4 +281,22 @@ internal static class PdbReaderTargets
 
         return markers;
     }
+
+    /// <summary>A customer-defined enum: a value type that is NOT in corlib.</summary>
+    // Nested here so the fixture stays one file; its FullName therefore also carries a '+', which is a
+    // second reason a corlib TypeRef-by-name cannot denote it. A top-level customer enum fails on the
+    // assembly alone, which IsNameableThroughCorlib checks first.
+    internal enum Severity
+    {
+        /// <summary>Low.</summary>
+        Low = 0,
+
+        /// <summary>High.</summary>
+        High = 1,
+    }
+
+    /// <summary>A customer-defined struct: a value type that is NOT in corlib.</summary>
+    /// <param name="X">First component.</param>
+    /// <param name="Y">Second component.</param>
+    internal readonly record struct Point(int X, int Y);
 }

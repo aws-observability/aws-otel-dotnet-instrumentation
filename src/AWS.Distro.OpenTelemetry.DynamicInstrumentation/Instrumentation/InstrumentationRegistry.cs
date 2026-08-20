@@ -25,6 +25,21 @@ internal sealed class InstrumentationRegistry
     // type, not from the config. Same-arity methods on one type still collide — the documented residual.
     private readonly ConcurrentDictionary<(string Type, int Arity), ConcurrentDictionary<string, byte>> keysByTypeAndArity = new();
 
+    // Types that have EVER had arities indexed, i.e. types the profiler has actually woven. A TOMBSTONE set:
+    // entries are never removed, deliberately.
+    //
+    // WHY IT EXISTS. Removal drops a config from every index but cannot un-weave the IL, so the removed
+    // method's callback keeps firing forever. Resolution is `byTypeAndArity ?? byType`, and once removal takes
+    // the type down to exactly ONE remaining config, the type-only fallback starts calling itself
+    // "unambiguous" again — so the DELETED method's next call attributes to the SURVIVOR's LocationHash and
+    // capture policy. Reproduced by test: a snapshot from the deleted method landed on the surviving probe.
+    //
+    // WHY IT IS NEVER CLEARED. The woven IL outlives the configuration with no expiry, so the fact that a type
+    // was once woven stays true for the life of the process. Keeping the entry after the last config for a
+    // type is removed costs one string per instrumented type and closes the same hole for the
+    // remove-everything-then-re-add case.
+    private readonly ConcurrentDictionary<string, byte> arityIndexedTypes = new();
+
     public int Count => this.configs.Count;
 
     /// <summary>
@@ -86,6 +101,13 @@ internal sealed class InstrumentationRegistry
     public IReadOnlyCollection<string> IndexArities(string typeName, string key, IReadOnlyCollection<int> arities)
     {
         var collidingKeys = new HashSet<string>();
+
+        // Mark the type as woven BEFORE indexing any arity. From here on, resolution for this type must be
+        // exact (type, arity) — see HasArityIndex and arityIndexedTypes. Recorded even when `arities` is
+        // empty: the profiler was still asked to weave this type, and it is the weaving, not the arity list,
+        // that makes the type-only fallback unsafe.
+        this.arityIndexedTypes[typeName] = 0;
+
         foreach (var arity in arities)
         {
             var bucket = this.keysByTypeAndArity.GetOrAdd((typeName, arity), _ => new ConcurrentDictionary<string, byte>());
@@ -127,14 +149,28 @@ internal sealed class InstrumentationRegistry
     }
 
     /// <summary>
+    /// Whether the profiler has ever woven this type, i.e. arities were indexed for it at Apply time.
+    /// </summary>
+    /// <param name="typeName">Fully-qualified type name from the woven call.</param>
+    /// <returns>True when resolution for this type must be exact (type, arity).</returns>
+    // The guard that makes the type-only fallback safe. Once a type is woven, a call arriving with an arity
+    // that is NOT in the index means the config for THAT method is gone — so the only correct answer is
+    // "capture nothing". Falling back to type-only there is what misattributed a deleted method's captures to
+    // a surviving probe on the same type.
+    public bool HasArityIndex(string typeName) => this.arityIndexedTypes.ContainsKey(typeName);
+
+    /// <summary>
     /// Resolves the instrumentation key for a woven call by its declaring type name alone, when that is
     /// unambiguous — i.e. exactly one config targets the type. Returns null if no config targets the type,
     /// OR if two-or-more do (a type-only match would have to guess which, and guessing wrong misattributes
     /// the capture to the wrong probe — worse than dropping it; see #3).
     /// </summary>
+    /// <param name="typeName">Fully-qualified type name from the woven call.</param>
+    /// <returns>The single instrumentation key targeting the type, or null when it is not unambiguous.</returns>
     // Type-only fallback for the arity path: used when the arity index has no entry for a call — e.g. a
     // capture that fires in the window after Register but before the Apply-time IndexArities call, or a
-    // registry populated without applying (unit tests). TryResolveKeyByTypeAndArity is the precise path.
+    // registry populated without applying (unit tests). TryResolveKeyByTypeAndArity is the precise path, and
+    // this fallback is refused outright for a type that has been woven (see HasArityIndex).
     public string? TryResolveKeyByType(string typeName)
     {
         if (this.keysByType.TryGetValue(typeName, out var keys) && keys.Count == 1)

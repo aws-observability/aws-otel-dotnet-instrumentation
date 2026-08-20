@@ -8,6 +8,8 @@
 #include "line_probe.h"
 
 #include <algorithm> // std::remove_if (N2 removal)
+#include <map>       // std::map (per-method box-token memoization). Compiles without it here only through
+                     // a transitive include; naming it keeps the MSVC and libstdc++ legs honest.
 #include "clr_helpers.h"
 #include "cor_profiler.h"
 #include "il_rewriter.h"
@@ -64,8 +66,12 @@ LineProbeRejitHandlerModuleMethod::LineProbeRejitHandlerModuleMethod(mdMethodDef
 
 void LineProbeRejitHandlerModuleMethod::AddLineProbeRequest(const LineProbeRequest& request)
 {
+    std::lock_guard<std::mutex> guard(m_requestsLock);
+
     // Dedup by (offset, probeId): repeat config polls re-submit the same probe, and we must not weave
-    // it twice into one body. A distinct offset OR distinct probeId is a genuinely new probe.
+    // it twice into one body. A distinct offset OR distinct probeId is a genuinely new probe. The scan and
+    // the push_back must be ONE critical section, or two polls carrying the same probe can both find it
+    // absent and both append it.
     for (const auto& existing : m_requests)
     {
         if (existing.il_offset == request.il_offset && existing.probe_id == request.probe_id)
@@ -77,13 +83,22 @@ void LineProbeRejitHandlerModuleMethod::AddLineProbeRequest(const LineProbeReque
     m_requests.push_back(request);
 }
 
-const std::vector<LineProbeRequest>& LineProbeRejitHandlerModuleMethod::GetLineProbeRequests() const
+std::vector<LineProbeRequest> LineProbeRejitHandlerModuleMethod::GetLineProbeRequests() const
 {
+    std::lock_guard<std::mutex> guard(m_requestsLock);
     return m_requests;
+}
+
+size_t LineProbeRejitHandlerModuleMethod::RequestCount() const
+{
+    std::lock_guard<std::mutex> guard(m_requestsLock);
+    return m_requests.size();
 }
 
 size_t LineProbeRejitHandlerModuleMethod::RemoveLineProbeRequest(int probeId)
 {
+    std::lock_guard<std::mutex> guard(m_requestsLock);
+
     // LineProbeRequest is not move/copy-assignable (MethodReference has const fields), so std::remove_if
     // won't work. Rebuild the vector keeping non-matching probes (push_back uses the copy CTOR, which IS
     // available). Fine for the small per-method probe counts we expect.
@@ -97,8 +112,9 @@ size_t LineProbeRejitHandlerModuleMethod::RemoveLineProbeRequest(int probeId)
         }
     }
 
-    m_requests = std::move(kept);
-    return m_requests.size();
+    const size_t removed = m_requests.size() - kept.size();
+    m_requests           = std::move(kept);
+    return removed;
 }
 
 MethodRewriter* LineProbeRejitHandlerModuleMethod::GetMethodRewriter()
@@ -113,8 +129,12 @@ MethodRewriter* LineProbeRejitHandlerModuleMethod::GetMethodRewriter()
 
 HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, RejitHandlerModuleMethod* methodHandler)
 {
-    auto        lineMethodHandler = static_cast<LineProbeRejitHandlerModuleMethod*>(methodHandler);
-    const auto& requests          = lineMethodHandler->GetLineProbeRequests();
+    auto lineMethodHandler = static_cast<LineProbeRejitHandlerModuleMethod*>(methodHandler);
+
+    // BY VALUE. The managed side can add or remove probes on another thread while this rewrite is in
+    // flight, so iterating the handler's live vector would be a use-after-free. This snapshot is the set
+    // that gets woven; a probe added a moment later arrives with its own ReJIT.
+    const auto requests = lineMethodHandler->GetLineProbeRequests();
     if (requests.empty())
     {
         Logger::Warn("LineProbeMethodRewriter::Rewrite: no LineProbeRequests.");
@@ -148,6 +168,98 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     bool      int32BoxFailed     = false;
     HRESULT   hr                 = S_OK;
 
+    // Box tokens are resolved PER TYPE NAME and memoized for this method, because several probes in one
+    // body may capture locals of different types. The empty name means System.Int32 (the historical
+    // behavior every pre-existing harness relies on).
+    std::map<WSTRING, mdTypeRef> boxTokenCache;
+
+    // True only for a name that a corlib-scoped TypeRef can actually DENOTE.
+    //
+    // WHY A CHECK IS NEEDED AT ALL. DefineTypeRefByName resolves nothing — it appends a TypeRef row for
+    // whatever name it is handed, which is exactly why this file uses it as the fallback when FindTypeRef
+    // reports "record not found" below. So it cannot report a bad name by failing. Without this test, a
+    // customer's enum local (`MyApp.Color`: IsValueType, so it needs a box) emitted
+    // `box [System.Private.CoreLib]MyApp.Color`; the JIT resolves a box operand when it compiles the method,
+    // so the CUSTOMER'S METHOD died with TypeLoadException for every caller — strictly worse than the
+    // wrong-value bug the typed-box work replaced. Nullable<int> (a TypeSpec, not a TypeRef-by-name) and a
+    // value type nested in another type fail the same way.
+    //
+    // THIS IS THE LAST LINE OF DEFENSE, NOT THE ONLY ONE. PdbReader.IsNameableThroughCorlib is the
+    // authoritative check: it tests real assembly identity, IsGenericType and IsNested, and refuses the probe
+    // with a reason the operator can see. This one exists because AddLineProbes is an exported ABI that must
+    // not corrupt a method body for a caller that is not LineProbeTranslator. A name cannot prove assembly
+    // identity, so it is deliberately conservative and rejects anything it cannot vouch for.
+    auto isCorlibNameableType = [](const WSTRING& name) -> bool {
+        // compare() clamps to the string's length, so a name shorter than "System." is simply unequal.
+        if (name.compare(0, 7, WStr("System.")) != 0)
+        {
+            return false;
+        }
+
+        if (name.find_first_of(WStr("`[]+*&,")) != WSTRING::npos)
+        {
+            return false;
+        }
+
+        // Exactly ONE dot, i.e. `System.<Name>`. A deeper namespace is the tell that the type is not in
+        // corlib at all: System.Numerics.BigInteger, System.Numerics.Vector3, System.Drawing.Point and
+        // System.Data.SqlTypes.SqlInt32 are all plain, non-generic, non-nested value types that pass a bare
+        // `System.` prefix test and live in OTHER assemblies — so each would still produce a corlib TypeRef
+        // the JIT cannot resolve. Every value type this path is meant to serve (Int32, Int64, Double,
+        // Decimal, DateTime, DateTimeOffset, TimeSpan, Guid, Boolean, Char) is a single segment.
+        return name.find(WStr("."), 7) == WSTRING::npos;
+    };
+
+    // Resolves a corlib TypeRef for `typeName` to use as a `box` token. Only corlib types are resolvable
+    // this way: DefineTypeRefByName against the corlib AssemblyRef cannot name a type that lives in the
+    // customer's own assembly or a third-party one. That is a real limitation, and it is why the caller
+    // treats a failure as "skip this probe" rather than "emit something and hope".
+    auto resolveBoxToken = [&](const WSTRING& typeName, mdTypeRef* out) -> bool {
+        const WSTRING& effective = typeName.empty() ? WStr("System.Int32") : typeName;
+
+        auto cached = boxTokenCache.find(effective);
+        if (cached != boxTokenCache.end())
+        {
+            *out = cached->second;
+            return cached->second != mdTypeRefNil;
+        }
+
+        if (!isCorlibNameableType(effective))
+        {
+            Logger::Warn("*** LineProbe_Rewrite(): box type '", effective,
+                         "' cannot be named through the corlib AssemblyRef (not a plain System.* type). "
+                         "Refusing to emit a box against an unresolvable TypeRef.");
+            boxTokenCache[effective] = mdTypeRefNil;
+            *out                     = mdTypeRefNil;
+            return false;
+        }
+
+        mdAssemblyRef corlibRef = mdAssemblyRefNil;
+        HRESULT       hrBox = GetCorLibAssemblyRef(module_metadata.assembly_emit,
+                                                   *module_metadata.corAssemblyProperty, &corlibRef);
+        if (FAILED(hrBox))
+        {
+            Logger::Warn("*** LineProbe_Rewrite(): GetCorLibAssemblyRef failed for box token.");
+            boxTokenCache[effective] = mdTypeRefNil;
+            *out                     = mdTypeRefNil;
+            return false;
+        }
+
+        mdTypeRef resolved = mdTypeRefNil;
+        hrBox              = metaEmit->DefineTypeRefByName(corlibRef, effective.c_str(), &resolved);
+        if (FAILED(hrBox))
+        {
+            Logger::Warn("*** LineProbe_Rewrite(): DefineTypeRefByName failed for box type ", effective);
+            boxTokenCache[effective] = mdTypeRefNil;
+            *out                     = mdTypeRefNil;
+            return false;
+        }
+
+        boxTokenCache[effective] = resolved;
+        *out                     = resolved;
+        return true;
+    };
+
     auto resolveInt32Box = [&]() -> bool {
         if (int32BoxResolved)
         {
@@ -158,20 +270,8 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
             return false;
         }
 
-        mdAssemblyRef corlibRef = mdAssemblyRefNil;
-        HRESULT       hrBox = GetCorLibAssemblyRef(module_metadata.assembly_emit,
-                                                   *module_metadata.corAssemblyProperty, &corlibRef);
-        if (FAILED(hrBox))
+        if (!resolveBoxToken(WStr("System.Int32"), &systemInt32TypeRef))
         {
-            Logger::Warn("*** LineProbe_Rewrite(): GetCorLibAssemblyRef failed for box token.");
-            int32BoxFailed = true;
-            return false;
-        }
-
-        hrBox = metaEmit->DefineTypeRefByName(corlibRef, WStr("System.Int32"), &systemInt32TypeRef);
-        if (FAILED(hrBox))
-        {
-            Logger::Warn("*** LineProbe_Rewrite(): DefineTypeRefByName System.Int32 failed for box token.");
             int32BoxFailed = true;
             return false;
         }
@@ -244,21 +344,79 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     const bool isAsyncHoistedCapture = (request->hoisted_field_token != mdTokenNil);
 
     // BOX-GATE (DECISION A): two box-emitting modes with a `Capture(int32, object)` callback.
-    const bool isGatedBox   = (request->emission_mode == LINE_EMIT_GATED_BOX);
-    const bool isUngatedBox = (request->emission_mode == LINE_EMIT_UNGATED_BOX);
+    // GUARDED AGAINST A HOISTED TOKEN FOR THE SAME REASON isLocalCapture IS, AND THE BUG HERE WAS WORSE.
+    // The emission chain below tests isGatedBox/isUngatedBox BEFORE the async case, while token resolution
+    // tests the async case first. So a request carrying BOTH a box-gate mode and a hoisted token resolved down
+    // the async branch — leaving systemInt32TypeRef at mdTypeRefNil (0x01000000: a TypeRef with RID 0) — and
+    // then emitted `box <nil>` from the gate branch, which is the invalid-token crash described above. Before
+    // the typed-box work, systemInt32TypeRef was resolved for EVERY path that emits a box, so this could not
+    // happen; making the flags mutually exclusive restores that invariant no matter what the managed side
+    // sends. Such a request is contradictory anyway: a hoisted field is a real variable, not the constant a
+    // gate path materializes, so the async emission is the meaningful reading of it.
+    const bool isGatedBox   = (request->emission_mode == LINE_EMIT_GATED_BOX) && !isAsyncHoistedCapture;
+    const bool isUngatedBox = (request->emission_mode == LINE_EMIT_UNGATED_BOX) && !isAsyncHoistedCapture;
     const bool isBoxGate    = isGatedBox || isUngatedBox;
 
     // G1: sync local capture — `ldc.i4 probeId; ldloc <slot>; box; call CaptureLocal(int32,object)`.
-    const bool isLocalCapture = (request->emission_mode == LINE_EMIT_LOCAL_CAPTURE);
+    //
+    // MUTUALLY EXCLUSIVE WITH THE ASYNC PATH BY CONSTRUCTION. The emission chain below tests isLocalCapture
+    // BEFORE isAsyncHoistedCapture, so a request carrying BOTH a LOCAL_CAPTURE mode and a hoisted token would
+    // silently emit `ldloc <slot>` on a state machine whose variable lives in a FIELD — reading an unrelated
+    // slot and boxing it. The managed side sends Legacy + token for async, but this makes the invariant hold
+    // regardless of what the managed side sends.
+    const bool isLocalCapture = (request->emission_mode == LINE_EMIT_LOCAL_CAPTURE) && !isAsyncHoistedCapture;
 
-    // These three groups need a two-arg `(int32, object)` callback and a System.Int32 box token.
-    const bool needsTwoArgCallback = isAsyncHoistedCapture || isBoxGate || isLocalCapture;
-    const bool needsInt32Box       = needsTwoArgCallback;
-
-    if (needsInt32Box && !resolveInt32Box())
+    // box_value doubles as the local slot index for a LOCAL_CAPTURE probe, and it is a SIGNED INT32 on the
+    // ABI. A negative value casts to a huge unsigned, falls past LoadLocal's <=3 and <=255 forms, and is
+    // TRUNCATED into the 16-bit operand of `ldloc` — reading an arbitrary slot in the customer's frame and
+    // boxing whatever it holds against the intended type's token. LineProbeTranslator clamps this today, so
+    // this guards the exported ABI rather than the current caller.
+    if (isLocalCapture && (request->box_value < 0 || request->box_value > 0xFFFF))
     {
-        Logger::Warn("*** LineProbe_Rewrite(): no box token available. Skipping probeId=", request->probe_id);
+        Logger::Warn("*** LineProbe_Rewrite(): local slot ", request->box_value,
+                     " is out of range for probeId=", request->probe_id, ". Skipping.");
         continue;
+    }
+
+    // These three groups need a two-arg `(int32, object)` callback.
+    const bool needsTwoArgCallback = isAsyncHoistedCapture || isBoxGate || isLocalCapture;
+
+    // NON-INT LOCAL CAPTURE. Which box token (if any) this probe needs:
+    //  - LOCAL_CAPTURE or ASYNC_HOISTED of a REFERENCE type -> NO box at all. The slot/field already holds
+    //    an object reference; `box` on one is invalid IL and the verifier would reject the rewritten body.
+    //  - LOCAL_CAPTURE or ASYNC_HOISTED of a VALUE type     -> box against THAT type's token, not Int32.
+    //  - the box-gate spike paths                           -> System.Int32 (they materialize a constant).
+    //
+    // The async path is typed EXACTLY like the sync one because a hoisted field is just a relocated local:
+    // `<note>5__2` is a System.String and `<stamp>5__3` a System.DateTime. Boxing either against a
+    // hardcoded System.Int32 is undefined behavior in the CUSTOMER'S method, not a lost snapshot — the
+    // sync path proved this by crashing with `TypeLoadException: Could not load type 'Invalid_Token...'`.
+    mdTypeRef boxTypeRef = mdTypeRefNil;
+    bool      needsBox   = needsTwoArgCallback;
+
+    if (isLocalCapture || isAsyncHoistedCapture)
+    {
+        needsBox = request->local_is_value_type;
+        if (needsBox && !resolveBoxToken(request->local_type_name, &boxTypeRef))
+        {
+            // Unresolvable box type — e.g. a value type declared in the customer's own assembly, which
+            // cannot be named through the corlib AssemblyRef. Skip THIS probe rather than emit a `box`
+            // against a wrong or nil token: a bad box corrupts the method body, while a skipped probe just
+            // captures nothing.
+            Logger::Warn("*** LineProbe_Rewrite(): cannot resolve box token for local type '",
+                         request->local_type_name, "'. Skipping probeId=", request->probe_id);
+            continue;
+        }
+    }
+    else if (needsBox)
+    {
+        if (!resolveInt32Box())
+        {
+            Logger::Warn("*** LineProbe_Rewrite(): no box token available. Skipping probeId=", request->probe_id);
+            continue;
+        }
+
+        boxTypeRef = systemInt32TypeRef;
     }
 
     // Build THIS probe's callback MemberRef signature.
@@ -404,23 +562,42 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         //   call   CaptureLocal(int32, object)
         reWriterWrapper.LoadInt32(request->probe_id);
         reWriterWrapper.LoadLocal(static_cast<unsigned>(request->box_value));
-        reWriterWrapper.Box(systemInt32TypeRef);
+
+        // Box ONLY a value type. A reference-type local is already an object reference, so `ldloc` alone
+        // satisfies the callback's `object` parameter — emitting `box` there would be invalid IL.
+        if (request->local_is_value_type)
+        {
+            reWriterWrapper.Box(boxTypeRef);
+        }
+
         reWriterWrapper.CallMember(callbackMemberRef, /* is_virtual */ false);
     }
     else if (isAsyncHoistedCapture)
     {
-        // ASYNC SPIKE core emission (mirrors Datadog's AsyncLineDebuggerInvoker reading hoisted
-        // locals off the state machine). At a mid-MoveNext offset:
+        // ASYNC / ITERATOR emission (mirrors Datadog's AsyncLineDebuggerInvoker reading hoisted locals off
+        // the state machine). At a mid-MoveNext offset:
         //   ldc.i4 <probeId>          ; arg0 = probeId
         //   ldarg.0                   ; `this` == the state-machine instance
-        //   ldfld  <hoistedFieldTok>  ; read the hoisted local (this.<y>5__1)
-        //   box    System.Int32       ; value-type local -> object
+        //   ldfld  <hoistedFieldTok>  ; read the hoisted local (this.<total>5__2)
+        //   box    <the field's type> ; ONLY for a value type
         //   call   CaptureLocal(int32, object)
+        //
+        // `ldarg.0` is correct for BOTH state-machine shapes: MEASURED on net8.0, Roslyn emits a STRUCT
+        // state machine in Release and a CLASS in Debug. For the struct, arg 0 is a managed pointer
+        // (`&this`), and `ldfld` accepts a managed pointer as well as an object reference — so no
+        // `ldobj`/`ldflda` variation is needed between configurations.
         reWriterWrapper.LoadInt32(request->probe_id);
         reWriterWrapper.LoadArgument(0); // ldarg.0 -> the state machine `this`
         ILInstr* ldfld = reWriterWrapper.CreateInstr(CEE_LDFLD);
         ldfld->m_Arg32 = request->hoisted_field_token;
-        reWriterWrapper.Box(systemInt32TypeRef);
+
+        // Box ONLY a value-type field, and against its OWN token — same rule and same reason as the sync
+        // local path above. A reference-type field is already an object reference.
+        if (request->local_is_value_type)
+        {
+            reWriterWrapper.Box(boxTypeRef);
+        }
+
         reWriterWrapper.CallMember(callbackMemberRef, /* is_virtual */ false);
     }
     else

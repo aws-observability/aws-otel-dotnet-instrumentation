@@ -13,6 +13,7 @@
 #define OTEL_CLR_PROFILER_LINE_PROBE_H_
 
 #include <corhlpr.h>
+#include <mutex>
 #include <vector>
 
 #include "integration.h"
@@ -75,6 +76,17 @@ typedef struct _LineProbeDefinition
     INT32   emissionMode; // LineProbeEmissionMode
     INT32   boxValue;     // the constant int the gated/ungated box path materializes as object
     WCHAR*  gateMethod;   // GATED mode: the `bool ShouldCapture(int32)` method name on callbackType
+    // NON-INT LOCAL CAPTURE. The declared type of the local being read, as a full name
+    // (e.g. "System.String", "System.DateTime"), resolved managed-side from the method body's local
+    // signature. Needed because `box` requires the local's OWN type token: boxing an int-typed token over
+    // a DateTime slot is undefined behavior, not a clean failure. NULL keeps the historical
+    // System.Int32 behavior so the pre-existing harnesses are unaffected.
+    WCHAR*  localTypeName;
+    // Whether the local is a VALUE type. Reference-type locals must NOT be boxed at all — `box` on an
+    // object reference is invalid IL and the verifier rejects the whole rewritten body — so this is a
+    // separate flag rather than something inferred from the name (the native side cannot resolve a name to
+    // a type's value-ness without loading it).
+    INT32   localIsValueType;
 } LineProbeDefinition;
 
 // Internal (non-marshaled) representation of one line probe, analogous to IntegrationDefinition.
@@ -90,16 +102,23 @@ struct LineProbeRequest
     INT32           emission_mode;   // BOX-GATE SPIKE (DECISION A): LineProbeEmissionMode
     INT32           box_value;       // constant int materialized as object on the box path
     WSTRING         gate_method;     // GATED: `bool ShouldCapture(int32)` name on callback_type
+    // NON-INT LOCAL CAPTURE: declared type of the captured local, and whether it is a value type.
+    // Empty local_type_name => historical System.Int32 behavior. local_is_value_type == FALSE suppresses
+    // the `box` entirely (a reference-type local is already an object reference).
+    WSTRING         local_type_name;
+    bool            local_is_value_type;
 
     LineProbeRequest() :
-        il_offset(0), probe_id(0), hoisted_field_token(mdTokenNil), emission_mode(LINE_EMIT_LEGACY), box_value(0)
+        il_offset(0), probe_id(0), hoisted_field_token(mdTokenNil), emission_mode(LINE_EMIT_LEGACY), box_value(0),
+        local_is_value_type(true)
     {
     }
 
     LineProbeRequest(const MethodReference& target_method, ULONG il_offset, INT32 probe_id,
                      mdFieldDef hoisted_field_token, const WSTRING& callback_assembly, const WSTRING& callback_type,
                      const WSTRING& callback_method, INT32 emission_mode = LINE_EMIT_LEGACY, INT32 box_value = 0,
-                     const WSTRING& gate_method = WSTRING()) :
+                     const WSTRING& gate_method = WSTRING(), const WSTRING& local_type_name = WSTRING(),
+                     bool local_is_value_type = true) :
         target_method(target_method),
         il_offset(il_offset),
         probe_id(probe_id),
@@ -109,7 +128,9 @@ struct LineProbeRequest
         callback_method(callback_method),
         emission_mode(emission_mode),
         box_value(box_value),
-        gate_method(gate_method)
+        gate_method(gate_method),
+        local_type_name(local_type_name),
+        local_is_value_type(local_is_value_type)
     {
     }
 
@@ -119,7 +140,8 @@ struct LineProbeRequest
                probe_id == other.probe_id && hoisted_field_token == other.hoisted_field_token &&
                callback_assembly == other.callback_assembly && callback_type == other.callback_type &&
                callback_method == other.callback_method && emission_mode == other.emission_mode &&
-               box_value == other.box_value && gate_method == other.gate_method;
+               box_value == other.box_value && gate_method == other.gate_method &&
+               local_type_name == other.local_type_name && local_is_value_type == other.local_is_value_type;
     }
 };
 
@@ -150,6 +172,18 @@ private:
     // poc/N2MultiProbeE2E. The whole set is woven in one ILRewriter pass (one Import/Export per ReJIT).
     std::vector<LineProbeRequest> m_requests;
 
+    // m_requests is touched from TWO threads and must not be raced.
+    //
+    // The managed side mutates it from whichever thread drives the configuration poll (AddLineProbes /
+    // RemoveLineProbe come in over the P/Invoke boundary), while the CLR calls Rewrite on a ReJIT thread
+    // that reads it. Unsynchronized, a push_back that reallocates while the rewriter iterates leaves the
+    // rewriter walking freed storage, and RemoveLineProbeRequest replaces the whole vector, which
+    // invalidates every pointer into it. Both are use-after-free in the middle of rewriting a customer's
+    // method body.
+    //
+    // `mutable` because RequestCount and the snapshot accessor are logically const but must still lock.
+    mutable std::mutex m_requestsLock;
+
 public:
     LineProbeRejitHandlerModuleMethod(mdMethodDef methodDef, RejitHandlerModule* module,
                                       const FunctionInfo& functionInfo, const LineProbeRequest& request);
@@ -158,17 +192,21 @@ public:
     // method). Deduplicates by (il_offset, probe_id) so repeat polls of the same config don't stack.
     void AddLineProbeRequest(const LineProbeRequest& request);
 
-    // N2 REMOVAL: drop one probe by probeId. Returns the number remaining. The caller re-ReJITs the
-    // method: ReJIT recompiles from the ORIGINAL body (verified — see poc/N2MultiProbeE2E), so the
-    // re-weave applies exactly the survivor set. Zero remaining => a re-ReJIT restores the pristine body.
+    // N2 REMOVAL: drop one probe by probeId. Returns the number of probes REMOVED (0 or 1), not the
+    // number remaining, so the caller does not have to compare a separate RequestCount taken outside the
+    // lock — that comparison was itself a race. The caller re-ReJITs the method: ReJIT recompiles from the
+    // ORIGINAL body (verified — see poc/N2MultiProbeE2E), so the re-weave applies exactly the survivor set.
+    // Removing the last probe means a re-ReJIT restores the pristine body.
     size_t RemoveLineProbeRequest(int probeId);
 
-    size_t RequestCount() const { return m_requests.size(); }
+    size_t RequestCount() const;
 
     LineProbeRejitHandlerModuleMethod* AsLineProbeHandler() override { return this; }
 
-    // All probes for this method. The rewriter iterates these, emitting each between one Import/Export.
-    const std::vector<LineProbeRequest>& GetLineProbeRequests() const;
+    // A SNAPSHOT of this method's probes, BY VALUE — deliberately not a reference. A reference would be
+    // read after the lock was released, which is exactly the use-after-free m_requestsLock exists to
+    // prevent; the copy is what makes the rewriter's iteration safe. Per-method probe counts are small.
+    std::vector<LineProbeRequest> GetLineProbeRequests() const;
 
     MethodRewriter* GetMethodRewriter() override;
 };

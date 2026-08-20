@@ -2,7 +2,7 @@ syntax = "proto3";
 
 // Service definition for mock collector
 service MockCollectorService {
-  // Clears all traces and metrics captured by  mock collector, so it can be used for multiple tests.
+  // Clears all traces, metrics and logs captured by  mock collector, so it can be used for multiple tests.
   rpc clear (ClearRequest) returns (ClearResponse) {}
 
   // Returns traces exported to mock collector
@@ -10,6 +10,10 @@ service MockCollectorService {
 
   // Returns metrics exported to mock collector
   rpc get_metrics (GetMetricsRequest) returns (GetMetricsResponse) {}
+
+  // Returns logs exported to mock collector. Dynamic Instrumentation snapshots are OTLP LogRecords, so
+  // without this RPC there is no way for a contract test to observe them at all.
+  rpc get_logs (GetLogsRequest) returns (GetLogsResponse) {}
 }
 
 // Empty request for clear rpc.
@@ -32,4 +36,12 @@ message GetMetricsRequest {}
 // Response for get metrics rpc - all metrics in byte form.
 message GetMetricsResponse {
   repeated bytes metrics = 1;
+}
+
+// Empty request for get logs rpc.
+message GetLogsRequest {}
+
+// Response for get logs rpc - all logs in byte form.
+message GetLogsResponse {
+  repeated bytes logs = 1;
 }

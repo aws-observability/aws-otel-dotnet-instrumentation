@@ -1229,15 +1229,22 @@ void CorProfiler::AddLineProbes(WCHAR* id, LineProbeDefinition* items, int size)
 
         const WSTRING gateMethod = current.gateMethod != nullptr ? WSTRING(current.gateMethod) : WSTRING();
 
+        // NON-INT LOCAL CAPTURE: nullable string, so an older/managed-side-unset value keeps the historical
+        // System.Int32 behavior rather than producing an empty type name that fails to resolve.
+        const WSTRING localTypeName =
+            current.localTypeName != nullptr ? WSTRING(current.localTypeName) : WSTRING();
+        const bool localIsValueType = current.localIsValueType != 0;
+
         LineProbeRequest request(targetMethodRef, current.ilOffset, current.probeId,
                                  static_cast<mdFieldDef>(current.hoistedFieldToken), WSTRING(current.callbackAssembly),
                                  WSTRING(current.callbackType), WSTRING(current.callbackMethod), current.emissionMode,
-                                 current.boxValue, gateMethod);
+                                 current.boxValue, gateMethod, localTypeName, localIsValueType);
 
         Logger::Debug("  * LineProbe Target: ", targetAssembly, " | ", targetType, ".", targetMethod, "(",
                       signatureTypes.size(), ") ilOffset=", current.ilOffset, " probeId=", current.probeId,
                       " hoistedFieldToken=", current.hoistedFieldToken, " emissionMode=", current.emissionMode,
-                      " boxValue=", current.boxValue, " callback=[", WSTRING(current.callbackAssembly), "]",
+                      " boxValue=", current.boxValue, " localType=", localTypeName,
+                      " localIsValueType=", localIsValueType, " callback=[", WSTRING(current.callbackAssembly), "]",
                       WSTRING(current.callbackType), ".", WSTRING(current.callbackMethod));
 
         lineProbeRequests.push_back(request);

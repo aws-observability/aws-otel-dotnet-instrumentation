@@ -40,9 +40,16 @@ public class NativeLineProbeDefinitionTests
         ("EmissionMode", 72),             // INT32
         ("BoxValue", 76),                 // INT32
         ("GateMethod", 80),               // WCHAR*
+        ("LocalTypeName", 88),            // WCHAR*  (non-int local capture: the box type's NAME)
+        ("LocalIsValueType", 96),         // INT32   (0 => reference type => emit NO box at all)
     ];
 
-    private const int ExpectedSize = 88;
+    // 104, not 100: the struct is padded to an 8-byte multiple because its widest member is a pointer, so
+    // the trailing INT32 at 96 is followed by 4 bytes of tail padding. The native side advances by
+    // sizeof(LineProbeDefinition) to reach item N+1, so getting this wrong misreads the whole array.
+    // Cross-checked against `offsetof`/`sizeof` compiled from the real line_probe.h struct on this
+    // platform — both sides measured 104 with identical offsets for all 16 fields.
+    private const int ExpectedSize = 104;
 
     [Fact]
     public void Layout_MatchesTheNativeLineProbeDefinitionStructExactly()

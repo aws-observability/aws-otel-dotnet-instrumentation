@@ -20,7 +20,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 // path is unit-testable WITHOUT the forked native binary present — which matters right now, because the
 // fork is not yet in the build (F2). The seam is the only reason P3b can be written and verified before
 // the fork lands.
-internal sealed class LineProbeTranslator
+internal sealed class LineProbeTranslator : IDisposable
 {
     /// <summary>Assembly hosting the managed line-probe callback.</summary>
     internal const string CallbackAssembly = "AWS.Distro.OpenTelemetry.DynamicInstrumentation";
@@ -37,6 +37,16 @@ internal sealed class LineProbeTranslator
 
     /// <summary>Rate-limit gate name: <c>bool ShouldCapture(int32)</c>.</summary>
     internal const string GateMethod = "ShouldCapture";
+
+    /// <summary>
+    /// Maximum locals captured at one line. Extra names are dropped, not refused.
+    /// </summary>
+    // Each captured local adds a `call` (and, for a value type, a `box`) to the customer's line. On a line
+    // inside a hot loop that cost is paid on every iteration, so an operator pasting a long name list would
+    // silently slow their own service. 5 matches the practical ceiling of what fits in a readable snapshot;
+    // Datadog's comparable limit is per-object field count (20), not per-line locals, so there is no vendor
+    // number to mirror here.
+    internal const int MaxLocalsPerLine = 5;
 
     private readonly Action<string, NativeLineProbeDefinition[], int>? addLineProbesOverride;
     private readonly Action<int>? removeLineProbeOverride;
@@ -63,12 +73,51 @@ internal sealed class LineProbeTranslator
     }
 
     /// <summary>
-    /// Resolves and applies a line probe for the given configuration.
+    /// Releases the PDB reader's open file handles.
+    /// </summary>
+    // The reader caches an AssemblyDebugInfo per resolved assembly, each holding an open FileStream over the
+    // assembly's PE image plus one over its sidecar .pdb. Nothing released them: Cleanup only nulled this
+    // field, so every Initialize cycle leaked a fresh set for the process lifetime. On Windows those handles
+    // also block in-place replacement of the customer's DLLs during a rolling deploy.
+    public void Dispose() => this.pdbReader.Dispose();
+
+    /// <summary>
+    /// Resolves and applies a line probe for the given configuration, one probe per requested local.
     /// </summary>
     /// <param name="config">A line-level configuration (<c>LineNumber &gt; 0</c>).</param>
-    /// <param name="probeId">Opaque id to bake into the injected IL.</param>
-    /// <returns>The outcome; <see cref="LineProbeResolutionStatus.Resolved"/> on success.</returns>
-    public LineProbeResolution ApplyLineProbe(InstrumentationConfiguration config, int probeId)
+    /// <param name="probeId">Opaque id to bake into the injected IL for the FIRST probe.</param>
+    /// <param name="allocateProbeId">
+    /// Supplies additional ids when more than one local is captured. Called once per extra local; may be
+    /// null, in which case only the first local is captured (the historical single-local behavior).
+    /// </param>
+    /// <param name="registerBeforeApply">
+    /// Invoked once per resolved probe IMMEDIATELY BEFORE the native apply, so a hit arriving the instant the
+    /// ReJIT completes already resolves. Callers that route hits by probeId must supply this rather than
+    /// registering from the returned resolution, which is too late. May be null for callers that do not
+    /// dispatch hits (tests).
+    /// </param>
+    /// <returns>
+    /// The outcome. On success, <see cref="LineProbeResolution.Locations"/> holds one entry per applied
+    /// probe, each paired with its id.
+    /// </returns>
+    // MULTI-LOCAL IS N PROBES AT ONE OFFSET, not one probe carrying N values.
+    //
+    // The alternative — an `object[]` built with newarr/stelem and a `CaptureLocals(int, object[])`
+    // callback — needs new native emission, allocates an array on every hit, and would have to be
+    // mutation-proven from scratch. N probes reuse emission that is already proven end to end, and the
+    // native side already supports it: requests are deduped by (offset, probeId), so distinct ids at the
+    // SAME offset are accepted, and every emit is InsertBefore(targetInstr), so N sequences chain in order
+    // ahead of the original instruction. Verified in line_probe.cpp (AddLineProbeRequest dedup) and
+    // il_rewriter.cpp (m_pOffsetToInstr maps to instruction POINTERS, which insertion does not invalidate).
+    //
+    // Cost: one extra `call` per local on the hot line. Benefit: no new IL shape, no per-hit allocation
+    // beyond the boxes already required, and each local keeps its own type/slot — which is what makes
+    // mixed-type capture (string + DateTime + int at one line) work without an object[] of boxed values.
+    public LineProbeResolution ApplyLineProbe(
+        InstrumentationConfiguration config,
+        int probeId,
+        Func<int>? allocateProbeId = null,
+        Action<LineProbeProbeLocation>? registerBeforeApply = null)
     {
         if (config == null || !config.IsLineLevel)
         {
@@ -83,56 +132,150 @@ internal sealed class LineProbeTranslator
             return LineProbeResolution.Fail(LineProbeResolutionStatus.TypeNotLoaded);
         }
 
-        // v1 captures ONE local (D7). CaptureLocals is a list on the wire, but the proven native
-        // emission boxes a single System.Int32, so honoring the whole list would need fork work that is
-        // not in scope. Taking [0] is the documented v1 behavior, not an oversight.
-        var localName = config.Capture?.CaptureLocals is { Length: > 0 } locals ? locals[0] : null;
+        // Every requested local, not just [0] (lifts D7). An empty/absent list is a bare line probe: it
+        // records that the line was REACHED and captures nothing, which is still a useful probe.
+        var requested = config.Capture?.CaptureLocals ?? Array.Empty<string>();
+        var localNames = requested.Length == 0
+            ? new string?[] { null }
+            : requested.Where(n => !string.IsNullOrEmpty(n)).Cast<string?>().ToArray();
 
-        var resolution = this.pdbReader.Resolve(type, config.MethodName, config.LineNumber, localName);
-        if (!resolution.IsResolved)
+        if (localNames.Length == 0)
         {
-            return resolution;
+            // The list existed but held only null/empty entries — treat as a bare probe rather than
+            // resolving nothing and reporting a confusing failure.
+            localNames = new string?[] { null };
         }
 
-        var location = resolution.Location!;
-
-        // A local was requested but no slot resolved: capture nothing rather than emit a probe that
-        // reads slot -1. PdbReader already refuses out-of-scope locals, so this is a belt-and-braces
-        // guard against a future resolution path returning Resolved with no slot.
-        if (localName != null && location.LocalSlot < 0)
+        // Cap the number of locals per line. Each one is an extra `call` inlined into the customer's hot
+        // path, so an unbounded list is a self-inflicted performance problem on a line that might run
+        // millions of times. Extra names are dropped rather than refused: capturing the first N is more
+        // useful to an operator than refusing the whole probe.
+        if (localNames.Length > MaxLocalsPerLine)
         {
-            return LineProbeResolution.Fail(
-                LineProbeResolutionStatus.LocalOutOfScope,
-                $"local '{localName}' resolved to no slot at IL offset {location.IlOffset}");
+            localNames = localNames.Take(MaxLocalsPerLine).ToArray();
         }
 
-        var mode = location.LocalSlot >= 0
-            ? LineProbeEmissionMode.LocalCapture
-            : LineProbeEmissionMode.Legacy;
+        var definitions = new List<NativeLineProbeDefinition>(localNames.Length);
+        var applied = new List<LineProbeProbeLocation>(localNames.Length);
+        LineProbeResolution? firstFailure = null;
+        var nextId = probeId;
 
-        // The callback name MUST match the arity the native side derives from emissionMode: LocalCapture
-        // builds a two-arg `(int32, object)` MemberRef, Legacy a one-arg `(int32)` one (line_probe.cpp:
-        // `needsTwoArgCallback = isAsyncHoistedCapture || isBoxGate || isLocalCapture`). A name/arity
-        // mismatch does not fail cleanly — DefineMemberRef succeeds against a signature no managed method
-        // has, and the call then binds to nothing at runtime. So the two modes get two distinct callbacks,
-        // not one shared name.
-        var callbackMethod = mode == LineProbeEmissionMode.LocalCapture ? CaptureMethod : ProbeMethod;
+        foreach (var localName in localNames)
+        {
+            var resolution = this.pdbReader.Resolve(type, config.MethodName, config.LineNumber, localName);
+            if (!resolution.IsResolved)
+            {
+                // PARTIAL SUCCESS IS THE RIGHT BEHAVIOR HERE. One out-of-scope name among several must not
+                // discard the locals that DID resolve — the operator gets what is capturable plus an error
+                // naming what was not. The first failure is remembered so a run where NOTHING resolves
+                // still reports a real cause instead of a generic one.
+                firstFailure ??= resolution;
+                continue;
+            }
 
-        var definition = new NativeLineProbeDefinition(
-            targetAssembly: location.AssemblyName,
-            targetType: location.TypeName,
-            targetMethod: location.MethodName,
-            targetSignatureTypes: BuildSignatureTypes(location.ParameterCount),
-            ilOffset: location.IlOffset,
-            probeId: probeId,
-            callbackAssembly: CallbackAssembly,
-            callbackType: CallbackType,
-            callbackMethod: callbackMethod,
-            emissionMode: mode,
-            boxValue: location.LocalSlot >= 0 ? location.LocalSlot : 0,
-            gateMethod: null);
+            var location = resolution.Location!;
 
-        var array = new[] { definition };
+            // A captured variable reaches the native side one of exactly two ways: a local SLOT (`ldloc`) or,
+            // for an async/iterator method, a hoisted state-machine FIELD (`ldarg.0; ldfld`).
+            var isHoisted = location.HoistedFieldToken != 0;
+            var capturesLocal = isHoisted || location.LocalSlot >= 0;
+
+            // A local was requested but neither a slot nor a field resolved: skip it rather than emit a probe
+            // that reads slot -1. PdbReader already refuses out-of-scope locals, so this guards a future
+            // resolution path returning Resolved with nothing to read.
+            if (localName != null && !capturesLocal)
+            {
+                var detail =
+                    $"local '{localName}' resolved to neither a slot nor a hoisted field at IL offset " +
+                    $"{location.IlOffset}";
+                firstFailure ??= LineProbeResolution.Fail(LineProbeResolutionStatus.LocalOutOfScope, detail);
+                continue;
+            }
+
+            // ASYNC RIDES `Legacy` + A NON-ZERO HOISTED TOKEN, NOT ITS OWN MODE. The native side derives the
+            // async path from `hoisted_field_token != nil` alone (line_probe.cpp), and its branch order puts
+            // isLocalCapture FIRST — so sending LocalCapture together with a token would emit `ldloc` against
+            // a slot that does not hold the variable. Legacy + token is the combination that selects the
+            // `ldarg.0; ldfld` emission.
+            var mode = !isHoisted && location.LocalSlot >= 0
+                ? LineProbeEmissionMode.LocalCapture
+                : LineProbeEmissionMode.Legacy;
+
+            // The callback name MUST match the arity the native side derives, which is
+            // `needsTwoArgCallback = isAsyncHoistedCapture || isBoxGate || isLocalCapture` — so a hoisted
+            // capture needs the TWO-arg callback even though its mode is Legacy. Keyed off capturesLocal
+            // rather than off `mode` for exactly that reason. A name/arity mismatch does not fail cleanly:
+            // DefineMemberRef succeeds against a signature no managed method has, and the call then binds to
+            // nothing at runtime.
+            var callbackMethod = capturesLocal ? CaptureMethod : ProbeMethod;
+
+            // localTypeName/localIsValueType are what lift the int-only limit: the native side boxes a
+            // value-type local against ITS OWN type token, and emits NO box for a reference type (boxing an
+            // object reference is invalid IL). A null type name means System.Int32, preserving the original
+            // behavior for the pre-existing spike harnesses.
+            definitions.Add(new NativeLineProbeDefinition(
+                targetAssembly: location.AssemblyName,
+                targetType: location.TypeName,
+                targetMethod: location.MethodName,
+                targetSignatureTypes: BuildSignatureTypes(location.ParameterCount),
+                ilOffset: location.IlOffset,
+                probeId: nextId,
+                callbackAssembly: CallbackAssembly,
+                callbackType: CallbackType,
+                callbackMethod: callbackMethod,
+                emissionMode: mode,
+                boxValue: location.LocalSlot >= 0 ? location.LocalSlot : 0,
+                gateMethod: null,
+                hoistedFieldToken: location.HoistedFieldToken,
+                localTypeName: location.LocalTypeName,
+                localIsValueType: location.LocalIsValueType));
+
+            applied.Add(new LineProbeProbeLocation(nextId, location));
+
+            // Allocate the NEXT id only when another local still needs one. Without an allocator we stop
+            // after the first, which is exactly the previous single-local behavior.
+            if (applied.Count < localNames.Length)
+            {
+                if (allocateProbeId == null)
+                {
+                    break;
+                }
+
+                nextId = allocateProbeId();
+            }
+        }
+
+        if (definitions.Count == 0)
+        {
+            // Nothing resolved. Report the first real cause rather than a synthesized one.
+            return firstFailure ?? LineProbeResolution.Fail(
+                LineProbeResolutionStatus.LineNotExecutable,
+                $"no requested local resolved at line {config.LineNumber}");
+        }
+
+        // REGISTER EVERY PROBE BEFORE THE P/INVOKE. AddLineProbes triggers a ReJIT, after which the injected
+        // callback can fire on a customer thread immediately — potentially before this method returns. A hit
+        // that arrives with its probeId unregistered resolves to nothing and is silently dropped, so the
+        // registration cannot wait until the caller inspects the returned resolution.
+        //
+        // This is why the ids and locations are collected during resolution above and handed over here rather
+        // than being read off the result: at this point nothing is woven yet, so no callback can exist, and
+        // every id a hit could carry is already resolvable.
+        //
+        // Registering an id whose apply then FAILS is the strictly safer error of the two: nothing weaves, so
+        // the entry is simply unreachable, and the caller drops it on the failure path.
+        if (registerBeforeApply != null)
+        {
+            foreach (var appliedProbe in applied)
+            {
+                registerBeforeApply(appliedProbe);
+            }
+        }
+
+        // ONE P/Invoke for all N probes (closes the N1 batching gap). The native side receives them as a
+        // single definitions batch and performs ONE Import/Export per method — "N edits, 1 ReJIT" — rather
+        // than N separate rewrites of the same body.
+        var array = definitions.ToArray();
         try
         {
             // The definitions id must be UNIQUE per apply: the native side dedups by it
@@ -149,7 +292,10 @@ internal sealed class LineProbeTranslator
                 NativeMethods.AddLineProbes(definitionsId, array, array.Length);
             }
 
-            return resolution;
+            // Carries EVERY applied probe so the caller can register each id against its own local. The
+            // single Location stays populated (the first probe) so existing single-local callers and tests
+            // read unchanged.
+            return LineProbeResolution.Success(applied[0].Location, applied);
         }
         catch (EntryPointNotFoundException)
         {

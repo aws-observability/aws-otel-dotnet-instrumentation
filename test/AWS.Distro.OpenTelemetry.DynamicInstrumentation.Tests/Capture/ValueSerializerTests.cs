@@ -250,6 +250,48 @@ public class ValueSerializerTests
 
         result.Fields.Should().HaveCount(1);
         result.NotCapturedReason.Should().Be(NotCapturedReason.FieldCount);
+
+        // The emitted shape puts `fields` ahead of `not_captured_reason`, so the reason above never reaches the
+        // wire; OriginalSize is what survives, as `size`. Without it a truncated object is byte-identical to a
+        // complete one and the dropped members are invisible — the same signal the collection and dictionary
+        // paths already carry.
+        result.OriginalSize.Should().Be(
+            2,
+            "TestObj has two capturable members, so the total must be reported even though only one was kept");
+    }
+
+    [Fact]
+    public void Serialize_ObjectWithinFieldCap_ReportsNoTruncation()
+    {
+        // Complement: `size` must appear ONLY when members were actually dropped, or every object would look
+        // truncated and the signal would mean nothing.
+        var limits = DefaultLimits with { MaxFieldsPerObject = 10 };
+
+        var result = ValueSerializer.Serialize(new TestObj { Name = "Alice", Age = 30 }, limits);
+
+        result.Fields.Should().HaveCount(2);
+        result.NotCapturedReason.Should().Be(NotCapturedReason.None);
+        result.OriginalSize.Should().BeNull("nothing was dropped, so there is no truncation to signal");
+    }
+
+    [Fact]
+    public void Serialize_ObjectWithIndexerAndWriteOnlyMembers_CountsOnlyCapturableOnesInTheTotal()
+    {
+        // `size` is compared against the fields emitted, so it has to be counted with the SAME filter the
+        // capture loop applies. An indexer or a write-only property is never captured; counting them would
+        // report truncation on an object that was captured completely.
+        // MaxFieldsPerObject = 1 ON PURPOSE. With a cap above the member count, OriginalSize is null whatever
+        // the filter does, so the assertion could not fail. Capping at 1 forces the count onto the wire:
+        // correct is 2 (Readable + Extra); a filter that counted the indexer and the write-only property
+        // would report 4.
+        var limits = DefaultLimits with { MaxFieldsPerObject = 1 };
+
+        var result = ValueSerializer.Serialize(new UncapturableMembers(), limits);
+
+        result.Fields.Should().HaveCount(1);
+        result.OriginalSize.Should().Be(
+            2,
+            "only the readable, non-indexed members count toward the total");
     }
 
     [Fact]
@@ -430,6 +472,21 @@ public class ValueSerializerTests
     {
         public string Name { get; set; } = "";
         public int Age { get; set; }
+    }
+
+    // Two capturable members plus two the capture loop always skips: an indexer and a write-only property.
+    private class UncapturableMembers
+    {
+        public string Readable { get; set; } = "kept";
+
+        public string Extra { get; set; } = "also kept";
+
+        public string WriteOnly
+        {
+            set => _ = value;
+        }
+
+        public string this[int index] => index.ToString();
     }
 
     private class Nested

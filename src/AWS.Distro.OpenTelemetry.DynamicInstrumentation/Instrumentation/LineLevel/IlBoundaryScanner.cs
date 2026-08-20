@@ -42,9 +42,13 @@ internal static class IlBoundaryScanner
     {
         var starts = new HashSet<uint>();
         var branchTargets = new HashSet<uint>();
+
+        // (source, target) pairs as well as the target set: the merge-point rule needs to know where a jump
+        // CAME FROM to tell "this path skips the probed line" from "this is a ternary inside it".
+        var branches = new List<IlBranch>();
         if (il == null || il.Length == 0)
         {
-            return new IlScanResult(starts, branchTargets, true);
+            return new IlScanResult(starts, branchTargets, branches, true);
         }
 
         int position = 0;
@@ -52,7 +56,8 @@ internal static class IlBoundaryScanner
 
         while (position < il.Length)
         {
-            starts.Add((uint)position);
+            var instructionStart = (uint)position;
+            starts.Add(instructionStart);
 
             ushort code = il[position];
             position++;
@@ -102,6 +107,7 @@ internal static class IlBoundaryScanner
                     if (target >= 0 && target <= il.Length)
                     {
                         branchTargets.Add((uint)target);
+                        branches.Add(new IlBranch(instructionStart, (uint)target));
                     }
                 }
 
@@ -123,6 +129,7 @@ internal static class IlBoundaryScanner
                 if (target >= 0 && target <= il.Length)
                 {
                     branchTargets.Add((uint)target);
+                    branches.Add(new IlBranch(instructionStart, (uint)target));
                 }
             }
             else if (operandType == OperandType.InlineBrTarget)
@@ -131,13 +138,14 @@ internal static class IlBoundaryScanner
                 if (target >= 0 && target <= il.Length)
                 {
                     branchTargets.Add((uint)target);
+                    branches.Add(new IlBranch(instructionStart, (uint)target));
                 }
             }
 
             position += operandSize;
         }
 
-        return new IlScanResult(starts, branchTargets, complete);
+        return new IlScanResult(starts, branchTargets, branches, complete);
     }
 
     private static int GetOperandSize(OperandType operandType) => operandType switch

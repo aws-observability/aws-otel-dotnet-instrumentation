@@ -351,9 +351,8 @@ bool RejitHandlerModule::RemoveLineProbeByProbeId(int probeId, mdMethodDef* meth
             continue;
         }
 
-        size_t before = lineHandler->RequestCount();
-        size_t after  = lineHandler->RemoveLineProbeRequest(probeId);
-        if (after < before)
+        // One locked call, not a before/after comparison across two: the count could change between them.
+        if (lineHandler->RemoveLineProbeRequest(probeId) > 0)
         {
             *methodDef = kv.first;
             return true;

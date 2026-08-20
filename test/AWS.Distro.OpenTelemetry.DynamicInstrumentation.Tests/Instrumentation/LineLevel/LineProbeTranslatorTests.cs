@@ -24,7 +24,8 @@ public class LineProbeTranslatorTests
     private static InstrumentationConfiguration LineConfig(
         string methodName,
         int lineNumber,
-        string? captureLocal = null) =>
+        string? captureLocal = null,
+        string[]? captureLocals = null) =>
         new()
         {
             Type = InstrumentationType.BREAKPOINT,
@@ -33,9 +34,16 @@ public class LineProbeTranslatorTests
             MethodName = methodName,
             LineNumber = lineNumber,
             LocationHash = "aabb000000000001",
-            Capture = captureLocal == null
-                ? CaptureConfiguration.Default
-                : CaptureConfiguration.Default with { CaptureLocals = [captureLocal] },
+
+            // captureLocals covers the multi-local case (N probes at one offset); captureLocal is the
+            // single-local shorthand the other tests use. InstrumentationConfiguration's properties are
+            // init-only, so this has to be decided here rather than adjusted afterwards.
+            Capture = (captureLocal, captureLocals) switch
+            {
+                (null, null) => CaptureConfiguration.Default,
+                (_, null) => CaptureConfiguration.Default with { CaptureLocals = [captureLocal!] },
+                _ => CaptureConfiguration.Default with { CaptureLocals = captureLocals! },
+            },
         };
 
     // Resolves to the real fixture type regardless of what the config says, so these tests do not depend
@@ -59,6 +67,43 @@ public class LineProbeTranslatorTests
     }
 
     [Fact]
+    public void ApplyLineProbe_RegistersEveryProbe_BEFORE_TheNativeApply()
+    {
+        // The injected callback becomes reachable the moment the ReJIT that AddLineProbes triggers completes,
+        // which can be before ApplyLineProbe returns. A hit carries only its probeId, so anything registered
+        // after the native call races that first hit and loses it — the probe silently misses its first
+        // execution. This asserts the ordering directly: the spy stands in for the native call, and by the
+        // time it runs, every probe must already have been handed to the register callback.
+        var registeredWhenNativeCalled = new List<int>();
+        var registered = new List<int>();
+
+        var translator = new LineProbeTranslator(
+            (_, _, _) => registeredWhenNativeCalled.AddRange(registered),
+            typeResolver: ResolvesToFixture);
+
+        // Two locals, so this covers the multi-probe case: N ids at one offset, all needing registration
+        // before the single batched apply.
+        var config = LineConfig(
+            nameof(PdbReaderTargets.MixedLocalTypes),
+            PdbReaderTargets.LineOf("mixedItems"),
+            captureLocals: ["number", "text"]);
+
+        var nextId = 100;
+        var result = translator.ApplyLineProbe(
+            config,
+            probeId: 42,
+            allocateProbeId: () => ++nextId,
+            registerBeforeApply: applied => registered.Add(applied.ProbeId));
+
+        result.IsResolved.Should().BeTrue($"expected resolution, got {result.Status}: {result.Detail}");
+        registered.Should().NotBeEmpty("the register callback must be invoked for each resolved probe");
+        registeredWhenNativeCalled.Should().BeEquivalentTo(
+            registered,
+            "every probe must be registered BEFORE AddLineProbes weaves it — a probeId that arrives at the "
+            + "sink unregistered resolves to nothing and its capture is dropped");
+    }
+
+    [Fact]
     public void ApplyLineProbe_ResolvableLine_CallsAddLineProbesWithOneDefinition()
     {
         var (seam, read) = Spy();
@@ -72,7 +117,7 @@ public class LineProbeTranslatorTests
 
         var captured = read();
         captured.Should().NotBeNull("the native call must actually be made, not merely resolved");
-        captured!.Size.Should().Be(1, "line-level registers exactly one definition per probe");
+        captured!.Size.Should().Be(1, "one captured local means exactly one definition");
         captured.Definitions.Should().HaveCount(1);
         captured.Definitions[0].ProbeId.Should().Be(42);
         captured.Definitions[0].TargetMethod.Should().Be(nameof(PdbReaderTargets.ThreeStatements));
@@ -402,6 +447,178 @@ public class LineProbeTranslatorTests
             typeResolver: ResolvesToFixture);
 
         translator.RemoveLineProbe(78).Should().BeFalse();
+    }
+
+    // ── MULTI-LOCAL CAPTURE ──────────────────────────────────────────────────────
+    // N probes at ONE offset, one per captured local — not one probe carrying an object[]. The native side
+    // dedups requests by (offset, probeId), so distinct ids at the same offset are accepted, and every emit
+    // is InsertBefore(targetInstr), so the sequences chain in order. All N ship in ONE AddLineProbes call,
+    // which is also what closes the batching gap: one Import/Export per method rather than N.
+
+    private static InstrumentationConfiguration MultiLocalConfig(
+        string methodName, int lineNumber, params string[] locals) =>
+        new()
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = TargetTypeName[..TargetTypeName.LastIndexOf('.')],
+            ClassName = TargetTypeName[(TargetTypeName.LastIndexOf('.') + 1)..],
+            MethodName = methodName,
+            LineNumber = lineNumber,
+            LocationHash = "aabb000000000002",
+            Capture = CaptureConfiguration.Default with { CaptureLocals = locals },
+        };
+
+    [Fact]
+    public void ApplyLineProbe_WithSeveralLocals_EmitsOneDefinitionPerLocalInASingleCall()
+    {
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+        var nextId = 500;
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "number", "text", "ratio"),
+            probeId: 42,
+            allocateProbeId: () => nextId++);
+
+        result.IsResolved.Should().BeTrue($"expected resolution, got {result.Status}: {result.Detail}");
+
+        var captured = read();
+        captured.Should().NotBeNull();
+
+        // ONE native call carrying THREE definitions — batching, not three separate P/Invokes.
+        captured!.Size.Should().Be(3);
+        captured.Definitions.Should().HaveCount(3);
+
+        // Every probe targets the SAME offset; only the local slot and box type differ.
+        captured.Definitions.Select(d => d.IlOffset).Distinct().Should().HaveCount(
+            1, "all locals are captured at the same line, so all probes share one IL offset");
+
+        // Distinct ids: the callback receives only the probeId, so two probes sharing one id would be
+        // indistinguishable and one local's value would be attributed to the other's name.
+        captured.Definitions.Select(d => d.ProbeId).Should().OnlyHaveUniqueItems();
+        captured.Definitions[0].ProbeId.Should().Be(42, "the first probe uses the caller-supplied id");
+
+        // Each local keeps its OWN declared type — which is the point of N probes over one object[].
+        captured.Definitions.Select(d => d.LocalTypeName).Should()
+            .BeEquivalentTo(["System.Int32", "System.String", "System.Double"]);
+
+        // And the resolution reports every applied probe so the caller can register each id to its local.
+        result.Locations.Should().HaveCount(3);
+        result.Locations.Select(l => l.Location.LocalName).Should()
+            .BeEquivalentTo(["number", "text", "ratio"]);
+        result.Locations.Select(l => l.ProbeId).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void ApplyLineProbe_WithNoAllocator_CapturesOnlyTheFirstLocal()
+    {
+        // Back-compat: a caller that supplies no id allocator cannot be given extra ids, so it gets the
+        // historical CaptureLocals[0] behavior instead of N probes sharing one id.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "number", "text"),
+            probeId: 7);
+
+        result.IsResolved.Should().BeTrue();
+        read()!.Size.Should().Be(1);
+        result.Locations.Should().HaveCount(1);
+        result.Locations[0].Location.LocalName.Should().Be("number");
+    }
+
+    [Fact]
+    public void ApplyLineProbe_WithOneUnresolvableLocal_StillAppliesTheOthers()
+    {
+        // PARTIAL SUCCESS. One bad name among several must not discard the locals that DID resolve — the
+        // operator gets what is capturable rather than nothing at all.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+        var nextId = 600;
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "number", "noSuchLocal", "text"),
+            probeId: 11,
+            allocateProbeId: () => nextId++);
+
+        result.IsResolved.Should().BeTrue("the resolvable locals must still be applied");
+        read()!.Size.Should().Be(2);
+        result.Locations.Select(l => l.Location.LocalName).Should().BeEquivalentTo(["number", "text"]);
+    }
+
+    [Fact]
+    public void ApplyLineProbe_WhenNoLocalResolves_FailsWithTheRealCause()
+    {
+        // All names bad → report the underlying resolution status, not a generic one, so the operator's
+        // ErrorCause names the actual problem.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+        var nextId = 700;
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "nope", "alsoNope"),
+            probeId: 12,
+            allocateProbeId: () => nextId++);
+
+        result.IsResolved.Should().BeFalse();
+        result.Status.Should().Be(LineProbeResolutionStatus.LocalOutOfScope);
+        read().Should().BeNull("nothing may be woven when no local resolved");
+    }
+
+    [Fact]
+    public void ApplyLineProbe_CapsTheNumberOfLocalsPerLine()
+    {
+        // Each captured local is an extra `call` on the customer's line, so a long list is a self-inflicted
+        // performance problem. Extra names are DROPPED rather than refused — the first N are more useful to
+        // an operator than an error.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+        var nextId = 800;
+
+        // Six names against a cap of five; all six exist in the fixture.
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(
+                nameof(PdbReaderTargets.MixedLocalTypes),
+                PdbReaderTargets.LineOf("mixedItems"),
+                "number", "text", "ratio", "stamp", "boxed", "items"),
+            probeId: 13,
+            allocateProbeId: () => nextId++);
+
+        result.IsResolved.Should().BeTrue();
+        read()!.Size.Should().Be(
+            LineProbeTranslator.MaxLocalsPerLine,
+            "the cap bounds the per-hit cost on the customer's line");
+    }
+
+    [Fact]
+    public void ApplyLineProbe_WithNoLocalsRequested_StillAppliesABareLineProbe()
+    {
+        // A probe with no capture still records that the line was REACHED, which is a legitimate use.
+        var (seam, read) = Spy();
+        var translator = new LineProbeTranslator(seam(), typeResolver: ResolvesToFixture);
+
+        var result = translator.ApplyLineProbe(
+            MultiLocalConfig(nameof(PdbReaderTargets.ThreeStatements), PdbReaderTargets.LineOf("assignsB")),
+            probeId: 14,
+            allocateProbeId: () => 900);
+
+        result.IsResolved.Should().BeTrue();
+        read()!.Size.Should().Be(1);
+        result.Locations.Should().HaveCount(1);
+        result.Locations[0].Location.LocalName.Should().BeNull();
+        result.Locations[0].Location.LocalSlot.Should().Be(-1);
     }
 
     [Fact]

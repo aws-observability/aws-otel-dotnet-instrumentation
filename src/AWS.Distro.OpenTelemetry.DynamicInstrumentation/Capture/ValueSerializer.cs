@@ -236,10 +236,40 @@ internal static class ValueSerializer
         int count = 0;
         bool fieldCountExceeded = false;
 
+        // Declared out here because the return below reports it: the loops live inside the try.
+        var totalCapturable = 0;
+
         try
         {
             var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
-            foreach (var field in type.GetFields(bindingFlags))
+            var declaredFields = type.GetFields(bindingFlags);
+            var declaredProperties = type.GetProperties(bindingFlags);
+
+            // Total capturable members, counted with the SAME filter the loops below apply. Needed because the
+            // loops break at the cap and so never learn how many members there were — and without a total, a
+            // truncated object is indistinguishable on the wire from a complete one (see OriginalSize below).
+            // Counted rather than LINQ-projected: this runs per captured object on the user's thread.
+            // DISTINCT NAMES, because `fields` below is keyed by name and GetFields does NOT apply
+            // hide-by-name: a `public new string Name` returns TWO FieldInfos, and a derived property
+            // shadowing a base field collides the same way. Counting both reported `size` greater than the
+            // fields emitted for an object captured completely — a truncation signal for nothing dropped.
+            var capturableNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var field in declaredFields)
+            {
+                capturableNames.Add(field.Name);
+            }
+
+            foreach (var prop in declaredProperties)
+            {
+                if (prop.CanRead && prop.GetIndexParameters().Length == 0)
+                {
+                    capturableNames.Add(prop.Name);
+                }
+            }
+
+            totalCapturable = capturableNames.Count;
+
+            foreach (var field in declaredFields)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
@@ -260,7 +290,7 @@ internal static class ValueSerializer
                 }
             }
 
-            foreach (var prop in type.GetProperties(bindingFlags))
+            foreach (var prop in declaredProperties)
             {
                 if (count >= limits.MaxFieldsPerObject)
                 {
@@ -295,6 +325,14 @@ internal static class ValueSerializer
         {
             Type = typeName,
             Fields = fields,
+
+            // THE TRUNCATION SIGNAL. Without OriginalSize, an object over MaxFieldsPerObject serialized to
+            // `fields` with no marker of any kind: the emitter's shape rule emits `size` from OriginalSize and
+            // reaches `not_captured_reason` only for values carrying NO partial data, so a truncated object was
+            // byte-identical to a complete one and the dropped fields were invisible. Reporting the total the
+            // same way the collection and dictionary paths do makes truncation detectable (size > fields
+            // emitted) and keeps one signal across all three container shapes.
+            OriginalSize = fieldCountExceeded ? totalCapturable : null,
             NotCapturedReason = fieldCountExceeded ? NotCapturedReason.FieldCount : NotCapturedReason.None,
         };
     }

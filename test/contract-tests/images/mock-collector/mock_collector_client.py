@@ -9,6 +9,8 @@ from google.protobuf.internal.containers import RepeatedScalarFieldContainer
 from grpc import Channel, insecure_channel
 from mock_collector_service_pb2 import (
     ClearRequest,
+    GetLogsRequest,
+    GetLogsResponse,
     GetMetricsRequest,
     GetMetricsResponse,
     GetTracesRequest,
@@ -16,8 +18,10 @@ from mock_collector_service_pb2 import (
 )
 from mock_collector_service_pb2_grpc import MockCollectorServiceStub
 
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+from opentelemetry.proto.logs.v1.logs_pb2 import LogRecord, ResourceLogs, ScopeLogs
 from opentelemetry.proto.metrics.v1.metrics_pb2 import Metric, ResourceMetrics, ScopeMetrics
 from opentelemetry.proto.trace.v1.trace_pb2 import ResourceSpans, ScopeSpans, Span
 
@@ -49,6 +53,19 @@ class ResourceScopeMetric:
         self.resource_metrics: ResourceMetrics = resource_metrics
         self.scope_metrics: ScopeMetrics = scope_metrics
         self.metric: Metric = metric
+
+
+class ResourceScopeLog:
+    """Data class used to correlate resources, scope and telemetry signals.
+
+    Correlate resource, scope and log record. Dynamic Instrumentation snapshots arrive as LogRecords, so
+    this is the shape a DI contract test asserts against.
+    """
+
+    def __init__(self, resource_logs: ResourceLogs, scope_logs: ScopeLogs, log_record: LogRecord):
+        self.resource_logs: ResourceLogs = resource_logs
+        self.scope_logs: ScopeLogs = scope_logs
+        self.log_record: LogRecord = log_record
 
 
 class MockCollectorClient:
@@ -123,6 +140,47 @@ class MockCollectorClient:
                     for metric in scope_metric.metrics:
                         metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
         return metrics
+
+    def get_logs(self, expected_count: int = 1) -> List[ResourceScopeLog]:
+        """Get all log records currently stored in the mock collector.
+
+        Args:
+            expected_count: minimum number of log records to wait for before returning.
+
+        Returns:
+            List of `ResourceScopeLog`, a flat list of every log record with its scope and resource.
+        """
+
+        def get_export() -> List[ExportLogsServiceRequest]:
+            response: GetLogsResponse = self.client.get_logs(GetLogsRequest())
+            serialized_logs: RepeatedScalarFieldContainer[bytes] = response.logs
+            return list(map(ExportLogsServiceRequest.FromString, serialized_logs))
+
+        def wait_condition(exported: List[ExportLogsServiceRequest], current: List[ExportLogsServiceRequest]) -> bool:
+            # Counts RECORDS, not export requests. An agent may batch many snapshots into one request or
+            # split them across several, so "len(current) == len(exported)" alone would settle as soon as
+            # the first request landed and drop the rest.
+            return _count_log_records(current) >= expected_count and _count_log_records(exported) == _count_log_records(
+                current
+            )
+
+        exported_logs: List[ExportLogsServiceRequest] = _wait_for_content(get_export, wait_condition)
+        logs: List[ResourceScopeLog] = []
+        for exported_log in exported_logs:
+            for resource_log in exported_log.resource_logs:
+                for scope_log in resource_log.scope_logs:
+                    for log_record in scope_log.log_records:
+                        logs.append(ResourceScopeLog(resource_log, scope_log, log_record))
+        return logs
+
+
+def _count_log_records(exports: List[ExportLogsServiceRequest]) -> int:
+    return sum(
+        len(scope_log.log_records)
+        for export in exports
+        for resource_log in export.resource_logs
+        for scope_log in resource_log.scope_logs
+    )
 
 
 def _wait_for_content(get_export: Callable[[], List[T]], wait_condition: Callable[[List[T], List[T]], bool]) -> List[T]:

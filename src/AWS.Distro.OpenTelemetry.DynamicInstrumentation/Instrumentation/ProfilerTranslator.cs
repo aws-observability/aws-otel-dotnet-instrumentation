@@ -50,9 +50,12 @@ internal sealed class ProfilerTranslator
     {
         appliedArities = Array.Empty<int>();
 
+        // Line-level is a different weave entirely (interior IL offset, not a method boundary) and is owned
+        // by LineProbeTranslator. Reaching here with a line-level config means the manager routed it wrong,
+        // so Skipped is the right answer rather than an attempt to weave a boundary for it.
         if (!config.IsMethodLevel)
         {
-            return InstrumentationApplyResult.Skipped; // Line-level requires C++ extension (Phase 2)
+            return InstrumentationApplyResult.Skipped;
         }
 
         if (IsUnsupportedTarget(config))

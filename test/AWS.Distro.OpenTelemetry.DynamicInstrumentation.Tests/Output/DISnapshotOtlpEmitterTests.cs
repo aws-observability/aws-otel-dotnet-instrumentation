@@ -257,6 +257,45 @@ public class DISnapshotOtlpEmitterExportTests
     }
 
     [Fact]
+    public void Export_FieldCountTruncatedObject_CarriesItsRealSizeOnTheWire()
+    {
+        // An object over MaxFieldsPerObject used to serialize to `fields` with NO truncation marker at all: the
+        // shape rule reaches `not_captured_reason` only for values with no partial data, so a truncated object
+        // was byte-identical to a complete one and the dropped members were invisible to the operator. The
+        // serializer now reports the real member count, which surfaces here as `size` — the same signal a
+        // truncated collection carries.
+        var (emitter, exported, factory) = CreateRealPipeline();
+
+        using (factory)
+        {
+            emitter.Emit(new PendingCapture
+            {
+                Type = CaptureType.METHOD,
+                InstrumentationKey = "MyApp.Svc.Run",
+                LocationHash = "hash1",
+                Arguments = new Dictionary<string, CapturedValue>
+                {
+                    ["order"] = new CapturedValue
+                    {
+                        Type = "MyApp.Order",
+                        Fields = new Dictionary<string, CapturedValue>
+                        {
+                            ["id"] = new CapturedValue { Type = "System.String", Value = "ORD-1" },
+                        },
+                        OriginalSize = 37,
+                        NotCapturedReason = NotCapturedReason.FieldCount,
+                    },
+                },
+            });
+        }
+
+        var body = exported.Single().Body ?? string.Empty;
+
+        body.Should().Contain("\"size\":37", "a field-count-truncated object must carry its real member count");
+        body.Should().Contain("fields", "the members that WERE captured are still emitted");
+    }
+
+    [Fact]
     public void Export_FaultedMethod_EmitsThrowableInBody()
     {
         // A probe on a method that threw must carry the exception in the snapshot body (type + message +

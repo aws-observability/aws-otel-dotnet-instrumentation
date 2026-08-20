@@ -16,6 +16,24 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 /// boundary, not a branch target, and positioned so the requested local is already assigned.</param>
 /// <param name="LocalSlot">The local variable slot to read, or -1 when no local was requested/resolved.</param>
 /// <param name="LocalName">The source name of the local being captured, or null.</param>
+/// <param name="LocalTypeName">
+/// Assembly-qualified-free full name of the local's declared type (e.g. <c>System.String</c>), or null when
+/// no local is being captured. The native rewriter needs this to emit the right <c>box</c> token: a
+/// value-type local must be boxed against ITS OWN type, and boxing against the wrong one is undefined
+/// behavior rather than a clean failure.
+/// </param>
+/// <param name="LocalIsValueType">
+/// Whether the local's declared type is a value type. This decides whether a <c>box</c> is emitted at all —
+/// a reference-type local is already an <c>object</c> reference and boxing one is invalid IL.
+/// </param>
+/// <param name="HoistedFieldToken">
+/// Non-zero when the captured variable lives in a FIELD of an async/iterator state machine rather than in a
+/// local slot. The native side then emits <c>ldarg.0; ldfld &lt;token&gt;</c> instead of <c>ldloc</c>.
+/// </param>
+// ASYNC: for a state-machine method, TypeName/MethodName/ParameterCount/MethodToken describe the COMPILER-
+// GENERATED MoveNext, not the method the operator named — the user's source lines only exist there. LocalName
+// stays the SOURCE name so the snapshot reads as the operator wrote it, which is the whole reason the two are
+// separate fields.
 internal sealed record LineProbeLocation(
     int MethodToken,
     string AssemblyName,
@@ -24,4 +42,7 @@ internal sealed record LineProbeLocation(
     int ParameterCount,
     uint IlOffset,
     int LocalSlot,
-    string? LocalName);
+    string? LocalName,
+    string? LocalTypeName = null,
+    bool LocalIsValueType = false,
+    uint HoistedFieldToken = 0);

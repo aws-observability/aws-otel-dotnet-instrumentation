@@ -20,6 +20,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 //   ULONG ilOffset; INT32 probeId; ULONG hoistedFieldToken;
 //   WCHAR* callbackAssembly; WCHAR* callbackType; WCHAR* callbackMethod;
 //   INT32 emissionMode; INT32 boxValue; WCHAR* gateMethod;
+//   WCHAR* localTypeName; INT32 localIsValueType;
 //
 // NAMES, NOT TOKENS (Q3): the target is located by assembly/type/method + signature COUNT, and the
 // native side builds the cross-assembly MemberRef for the callback itself. Metadata tokens are
@@ -45,9 +46,14 @@ internal struct NativeLineProbeDefinition : IDisposable
     public int ProbeId;
 
     /// <summary>
-    /// Async only: an <c>mdFieldDef</c> in the TARGET's module identifying a hoisted state-machine
-    /// field to read. Zero for the sync path. Async is out of scope for v1, so this ships as 0.
+    /// State machines only: an <c>mdFieldDef</c> in the TARGET's module identifying a hoisted local field to
+    /// read. Zero for the sync path.
     /// </summary>
+    // THIS FIELD ALONE SELECTS THE ASYNC EMISSION. The native side computes
+    // `isAsyncHoistedCapture = (hoisted_field_token != mdTokenNil)` and reads `ldarg.0; ldfld <token>`
+    // instead of `ldloc <slot>`, so it must be paired with EmissionMode = Legacy, never LocalCapture (see
+    // LineProbeTranslator). A token is safe to send across the ABI — unlike the callback (Q3) — precisely
+    // because the state machine is declared in the SAME module as the method being woven.
     public uint HoistedFieldToken;
 
     [MarshalAs(UnmanagedType.LPWStr)]
@@ -74,6 +80,25 @@ internal struct NativeLineProbeDefinition : IDisposable
     public string? GateMethod;
 
     /// <summary>
+    /// Full name of the captured local's declared type (e.g. <c>System.String</c>), or null to mean
+    /// <c>System.Int32</c>. Used by the native side as the <c>box</c> token for a value-type local.
+    /// </summary>
+    // Sent as a NAME rather than a token for the same reason as the callback (Q3): metadata tokens are
+    // per-module, and the box target lives in corlib, not the customer's module. The native side resolves
+    // it via DefineTypeRefByName against the corlib AssemblyRef.
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string? LocalTypeName;
+
+    /// <summary>
+    /// Non-zero when the captured local is a value type and therefore needs boxing. Zero suppresses the
+    /// <c>box</c> entirely, which is required for a reference-type local.
+    /// </summary>
+    // An INT32 rather than a bool: `bool` marshals as 4 bytes by default here, but relying on that is a
+    // coin-flip against the native INT32 field. Being explicit removes the ambiguity from a struct whose
+    // whole contract is byte layout.
+    public int LocalIsValueType;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NativeLineProbeDefinition"/> struct.
     /// </summary>
     /// <param name="targetAssembly">Simple name of the assembly declaring the target method.</param>
@@ -92,6 +117,8 @@ internal struct NativeLineProbeDefinition : IDisposable
     /// <param name="boxValue">Local slot index (LocalCapture) or constant to box (box modes).</param>
     /// <param name="gateMethod">Gate method name; required for <see cref="LineProbeEmissionMode.GatedBox"/>.</param>
     /// <param name="hoistedFieldToken">Async hoisted-field token; 0 for the sync path.</param>
+    /// <param name="localTypeName">Declared type of the captured local; null means <c>System.Int32</c>.</param>
+    /// <param name="localIsValueType">Whether the captured local needs boxing.</param>
     public NativeLineProbeDefinition(
         string targetAssembly,
         string targetType,
@@ -105,7 +132,9 @@ internal struct NativeLineProbeDefinition : IDisposable
         LineProbeEmissionMode emissionMode = LineProbeEmissionMode.Legacy,
         int boxValue = 0,
         string? gateMethod = null,
-        uint hoistedFieldToken = 0)
+        uint hoistedFieldToken = 0,
+        string? localTypeName = null,
+        bool localIsValueType = true)
     {
         this.TargetAssembly = targetAssembly;
         this.TargetType = targetType;
@@ -119,6 +148,8 @@ internal struct NativeLineProbeDefinition : IDisposable
         this.EmissionMode = (int)emissionMode;
         this.BoxValue = boxValue;
         this.GateMethod = gateMethod;
+        this.LocalTypeName = localTypeName;
+        this.LocalIsValueType = localIsValueType ? 1 : 0;
 
         this.TargetSignatureTypesLength = (ushort)targetSignatureTypes.Length;
         this.TargetSignatureTypes = Marshal.AllocHGlobal(IntPtr.Size * targetSignatureTypes.Length);
