@@ -116,6 +116,12 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
         {
             new("event.name", IncidentSnapshotEventName),
             new("aws.service_events.snapshot_id", snapshot.SnapshotId),
+
+            // Incident time, as an attribute rather than only in the body, so a consumer can read and
+            // filter on when the incident occurred without parsing the body. Not redundant with the
+            // record's own time_unix_nano, which the logging pipeline stamps at emit — up to a flush
+            // interval later — nor with request_context.timestamp, which is request start.
+            new("aws.service_events.timestamp", snapshot.Timestamp),
             new("aws.service_events.trigger_type", snapshot.TriggerType),
             new("aws.service_events.operation", snapshot.Operation),
             new("aws.service_events.duration_ms", snapshot.DurationMs),

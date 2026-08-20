@@ -480,6 +480,48 @@ public class IncidentSnapshotCollectorTests
         callPath[0].GetProperty("function_name").GetString().Should().Be("Contoso.Service.Layer0.Handle");
     }
 
+    /// <summary>
+    /// The emitted record carries the incident time as a top-level attribute, and the incident time
+    /// and the request-context time are deliberately different values.
+    /// </summary>
+    /// <remarks>
+    /// The gap between them is the request duration, which is why this uses a 6000ms latency incident:
+    /// the two anchors are far enough apart that neither could be mistaken for the other, and it is
+    /// exactly the case where anchoring on request start would misreport the incident by the whole
+    /// latency threshold.
+    /// </remarks>
+    [Fact]
+    public void EmittedIncident_CarriesIncidentTimeAtTopLevel_DistinctFromRequestStart()
+    {
+        var (collector, logger) = NewCapturingCollector();
+
+        var result = collector.ProcessPotentialIncident(
+            route: "/slow", method: "GET", statusCode: 200, durationMs: 6000,
+            exceptionType: null, exceptionMessage: null, stackTrace: null,
+            traceId: null, spanId: null, requestTimestampMs: 1_000_000);
+
+        result.Should().NotBeNull();
+
+        collector.Dispose();
+
+        var record = logger.Records.Should().ContainSingle(
+            r => r.Any(kv => kv.Key == "event.name"
+                             && (kv.Value as string) == "aws.service_events.incident_snapshot"))
+            .Subject;
+
+        record.Single(kv => kv.Key == "aws.service_events.timestamp").Value
+            .Should().Be(1_006_000L, "incident time is request start plus the 6000ms duration");
+
+        // The exemplar cross-referencing this snapshot must agree on the incident time.
+        result!.Timestamp.Should().Be(1_006_000L);
+
+        // request_context.timestamp stays at request start, so the two are not the same field.
+        var body = record.Single(kv => kv.Key == "body").Value as string;
+        using var parsed = JsonDocument.Parse(body!);
+        parsed.RootElement.GetProperty("request_context").GetProperty("timestamp").GetInt64()
+            .Should().Be(1_000_000L, "request_context carries request start, not incident time");
+    }
+
     /// <summary>Exception text at or under the cap is emitted unchanged, with no marker.</summary>
     [Fact]
     public void ShortExceptionText_IsEmittedUnchanged()

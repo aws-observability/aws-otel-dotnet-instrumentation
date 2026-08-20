@@ -184,9 +184,23 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
 
         var exceptionInfo = BuildExceptionInfo(exceptionType, exceptionMessage, stackTrace, spanFrames);
 
+        // When the incident *occurred*: the moment the request finished and the error or the latency
+        // breach became true — not when the request started. Derived from request start plus duration
+        // rather than a fresh clock read, so it stays exactly consistent with the emitted duration_ms
+        // and needs no second time source. For a latency incident, whose threshold defaults to five
+        // seconds, request start would sit at least that far behind the real event.
+        //
+        // This is one of three timestamps on an incident, and they deliberately mean different things:
+        // this one is the incident time, the LogRecord's own time_unix_nano is *emit* time (up to a
+        // flush interval later), and request_context.timestamp is request *start*, which is what the
+        // wire format defines it as and what makes it useful next to duration_ms. Java and Python both
+        // stamp incident time at this point in their flow.
+        var incidentTimestampMs = requestTimestampMs + (long)durationMs;
+
         var snapshot = new IncidentSnapshot
         {
             SnapshotId = snapshotId,
+            Timestamp = incidentTimestampMs,
             TriggerType = triggerType,
             Operation = operation,
             Method = method,
@@ -211,16 +225,8 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
 
         this.pending.Enqueue(snapshot);
 
-        // The exemplar carries when the incident *occurred*, which is when the request finished and
-        // the error or the latency breach became true — not when it started. Derived from the request
-        // start plus its duration rather than a fresh clock read, so it stays exactly consistent with
-        // the emitted duration_ms and needs no second timestamp source. Java and Python both stamp
-        // incident time at this point in the flow; for a latency incident, whose threshold defaults to
-        // five seconds, request start would put the exemplar at least that far in the past.
-        // request_context.timestamp deliberately stays at request start — that is what the wire format
-        // defines it as, and it is what makes it useful next to duration_ms.
-        var incidentTimestampMs = requestTimestampMs + (long)durationMs;
-
+        // Same value on the exemplar, so an EndpointSummary exemplar and the IncidentSnapshot it
+        // cross-references agree on when the incident happened.
         return new IncidentTriggerResult(operation, snapshotId, triggerType, severity, incidentTimestampMs);
     }
 
