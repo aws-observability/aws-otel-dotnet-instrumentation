@@ -17,7 +17,7 @@ plugin) into the line-level branch.
 |---|------|--------|----------|
 | 1 | Vendor upstream native source | DONE | 544 upstream files present, 0 missing in either direction; re-verified 2026-08-20 against a sparse checkout of `b61301e` |
 | 2 | Record rebase baseline | DONE | `UPSTREAM-BASE.txt`; `git tag --points-at b61301e` = `v1.16.0`; distribution `VERSION` file independently reads `v1.16.0@b61301e...` |
-| 3 | Confirm delta is only ours | DONE | measured 2026-08-20: 9 modified files **+275/−1**, plus `line_probe.{h,cpp}` (231+641). The +297/−1 previously recorded here was the 2026-08-03 figure and had drifted; `UPSTREAM-BASE.txt` now carries the reproduce command |
+| 3 | Confirm delta is only ours | DONE | re-measured 2026-08-20 after the weave log landed: 9 modified files **+289/−1**, plus `line_probe.{h,cpp}` (303+801). Earlier figures here (+275/−1 then +297/−1) had each gone stale; `UPSTREAM-BASE.txt` carries the reproduce command and the full per-file table |
 | 4 | Source-list consistency gate | DONE | `AssertNativeSourceListsAreComplete`; 36 own .cpp (5 Windows-only) |
 | 5 | Version-pin gate (V3) | DONE | `AssertManagedAssemblyVersionMatchesNativePin`; upstream ships `Version=1.0.0.0` |
 | 6 | Wire gates into `Workflow` | DONE | Present in the executed target graph, ordered after unpack |
@@ -30,7 +30,7 @@ plugin) into the line-level branch.
 | 13 | Conditional execution | DONE | Verified in BOTH states: skips with no binary, runs with one |
 | 14 | CI job | WRITTEN, NOT RUN | `build-native-x64` in `main-build.yml`; YAML parses, `build` has `needs: build-native-x64`. **Never executed on a real runner** — the branch is still local, so nothing has pushed to trigger it. |
 | 15 | Live in-process verification | DONE | See "Live verification" |
-| 16 | Other four RIDs | NOT STARTED | musl x64/arm64, glibc-arm64, Windows all still ship the stock binary |
+| 16 | Other four RIDs | NOT STARTED | musl x64/arm64, glibc-arm64, Windows all still ship the stock binary. What that costs is now MEASURED rather than argued — see W8 |
 
 ### Mutation results — 4/4 red
 
