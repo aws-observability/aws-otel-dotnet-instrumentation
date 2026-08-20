@@ -10,8 +10,16 @@ Upstream tag        : v1.16.0
 Upstream commit     : b61301e099ad662679ccd8dd3f89b212190c1800
 Upstream subtree    : src/OpenTelemetry.AutoInstrumentation.Native
 Vendored on         : 2026-08-03
-Files vendored      : 546 (105 own source files + 441 files under lib/, already
+Delta re-measured   : 2026-08-20 (against a sparse checkout of the pinned commit)
+Files vendored      : 544 (103 own source files + 441 files under lib/, already
                       vendored BY UPSTREAM: lib/coreclr 7.8 MB, lib/spdlog 1.1 MB)
+Files here          : 548 = the 544 above + line_probe.{h,cpp} + this file
+                      + IMPLEMENTATION-STATUS.md
+
+Verified 2026-08-20 by fetching b61301e into a scratch clone and comparing every path both
+ways: ZERO upstream files missing from this copy, and the only paths present here and not
+upstream are the four listed above. That check is the one that catches a partial vendoring,
+which otherwise surfaces only at dlopen (see "THE FAILURE MODE" below).
 
 WHY THIS FILE EXISTS
 --------------------
@@ -23,20 +31,37 @@ answer to "what did upstream change under me."
 
 THE LOCAL DELTA (line-level line probes)
 ----------------------------------------
-Nine modified files (+297 lines, -1) and two new files (+657 lines):
+MEASURED 2026-08-20 against b61301e, not estimated. Nine modified files (+275, -1) and two
+new source files (872 lines):
 
-  NEW    line_probe.h                                  193 lines
-  NEW    line_probe.cpp                                464 lines
-  MOD    cor_profiler.cpp                             +122
-  MOD    rejit_handler.cpp                             +97
-  MOD    rejit_preprocessor.cpp                        +37 -1
-  MOD    rejit_handler.h                               +14
-  MOD    interop.cpp                                   +12   (AddLineProbes/RemoveLineProbe exports)
-  MOD    cor_profiler.h                                +10
-  MOD    OpenTelemetry.AutoInstrumentation.Native.vcxproj  +2  (Windows source list)
-  MOD    OpenTelemetry.AutoInstrumentation.Native.def   +2   (exported symbols)
-  MOD    CMakeLists.txt                                 +1   (non-Windows source list)
-                                                       +19  (pthread link — see below)
+  NEW    line_probe.h                                  231 lines
+  NEW    line_probe.cpp                                641 lines
+  MOD    cor_profiler.cpp                             +107
+  MOD    rejit_handler.cpp                             +84
+  MOD    rejit_preprocessor.cpp                        +34 -1
+  MOD    CMakeLists.txt                               +16    (source list + pthread, see below)
+  MOD    rejit_handler.h                              +11
+  MOD    interop.cpp                                  +10    (AddLineProbes/RemoveLineProbe exports)
+  MOD    cor_profiler.h                                +9
+  MOD    OpenTelemetry.AutoInstrumentation.Native.def   +2    (exported symbols)
+  MOD    OpenTelemetry.AutoInstrumentation.Native.vcxproj +2  (Windows source list)
+
+Reproduce (this is how the numbers above were obtained):
+
+  git init /tmp/up && cd /tmp/up
+  git remote add origin https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation
+  git config core.sparseCheckout true
+  git sparse-checkout set --no-cone "src/OpenTelemetry.AutoInstrumentation.Native"
+  git fetch --depth 1 origin b61301e099ad662679ccd8dd3f89b212190c1800
+  git checkout FETCH_HEAD
+  diff -ru /tmp/up/src/OpenTelemetry.AutoInstrumentation.Native <this directory>
+
+The figures previously recorded here (+297/-1, new files 193/464) were taken at vendoring time
+on 2026-08-03 and had drifted in BOTH directions: the new files grew as non-int local capture,
+async hoisted-field reads and multi-local capture landed, while the modified-file total came
+DOWN as review moved logic out of upstream's files into line_probe.cpp. Re-measure with the
+command above rather than adjusting by hand — a stale number here is worse than no number,
+because the only reason this file exists is to be trustworthy at rebase time.
 
 PTHREAD LINK — A DELTA UPSTREAM DOES NOT HAVE
 ---------------------------------------------

@@ -11,6 +11,14 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Add line-level Dynamic Instrumentation: capture local variables at a specific source line without
+  redeploying. Requires the target assembly's portable or embedded PDB to be deployed alongside it, and
+  a native profiler built from the vendored source (currently linux-x64 only; other runtime identifiers
+  ship the upstream profiler, on which line-level probes report an error and function-level probes are
+  unaffected). See [docs/dynamic-instrumentation.md](docs/dynamic-instrumentation.md) for the supported
+  targets and limits.
+  ([#TBD](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/TBD))
+
 - Attribute presigned S3 URLs as `AWS::S3` dependencies in Application Signals, opt-in via
   `OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED`
   ([#440](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/440))
