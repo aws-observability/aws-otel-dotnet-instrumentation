@@ -40,6 +40,9 @@ rm -rf dist/contract_tests*
 if [ "$cloudwatch_plugin_selected" = true ]; then
   plugin_project="../src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj"
   aws_instrumentation_project="../src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj"
+  otel_version="${OTEL_VERSION:-1.16.0}"
+  otel_auto_instrumentation_version="${OTEL_AUTO_INSTRUMENTATION_VERSION:-1.16.0}"
+  otel_instrumentation_version="${OTEL_INSTRUMENTATION_VERSION:-1.16.0}"
 
   rm -rf ./dist/nuget
   mkdir -p ./dist/nuget
@@ -106,9 +109,12 @@ do
   application=$(echo "$application_directory" | tr '[:upper:]' '[:lower:]')
   echo "application: ${application}"
   if [ "$application_directory" = "cloudwatch-plugin-otel" ]; then
-    docker build . \
+    docker build --platform linux/amd64 . \
       --build-arg "CLOUDWATCH_PLUGIN_VERSION=${cloudwatch_plugin_version}" \
       --build-arg "AWS_INSTRUMENTATION_VERSION=${aws_instrumentation_version}" \
+      --build-arg "OTEL_VERSION=${otel_version}" \
+      --build-arg "OTEL_AUTO_INSTRUMENTATION_VERSION=${otel_auto_instrumentation_version}" \
+      --build-arg "OTEL_INSTRUMENTATION_VERSION=${otel_instrumentation_version}" \
       -t "aws-application-signals-tests-${application}-app" \
       -f "${dir}/Dockerfile"
   else

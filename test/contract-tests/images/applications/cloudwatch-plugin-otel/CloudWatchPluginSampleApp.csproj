@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>CloudWatchPluginSampleApp</AssemblyName>
+    <RootNamespace>SampleApp</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -19,16 +21,21 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.6" />
-    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore"
+                      Version="$(OpenTelemetryInstrumentationVersion)" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AWS" Version="$(AwsInstrumentationVersion)" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.16.0-beta.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.GrpcNetClient" Version="1.16.0-beta.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.16.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore"
+                      Version="$(OpenTelemetryInstrumentationVersion)-beta.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.GrpcNetClient"
+                      Version="$(OpenTelemetryInstrumentationVersion)-beta.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http"
+                      Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis"
+                      Version="$(OpenTelemetryInstrumentationVersion)-beta.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
   </ItemGroup>
 
@@ -41,5 +48,9 @@
            Text="CloudWatchPluginVersion must be supplied by set-up-contract-tests.sh." />
     <Error Condition="'$(AwsInstrumentationVersion)' == ''"
            Text="AwsInstrumentationVersion must be supplied by set-up-contract-tests.sh." />
+    <Error Condition="'$(OpenTelemetryVersion)' == ''"
+           Text="OpenTelemetryVersion must be supplied by set-up-contract-tests.sh." />
+    <Error Condition="'$(OpenTelemetryInstrumentationVersion)' == ''"
+           Text="OpenTelemetryInstrumentationVersion must be supplied by set-up-contract-tests.sh." />
   </Target>
 </Project>

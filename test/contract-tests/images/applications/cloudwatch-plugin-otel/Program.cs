@@ -13,7 +13,6 @@ using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using Amazon.SQS;
 using Amazon.SQS.Model;
-using CloudWatchPluginOtel.Contract;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -23,14 +22,15 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using SampleApp.Contract;
 using StackExchange.Redis;
 
-namespace CloudWatchPluginOtel;
+namespace SampleApp;
 
 public static class Program
 {
-    internal const string ActivitySourceName = "CloudWatchPluginOtel.Contract";
-    internal const string DependenciesReadyMessage = "CloudWatchPluginOtel dependencies ready.";
+    internal const string ActivitySourceName = "CloudWatchPluginSampleApp.Contract";
+    internal const string DependenciesReadyMessage = "CloudWatchPluginSampleApp dependencies ready.";
 
     private const string LocalStackEndpoint = "http://localstack:4566";
     private const string RedisEndpoint = "redis:6379,abortConnect=false";

@@ -17,7 +17,7 @@ _logger.setLevel(INFO)
 
 _APPLICATION_IMAGE = "aws-application-signals-tests-cloudwatch-plugin-otel-app"
 _IMAGE_VERSION_LABEL = "com.amazonaws.cloudwatch-plugin.version"
-_READY_MESSAGE = "CloudWatchPluginOtel dependencies ready."
+_READY_MESSAGE = "CloudWatchPluginSampleApp dependencies ready."
 _SERVICE_NAME = "cloudwatch-plugin-otel-contract-test"
 _SCOPE_NAME = "cloudwatch.plugin.otel.span_metrics"
 
@@ -132,16 +132,17 @@ class SpanMetricsContractTestBase(ContractTestBase):
             self.assertIn("OpenTelemetry tracer initialized.", logs)
             self.assertIn("OpenTelemetry meter initialized.", logs)
             self.assertIn(
-                "AwsInstrumentationPlugin.BeforeConfigureTracerProvider invoked.", logs
+                "AwsSdkInstrumentationPlugin.BeforeConfigureTracerProvider invoked.",
+                logs,
             )
             self.assertIn("CORECLR_ENABLE_PROFILING=1", logs)
             self.assertIn(
-                "DOTNET_STARTUP_HOOKS=/opt/aws/otel/dotnet/net/"
+                "DOTNET_STARTUP_HOOKS=/otel-dotnet-auto/net/"
                 "OpenTelemetry.AutoInstrumentation.StartupHook.dll",
                 logs,
             )
             self.assertIn(
-                "CORECLR_PROFILER_PATH=/opt/aws/otel/dotnet/linux-x64/"
+                "CORECLR_PROFILER_PATH=/otel-dotnet-auto/linux-x64/"
                 "OpenTelemetry.AutoInstrumentation.Native.so",
                 logs,
             )
@@ -151,6 +152,19 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 "OpenTelemetry.Instrumentation.EntityFrameworkCore",
                 "OpenTelemetry.Instrumentation.GrpcNetClient",
                 "OpenTelemetry.Instrumentation.StackExchangeRedis",
+            ):
+                escaped_name = assembly_name.replace(".", r"\.")
+                self.assertRegex(
+                    logs,
+                    rf"Instrumentation assembly {escaped_name}, .+ "
+                    rf"location=(?:/app/|/otel-dotnet-auto/net/(?:net\d+\.\d+/)?)"
+                    rf"{escaped_name}\.dll",
+                )
+                self.assertNotIn(
+                    f"Instrumentation assembly {assembly_name}=not-loaded",
+                    logs,
+                )
+            for assembly_name in (
                 "OpenTelemetry.Instrumentation.AWS",
                 "OpenTelemetry.Extensions.AWS",
             ):
@@ -252,22 +266,36 @@ class SpanMetricsContractTestBase(ContractTestBase):
                     "rpc.method": "Publish",
                 },
             ),
-            self._find_span(
+            self._find_span_with_attribute_variants(
                 spans,
                 Span.SPAN_KIND_CLIENT,
-                {
-                    "rpc.system.name": "grpc",
-                    "rpc.method": "contract.Health/Check",
-                },
+                [
+                    {
+                        "rpc.system.name": "grpc",
+                        "rpc.method": "contract.Health/Check",
+                    },
+                    {
+                        "rpc.system": "grpc",
+                        "rpc.service": "contract.Health",
+                        "rpc.method": "Check",
+                    },
+                ],
                 name="contract.Health/Check",
             ),
-            self._find_span(
+            self._find_span_with_attribute_variants(
                 spans,
                 Span.SPAN_KIND_SERVER,
-                {
-                    "grpc.method": "/contract.Health/Check",
-                    "http.route": "/contract.Health/Check",
-                },
+                [
+                    {
+                        "grpc.method": "/contract.Health/Check",
+                        "http.route": "/contract.Health/Check",
+                    },
+                    {
+                        "rpc.system": "grpc",
+                        "rpc.service": "contract.Health",
+                        "rpc.method": "Check",
+                    },
+                ],
             ),
         ]
 
@@ -399,14 +427,23 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 {"span.name": "GET", "span.kind": "CLIENT", "db.system": "redis"},
             ],
         )
-        self._assert_span_metrics_recorded(
+        self._assert_span_metrics_recorded_variants(
             metrics,
-            {
-                "span.name": "contract.Health/Check",
-                "span.kind": "CLIENT",
-                "rpc.system.name": "grpc",
-                "rpc.method": "contract.Health/Check",
-            },
+            [
+                {
+                    "span.name": "contract.Health/Check",
+                    "span.kind": "CLIENT",
+                    "rpc.system.name": "grpc",
+                    "rpc.method": "contract.Health/Check",
+                },
+                {
+                    "span.name": "contract.Health/Check",
+                    "span.kind": "CLIENT",
+                    "rpc.system": "grpc",
+                    "rpc.service": "contract.Health",
+                    "rpc.method": "Check",
+                },
+            ],
         )
         self._assert_span_metrics_recorded(
             metrics,

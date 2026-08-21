@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "CloudWatchPluginOtel.Contract";
+option csharp_namespace = "SampleApp.Contract";
 
 package contract;
 

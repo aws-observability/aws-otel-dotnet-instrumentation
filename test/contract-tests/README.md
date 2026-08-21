@@ -42,3 +42,16 @@ Pass one or more application directory names to build only those images:
 ```sh
 ./set-up-contract-tests.sh ServiceEvents.NetCore cloudwatch-plugin-otel
 ```
+
+The CloudWatch plugin contract test uses an unmodified upstream OpenTelemetry
+.NET Automatic Instrumentation distribution. To run one of the CI compatibility
+combinations:
+
+```sh
+./download-upstream-auto-instrumentation.sh v1.15.0
+OTEL_VERSION=1.15.3 \
+OTEL_AUTO_INSTRUMENTATION_VERSION=1.15.0 \
+OTEL_INSTRUMENTATION_VERSION=1.15.0 \
+  ./set-up-contract-tests.sh cloudwatch-plugin-otel
+pytest contract-tests/tests/test/amazon/cloudwatch_plugin_otel
+```

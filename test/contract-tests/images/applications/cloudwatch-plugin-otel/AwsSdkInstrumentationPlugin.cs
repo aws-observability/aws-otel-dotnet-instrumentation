@@ -3,17 +3,17 @@
 
 using OpenTelemetry.Trace;
 
-namespace CloudWatchPluginOtel;
+namespace SampleApp;
 
-public sealed class AwsInstrumentationPlugin
+public sealed class AwsSdkInstrumentationPlugin
 {
-    public AwsInstrumentationPlugin()
+    public AwsSdkInstrumentationPlugin()
     {
     }
 
     public TracerProviderBuilder BeforeConfigureTracerProvider(TracerProviderBuilder builder)
     {
-        Console.WriteLine("AwsInstrumentationPlugin.BeforeConfigureTracerProvider invoked.");
+        Console.WriteLine("AwsSdkInstrumentationPlugin.BeforeConfigureTracerProvider invoked.");
         return builder.AddAWSInstrumentation();
     }
 }
