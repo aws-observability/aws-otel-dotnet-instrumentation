@@ -48,7 +48,6 @@ The CloudWatch plugin contract test uses an unmodified upstream OpenTelemetry
 combinations:
 
 ```sh
-./download-upstream-auto-instrumentation.sh v1.15.0
 OTEL_VERSION=1.15.3 \
 OTEL_AUTO_INSTRUMENTATION_VERSION=1.15.0 \
 OTEL_INSTRUMENTATION_VERSION=1.15.0 \

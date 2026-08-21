@@ -383,8 +383,6 @@ jobs:
           OTEL_INSTRUMENTATION_VERSION: ${{ matrix.dependency.instrumentation }}
         run: |
           cd test
-          bash ./download-upstream-auto-instrumentation.sh \
-            "v${OTEL_AUTO_INSTRUMENTATION_VERSION}"
           bash ./set-up-contract-tests.sh cloudwatch-plugin-otel
 
       - name: Run cloudwatch-plugin-otel/span_metrics contract tests with pytest

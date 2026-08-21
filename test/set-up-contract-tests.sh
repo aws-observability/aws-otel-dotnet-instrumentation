@@ -43,6 +43,20 @@ if [ "$cloudwatch_plugin_selected" = true ]; then
   otel_version="${OTEL_VERSION:-1.16.0}"
   otel_auto_instrumentation_version="${OTEL_AUTO_INSTRUMENTATION_VERSION:-1.16.0}"
   otel_instrumentation_version="${OTEL_INSTRUMENTATION_VERSION:-1.16.0}"
+  otel_auto_instrumentation_tag="v${otel_auto_instrumentation_version#v}"
+  otel_auto_download_dir="$(mktemp -d)"
+  otel_auto_installer="${otel_auto_download_dir}/otel-dotnet-auto-install.sh"
+  otel_auto_installer_url="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${otel_auto_instrumentation_tag}/otel-dotnet-auto-install.sh"
+
+  mkdir -p ./dist
+  curl --fail --location --retry 3 --output "$otel_auto_installer" "$otel_auto_installer_url"
+  OS_TYPE=linux-glibc \
+    ARCHITECTURE=x64 \
+    VERSION="$otel_auto_instrumentation_tag" \
+    OTEL_DOTNET_AUTO_HOME="$(pwd)/dist/UpstreamOpenTelemetryDistribution" \
+    DOWNLOAD_DIR="$otel_auto_download_dir" \
+    sh "$otel_auto_installer"
+  rm -rf "$otel_auto_download_dir"
 
   rm -rf ./dist/nuget
   mkdir -p ./dist/nuget
