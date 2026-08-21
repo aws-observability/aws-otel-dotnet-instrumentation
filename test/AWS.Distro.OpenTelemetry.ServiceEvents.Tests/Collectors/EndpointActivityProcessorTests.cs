@@ -279,6 +279,123 @@ public class EndpointActivityProcessorTests : IDisposable
         call.SpanId.Should().NotBeNullOrEmpty().And.HaveLength(16);
     }
 
+    /// <summary>
+    /// The private capture channel outranks a span exception event. Both can be present when a
+    /// customer has independently enabled <c>RecordException</c> on their own instrumentation; the
+    /// capture is the more trustworthy of the two because it is taken from the exception object at
+    /// the point it escaped, whereas the event's tags may have been rewritten by a span processor.
+    /// </summary>
+    [Fact]
+    public void OnEnd_CapturedException_TakesPrecedenceOverSpanExceptionEvent()
+    {
+        var recorder = new FakeRecorder();
+        var trigger = new FakeIncidentTrigger();
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig(), trigger);
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "POST");
+        activity.SetTag("http.route", "/checkout");
+        activity.SetTag("http.response.status_code", 500);
+
+        // A span exception event carrying deliberately different values.
+        activity.AddEvent(new ActivityEvent(
+            "exception",
+            tags: new ActivityTagsCollection
+            {
+                { "exception.type", "FromTheSpanEvent" },
+                { "exception.message", "from the span event" },
+                { "exception.stacktrace", "at X()" },
+            }));
+
+        ExceptionCapture.Stash(activity, Catch(() => throw new InvalidOperationException("from the capture")));
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        var call = trigger.Calls.Should().ContainSingle().Subject;
+        call.ExceptionType.Should().Be("System.InvalidOperationException", "the capture wins over the span event");
+        call.ExceptionMessage.Should().Be("from the capture");
+        call.StackTrace.Should().NotBe("at X()").And.Contain("InvalidOperationException");
+    }
+
+    /// <summary>
+    /// <c>error.type</c> is the last resort and yields a type only. When the capture is present it
+    /// supersedes the tag and additionally supplies the message and stack that <c>error.type</c>
+    /// can never carry — without them an IncidentSnapshot has no <c>call_path</c> to derive.
+    /// </summary>
+    [Fact]
+    public void OnEnd_CapturedException_TakesPrecedenceOverErrorTypeTag()
+    {
+        var recorder = new FakeRecorder();
+        var trigger = new FakeIncidentTrigger();
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig(), trigger);
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "POST");
+        activity.SetTag("http.route", "/checkout");
+        activity.SetTag("http.response.status_code", 500);
+        activity.SetTag("error.type", "System.TimeoutException");
+
+        ExceptionCapture.Stash(activity, Catch(() => throw new InvalidOperationException("the real one")));
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        var call = trigger.Calls.Should().ContainSingle().Subject;
+        call.ExceptionType.Should().Be("System.InvalidOperationException", "the capture wins over error.type");
+        call.ExceptionMessage.Should().Be("the real one");
+        call.StackTrace.Should().NotBeNullOrEmpty("error.type alone could not have supplied a stack");
+    }
+
+    /// <summary>
+    /// <c>ReadError</c> (which feeds the <c>exception</c> metric dimension) and
+    /// <c>ReadExceptionDetails</c> (which feeds the snapshot) resolve the exception type through the
+    /// same precedence chain, so a request cannot be attributed to one type on the metric and a
+    /// different one on the snapshot the metric's exemplar points at.
+    /// </summary>
+    [Fact]
+    public void OnEnd_CapturedException_ReportsTheSameTypeOnTheMetricAndTheSnapshot()
+    {
+        var recorder = new FakeRecorder();
+        var trigger = new FakeIncidentTrigger();
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig(), trigger);
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetTag("http.request.method", "POST");
+        activity.SetTag("http.route", "/checkout");
+        activity.SetTag("http.response.status_code", 500);
+        activity.SetTag("error.type", "System.TimeoutException");
+
+        ExceptionCapture.Stash(activity, Catch(() => throw new InvalidOperationException("boom")));
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        var metricErrorType = recorder.Calls.Should().ContainSingle().Subject.ErrorType;
+        var snapshotErrorType = trigger.Calls.Should().ContainSingle().Subject.ExceptionType;
+
+        metricErrorType.Should().Be("System.InvalidOperationException");
+        snapshotErrorType.Should().Be(
+            metricErrorType,
+            "both readers consult the capture first; if they diverge, the exception metric and the " +
+            "snapshot it links to would disagree about what failed");
+    }
+
+    /// <summary>Throw and catch so the exception carries a real stack trace.</summary>
+    private static Exception Catch(Action throwing)
+    {
+        try
+        {
+            throwing();
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+
+        throw new InvalidOperationException("the action was expected to throw");
+    }
+
     [Fact]
     public void OnEnd_WithIncidentTrigger_UnsampledSpan_OmitsTraceContext()
     {
@@ -392,8 +509,9 @@ public class EndpointActivityProcessorTests : IDisposable
     [Fact]
     public void OnEnd_WhenTheIncidentTriggerThrows_DoesNotPropagateToTheCaller()
     {
+        var recorder = new FakeRecorder();
         var trigger = new FakeIncidentTrigger { ShouldThrow = true };
-        var processor = new EndpointActivityProcessor(new FakeRecorder(), new ServiceEventsConfig(), trigger);
+        var processor = new EndpointActivityProcessor(recorder, new ServiceEventsConfig(), trigger);
 
         var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
         activity.SetTag("http.request.method", "POST");
@@ -405,6 +523,44 @@ public class EndpointActivityProcessorTests : IDisposable
 
         onEnd.Should().NotThrow(
             "the incident path is downstream of the endpoint recording and must not escape either");
+
+        recorder.Calls.Should().ContainSingle(
+            "the incident path runs after RecordRequest, so a failure there costs the incident but " +
+            "must not also cost the endpoint metric for the request");
+    }
+
+    /// <summary>
+    /// Pins the incident timestamp to epoch <b>milliseconds</b> read as UTC. Scope worth being clear
+    /// about: this catches a unit error (seconds for milliseconds) or a wrong epoch, but it does not
+    /// exercise the <c>SpecifyKind</c> guard in <c>FeedIncidentTrigger</c> — <c>SetStartTime</c>
+    /// rejects any <c>DateTimeKind</c> other than UTC, so the kind this test can supply makes that
+    /// call a no-op either way.
+    /// </summary>
+    [Fact]
+    public void OnEnd_DerivesTheIncidentTimestampAsUtcMilliseconds()
+    {
+        var trigger = new FakeIncidentTrigger();
+        var processor = new EndpointActivityProcessor(new FakeRecorder(), new ServiceEventsConfig(), trigger);
+
+        // 2021-01-01T00:00:00Z. Hard-coded rather than round-tripped through the same conversion the
+        // production code uses, so the assertion is independent of that code being right.
+        var start = new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        const long expectedEpochMs = 1609459200000L;
+
+        var activity = this.source.StartActivity("ingress", ActivityKind.Server)!;
+        activity.SetStartTime(start);
+        activity.SetTag("http.request.method", "POST");
+        activity.SetTag("http.route", "/checkout");
+        activity.SetTag("http.response.status_code", 500);
+        activity.Stop();
+
+        processor.OnEnd(activity);
+
+        trigger.Calls.Should().ContainSingle().Which
+            .Timestamp.Should().Be(
+                expectedEpochMs,
+                "the timestamp must be epoch milliseconds read as UTC, not seconds and not shifted " +
+                "by the host's local offset");
     }
 
     [Fact]

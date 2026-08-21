@@ -21,8 +21,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// frame on end; the server processor drains it on span end.
 /// </para>
 /// <para>
-/// Exception incidents use the stack-trace-derived call path instead (C1); this span
-/// buffer backs the latency path where no exception/stack is available.
+/// Exception incidents use the stack-trace-derived call path instead, because it names the real
+/// throwing method; this span buffer backs the latency path, where no exception or stack is available.
 /// </para>
 /// </remarks>
 internal static class CallPathCapture

@@ -4,7 +4,7 @@
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 
 /// <summary>
-/// Sink interface implemented by the incident-snapshot collector (M4) so
+/// Sink interface implemented by the incident-snapshot collector so
 /// the syncer can push updated config without a hard dependency on the
 /// collector type.
 /// </summary>
