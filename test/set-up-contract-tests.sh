@@ -10,12 +10,62 @@ current_path=$(pwd)
 current_dir="${current_path##*/}"
 if [ "$current_dir" != "test" ]; then
   echo "Please run from test dir"
-  exit
+  exit 1
+fi
+
+applications=("$@")
+for application in "${applications[@]}"; do
+  if [ ! -d "contract-tests/images/applications/${application}" ]; then
+    echo "Unknown contract-test application: ${application}"
+    exit 1
+  fi
+done
+
+cloudwatch_plugin_selected=false
+if [ "${#applications[@]}" -eq 0 ]; then
+  cloudwatch_plugin_selected=true
+else
+  for application in "${applications[@]}"; do
+    if [ "$application" = "cloudwatch-plugin-otel" ]; then
+      cloudwatch_plugin_selected=true
+      break
+    fi
+  done
 fi
 
 # Remove old whl files (excluding distro whl)
 rm -rf dist/mock_collector*
 rm -rf dist/contract_tests*
+
+if [ "$cloudwatch_plugin_selected" = true ]; then
+  plugin_project="../src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj"
+  aws_instrumentation_project="../src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj"
+
+  rm -rf ./dist/nuget
+  mkdir -p ./dist/nuget
+  dotnet pack "$plugin_project" --configuration Release --output ./dist/nuget
+  dotnet pack "$aws_instrumentation_project" --configuration Release --output ./dist/nuget
+
+  shopt -s nullglob
+  cloudwatch_plugin_packages=(./dist/nuget/AWS.OpenTelemetry.CloudWatch.Plugin.*.nupkg)
+  aws_instrumentation_packages=(./dist/nuget/OpenTelemetry.Instrumentation.AWS.*.nupkg)
+  shopt -u nullglob
+  if [ "${#cloudwatch_plugin_packages[@]}" -ne 1 ]; then
+    echo "Expected exactly one CloudWatch plugin package in test/dist/nuget"
+    exit 1
+  fi
+  if [ "${#aws_instrumentation_packages[@]}" -ne 1 ]; then
+    echo "Expected exactly one AWS instrumentation package in test/dist/nuget"
+    exit 1
+  fi
+
+  cloudwatch_plugin_package="${cloudwatch_plugin_packages[0]##*/}"
+  cloudwatch_plugin_version="${cloudwatch_plugin_package#AWS.OpenTelemetry.CloudWatch.Plugin.}"
+  cloudwatch_plugin_version="${cloudwatch_plugin_version%.nupkg}"
+  aws_instrumentation_package="${aws_instrumentation_packages[0]##*/}"
+  aws_instrumentation_version="${aws_instrumentation_package#OpenTelemetry.Instrumentation.AWS.}"
+  aws_instrumentation_version="${aws_instrumentation_version%.nupkg}"
+fi
 
 # Install python dependency for contract-test
 pip3 install pymysql
@@ -36,8 +86,6 @@ fi
 
 # Create application images
 cd ../../..
-applications=("$@")
-excluded_application="${CONTRACT_TEST_APPLICATION_EXCLUDE:-}"
 applications_built=0
 for dir in contract-tests/images/applications/*
 do
@@ -54,13 +102,18 @@ do
       continue
     fi
   fi
-  if [ -n "$excluded_application" ] && [ "$application_directory" = "$excluded_application" ]; then
-    continue
-  fi
 
   application=$(echo "$application_directory" | tr '[:upper:]' '[:lower:]')
   echo "application: ${application}"
-  docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile"
+  if [ "$application_directory" = "cloudwatch-plugin-otel" ]; then
+    docker build . \
+      --build-arg "CLOUDWATCH_PLUGIN_VERSION=${cloudwatch_plugin_version}" \
+      --build-arg "AWS_INSTRUMENTATION_VERSION=${aws_instrumentation_version}" \
+      -t "aws-application-signals-tests-${application}-app" \
+      -f "${dir}/Dockerfile"
+  else
+    docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile"
+  fi
   if [ $? = 1 ]; then
     echo "Docker build for ${application} application failed"
     exit 1

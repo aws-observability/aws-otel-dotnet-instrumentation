@@ -37,3 +37,8 @@ Steps:
 ./set-up-contract-tests.sh
 pytest contract-tests/tests/test/amazon/{test-folder}
 ```
+
+Pass one or more application directory names to build only those images:
+```sh
+./set-up-contract-tests.sh ServiceEvents.NetCore cloudwatch-plugin-otel
+```

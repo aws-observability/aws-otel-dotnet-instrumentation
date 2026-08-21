@@ -51,5 +51,5 @@ jobs:
         run: |
           cd test
           bash ./build-and-install-distro.sh
-          bash ./set-up-contract-tests.sh
+          bash ./set-up-contract-tests.sh ServiceEvents.NetCore
           pytest contract-tests/tests/test/amazon/serviceevents

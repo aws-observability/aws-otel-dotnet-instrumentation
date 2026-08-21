@@ -331,43 +331,26 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Set up and run contract tests with pytest
+      - name: Set up contract tests
         run: |
           cd test
           bash ./build-and-install-distro.sh
-          CONTRACT_TEST_APPLICATION_EXCLUDE=cloudwatch-plugin-otel bash ./set-up-contract-tests.sh
+          bash ./set-up-contract-tests.sh
+
+      - name: Run contract tests with pytest
+        run: |
+          cd test
           pytest contract-tests/tests --ignore=contract-tests/tests/test/amazon/cloudwatch_plugin_otel
 
-  cloudwatch-plugin-otel-contract-tests:
-    name: cloudwatch-plugin-otel/span_metrics
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
-        with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
-            10.0.x
-
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v6.0.0
-        with:
-          python-version: '3.10'
-
-      - name: Set up and run cloudwatch-plugin-otel/span_metrics contract tests with pytest
+      - name: Run cloudwatch-plugin-otel/span_metrics contract tests with pytest
         run: |
           cd test
-          bash ./build-and-install-distro.sh
-          bash ./set-up-contract-tests.sh cloudwatch-plugin-otel
           pytest contract-tests/tests/test/amazon/cloudwatch_plugin_otel
 
 
   all-pr-checks-pass:
     runs-on: ubuntu-latest
-    needs: [static-code-checks, build, cloudwatch-plugin-tests, build-arm, build-x64-musl, build-arm-musl, build-and-scan-images, contract-test, cloudwatch-plugin-otel-contract-tests]
+    needs: [static-code-checks, build, cloudwatch-plugin-tests, build-arm, build-x64-musl, build-arm-musl, build-and-scan-images, contract-test]
     if: always()
     steps:
       - name: Checkout to get workflow file

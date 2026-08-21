@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Net;
 using System.Reflection;
-using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
@@ -179,7 +178,6 @@ public static class Program
             Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID") ?? "testing",
             Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY") ?? "testing");
 
-        services.AddSingleton(redisConnection);
         services.AddSingleton<IConnectionMultiplexer>(redisConnection);
         services.AddDbContext<ContractDbContext>(
             options => options.UseSqlite(DatabaseConnectionString));
@@ -312,33 +310,16 @@ public static class Program
 
     private static IResult ThrowContractError()
     {
-        Activity.Current?.SetTag("error.type", "RuntimeError");
         Activity.Current?.SetStatus(ActivityStatusCode.Error);
         throw new InvalidOperationException("expected contract-test error");
     }
 
-    private static async Task InitializeDependenciesAsync(IServiceProvider services)
+    private static Task InitializeDependenciesAsync(IServiceProvider services)
     {
-        const int maxAttempts = 30;
-        Exception? lastException = null;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                await InitializeDependenciesOnceAsync(services);
-                return;
-            }
-            catch (Exception exception) when (attempt < maxAttempts)
-            {
-                lastException = exception;
-                Console.WriteLine(
-                    $"Dependency initialization attempt {attempt} failed: " +
-                    $"{exception.GetType().Name}: {exception.Message}");
-                await Task.Delay(TimeSpan.FromSeconds(1));
-            }
-        }
-
-        throw new InvalidOperationException("Dependency initialization did not complete.", lastException);
+        return RetryAsync(
+            () => InitializeDependenciesOnceAsync(services),
+            "Dependency initialization",
+            "Dependency initialization did not complete.");
     }
 
     private static async Task InitializeDependenciesOnceAsync(IServiceProvider services)
@@ -427,27 +408,59 @@ public static class Program
 
     private static async Task<IConnectionMultiplexer> ConnectToRedisAsync()
     {
-        const int maxAttempts = 30;
-        Exception? lastException = null;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
+        return await RetryAsync(
+            async () =>
             {
                 var connection = await ConnectionMultiplexer.ConnectAsync(RedisEndpoint);
                 await connection.GetDatabase().PingAsync();
                 return connection;
-            }
-            catch (Exception exception) when (attempt < maxAttempts)
+            },
+            "Redis connection",
+            "Redis did not become available.");
+    }
+
+    private static async Task RetryAsync(
+        Func<Task> operation,
+        string operationName,
+        string failureMessage)
+    {
+        await RetryAsync(
+            async () =>
             {
-                lastException = exception;
+                await operation();
+                return true;
+            },
+            operationName,
+            failureMessage);
+    }
+
+    private static async Task<T> RetryAsync<T>(
+        Func<Task<T>> operation,
+        string operationName,
+        string failureMessage)
+    {
+        const int maxAttempts = 30;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (Exception exception)
+            {
+                if (attempt == maxAttempts)
+                {
+                    throw new InvalidOperationException(failureMessage, exception);
+                }
+
                 Console.WriteLine(
-                    $"Redis connection attempt {attempt} failed: " +
+                    $"{operationName} attempt {attempt} failed: " +
                     $"{exception.GetType().Name}: {exception.Message}");
                 await Task.Delay(TimeSpan.FromSeconds(1));
             }
         }
 
-        throw new InvalidOperationException("Redis did not become available.", lastException);
+        throw new InvalidOperationException(failureMessage);
     }
 
     private static ResourceBuilder CreateResourceBuilder()
@@ -503,6 +516,7 @@ public static class Program
 
     private static void LogInstrumentationAssemblies()
     {
+        var loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
         foreach (var assemblyName in new[]
                  {
                      "OpenTelemetry.Instrumentation.AspNetCore",
@@ -514,10 +528,8 @@ public static class Program
                      "OpenTelemetry.Extensions.AWS",
                  })
         {
-            var assembly = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .FirstOrDefault(candidate =>
-                    string.Equals(candidate.GetName().Name, assemblyName, StringComparison.Ordinal));
+            var assembly = loadedAssemblies.FirstOrDefault(candidate =>
+                string.Equals(candidate.GetName().Name, assemblyName, StringComparison.Ordinal));
             Console.WriteLine(
                 assembly is null
                     ? $"Instrumentation assembly {assemblyName}=not-loaded"

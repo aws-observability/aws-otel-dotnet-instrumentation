@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="1.0.0" />
+    <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="$(CloudWatchPluginVersion)" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.S3" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="[4.0.0, 5.0.0)" />
@@ -24,7 +24,7 @@
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AWS" Version="1.0.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AWS" Version="$(AwsInstrumentationVersion)" />
     <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.16.0-beta.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.GrpcNetClient" Version="1.16.0-beta.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
@@ -35,4 +35,11 @@
   <ItemGroup>
     <Protobuf Include="Protos/health.proto" GrpcServices="Both" />
   </ItemGroup>
+
+  <Target Name="ValidateLocalPackageVersions" BeforeTargets="CollectPackageReferences">
+    <Error Condition="'$(CloudWatchPluginVersion)' == ''"
+           Text="CloudWatchPluginVersion must be supplied by set-up-contract-tests.sh." />
+    <Error Condition="'$(AwsInstrumentationVersion)' == ''"
+           Text="AwsInstrumentationVersion must be supplied by set-up-contract-tests.sh." />
+  </Target>
 </Project>

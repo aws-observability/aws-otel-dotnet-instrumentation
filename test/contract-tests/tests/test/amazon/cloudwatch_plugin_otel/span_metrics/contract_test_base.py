@@ -1,157 +1,58 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import time
 from logging import INFO, Logger, getLogger
-from typing import Any, Callable, Dict, List, TypeVar
+from typing import Any, Dict, List
 
-from docker.types import EndpointConfig
 from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from mock_collector_service_pb2 import GetTracesRequest
-from requests import Response, request
-from testcontainers.core.container import DockerContainer
-from testcontainers.core.waiting_utils import wait_for_logs
-from testcontainers.localstack import LocalStackContainer
 from typing_extensions import override
 
-from amazon.base.contract_test_base import NETWORK_NAME, ContractTestBase
+from amazon.base.contract_test_base import MOCK_COLLECTOR_PORT, ContractTestBase
 from amazon.cloudwatch_plugin_otel.span_metrics import InstrumentationMode
 from opentelemetry.proto.trace.v1.trace_pb2 import Span, Status
 
 _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
 
-_TestMethod = TypeVar("_TestMethod", bound=Callable[..., None])
-
 _APPLICATION_IMAGE = "aws-application-signals-tests-cloudwatch-plugin-otel-app"
-_APPLICATION_SOURCE = "CloudWatchPluginOtel.Contract"
-_LIBRARY_VERSION = "1.0.0"
+_IMAGE_VERSION_LABEL = "com.amazonaws.cloudwatch-plugin.version"
 _READY_MESSAGE = "CloudWatchPluginOtel dependencies ready."
 _SERVICE_NAME = "cloudwatch-plugin-otel-contract-test"
 _SCOPE_NAME = "cloudwatch.plugin.otel.span_metrics"
 
 
-def _with_sampler(sampler: str) -> Callable[[_TestMethod], _TestMethod]:
-    def decorator(test_method: _TestMethod) -> _TestMethod:
-        setattr(test_method, "sampler", sampler)
-        return test_method
-
-    return decorator
-
-
 class SpanMetricsContractTestBase(ContractTestBase):
     __test__ = False
 
-    _local_stack: LocalStackContainer
-    _redis: DockerContainer
-
     @classmethod
     @override
-    def set_up_dependency_container(cls) -> None:
-        local_stack_networking_config = {
-            NETWORK_NAME: EndpointConfig(
-                version="1.22",
-                aliases=["localstack", "s3.localstack"],
-            )
-        }
-        cls._local_stack = (
-            LocalStackContainer(image="localstack/localstack:4.0.0")
-            .with_name(f"localstack-{cls.__name__.lower()}")
-            .with_services("s3", "sqs", "sns", "dynamodb")
-            .with_env("DEFAULT_REGION", "us-east-1")
-            .with_kwargs(
-                network=NETWORK_NAME, networking_config=local_stack_networking_config
-            )
-        )
-        cls._local_stack.start()
-
-        redis_networking_config = {
-            NETWORK_NAME: EndpointConfig(version="1.22", aliases=["redis"])
-        }
-        cls._redis = (
-            DockerContainer("redis:7")
-            .with_name(f"redis-{cls.__name__.lower()}")
-            .with_kwargs(
-                network=NETWORK_NAME, networking_config=redis_networking_config
-            )
-        )
-        cls._redis.start()
-        wait_for_logs(cls._redis, "Ready to accept connections", timeout=30)
-
-    @classmethod
-    @override
-    def tear_down_dependency_container(cls) -> None:
-        if hasattr(cls, "_redis"):
-            _logger.info("Redis stdout\n%s", cls._redis.get_logs()[0].decode())
-            _logger.info("Redis stderr\n%s", cls._redis.get_logs()[1].decode())
-            cls._redis.stop()
-        if hasattr(cls, "_local_stack"):
-            _logger.info(
-                "LocalStack stdout\n%s", cls._local_stack.get_logs()[0].decode()
-            )
-            _logger.info(
-                "LocalStack stderr\n%s", cls._local_stack.get_logs()[1].decode()
-            )
-            cls._local_stack.stop()
+    def manages_test_network(cls) -> bool:
+        return False
 
     @override
-    def get_application_extra_environment_variables(self) -> Dict[str, str]:
-        common = {
+    def get_application_environment_variables(self) -> Dict[str, str]:
+        collector_endpoint = f"http://collector:{MOCK_COLLECTOR_PORT}"
+        return {
             "AWS_ACCESS_KEY_ID": "testing",
             "AWS_SECRET_ACCESS_KEY": "testing",
             "AWS_REGION": "us-east-1",
             "OTEL_AWS_APPLICATION_SIGNALS_ENABLED": "false",
+            "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT": collector_endpoint,
+            "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED": "false",
             "OTEL_BSP_SCHEDULE_DELAY": "50",
             "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": collector_endpoint,
+            "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": collector_endpoint,
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": collector_endpoint,
             "OTEL_METRIC_EXPORT_INTERVAL": "100",
             "OTEL_METRICS_EXPORTER": "otlp",
+            "OTEL_RESOURCE_ATTRIBUTES": f"service.name={_SERVICE_NAME}",
             "OTEL_SERVICE_NAME": _SERVICE_NAME,
             "OTEL_TRACES_EXPORTER": "otlp",
             "OTEL_TRACES_SAMPLER": self.get_sampler(),
-            "SPAN_METRICS_MODE": str(self.get_mode()),
+            "RESOURCE_DETECTORS_ENABLED": "false",
         }
-        if self.get_mode() is InstrumentationMode.AUTO:
-            common.update(
-                {
-                    "CORECLR_PROFILER_PATH": (
-                        "/opt/aws/otel/dotnet/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
-                    ),
-                    "DOTNET_ADDITIONAL_DEPS": "/opt/aws/otel/dotnet/AdditionalDeps",
-                    "DOTNET_SHARED_STORE": "/opt/aws/otel/dotnet/store",
-                    "DOTNET_STARTUP_HOOKS": (
-                        "/opt/aws/otel/dotnet/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
-                    ),
-                    "OTEL_DOTNET_AUTO_HOME": "/opt/aws/otel/dotnet",
-                    "OTEL_DOTNET_AUTO_LOGGER": "console",
-                    "OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED": "false",
-                    "OTEL_DOTNET_AUTO_PLUGINS": (
-                        "CloudWatchPluginOtel.AwsInstrumentationPlugin, CloudWatchPluginOtel:"
-                        "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, "
-                        "AWS.OpenTelemetry.CloudWatch.Plugin"
-                    ),
-                    "OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES": _APPLICATION_SOURCE,
-                    "OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_ENABLED": "true",
-                    "OTEL_DOTNET_AUTO_TRACES_ENTITYFRAMEWORKCORE_INSTRUMENTATION_ENABLED": "true",
-                    "OTEL_DOTNET_AUTO_TRACES_GRPCNETCLIENT_INSTRUMENTATION_ENABLED": "true",
-                    "OTEL_DOTNET_AUTO_TRACES_HTTPCLIENT_INSTRUMENTATION_ENABLED": "true",
-                    "OTEL_DOTNET_AUTO_TRACES_INSTRUMENTATION_ENABLED": "false",
-                    "OTEL_DOTNET_AUTO_TRACES_STACKEXCHANGEREDIS_INSTRUMENTATION_ENABLED": "true",
-                    "OTEL_LOG_LEVEL": "info",
-                }
-            )
-        else:
-            common.update(
-                {
-                    "CORECLR_ENABLE_PROFILING": "0",
-                    "CORECLR_PROFILER_PATH": "",
-                    "DOTNET_ADDITIONAL_DEPS": "",
-                    "DOTNET_SHARED_STORE": "",
-                    "DOTNET_STARTUP_HOOKS": "",
-                    "OTEL_DOTNET_AUTO_HOME": "",
-                    "OTEL_DOTNET_AUTO_PLUGINS": "",
-                }
-            )
-        return common
 
     @override
     def get_application_image_name(self) -> str:
@@ -173,13 +74,17 @@ class SpanMetricsContractTestBase(ContractTestBase):
         raise NotImplementedError
 
     def get_sampler(self) -> str:
-        test_method = getattr(self, self._testMethodName)
-        return getattr(test_method, "sampler", "always_on")
+        if (
+            self._testMethodName
+            == "test_always_off_records_metrics_without_exporting_spans"
+        ):
+            return "always_off"
+        return "always_on"
 
     def test_derives_metrics_for_auto_instrumented_and_explicit_spans(self) -> None:
         self._assert_mode_configuration()
-        self.assertEqual(200, self.send_request("GET", "exercise").status_code)
-        self.assertEqual(500, self.send_request("GET", "error").status_code)
+        self.do_send_request("exercise", "GET", 200)
+        self.do_send_request("error", "GET", 500)
 
         metrics = self._get_plugin_metrics(
             [
@@ -203,10 +108,9 @@ class SpanMetricsContractTestBase(ContractTestBase):
         )
         self.assertIn("error.type", error_attributes)
 
-    @_with_sampler("always_off")
     def test_always_off_records_metrics_without_exporting_spans(self) -> None:
         self._assert_mode_configuration()
-        self.assertEqual(200, self.send_request("GET", "exercise").status_code)
+        self.do_send_request("exercise", "GET", 200)
 
         metrics = self._get_plugin_metrics(
             [
@@ -219,11 +123,6 @@ class SpanMetricsContractTestBase(ContractTestBase):
         response = self.mock_collector_client.client.get_traces(GetTracesRequest())
         self.assertEqual([], list(response.traces))
 
-    def send_request(self, method: str, path: str) -> Response:
-        address = self.application.get_container_host_ip()
-        port = self.application.get_exposed_port(self.get_application_port())
-        return request(method, f"http://{address}:{port}/{path}", timeout=200)
-
     def _assert_mode_configuration(self) -> None:
         stdout, stderr = self.application.get_logs()
         logs = stdout.decode() + stderr.decode()
@@ -235,7 +134,6 @@ class SpanMetricsContractTestBase(ContractTestBase):
             self.assertIn(
                 "AwsInstrumentationPlugin.BeforeConfigureTracerProvider invoked.", logs
             )
-            self.assertNotIn("CloudWatch span metrics were disabled", logs)
             self.assertIn("CORECLR_ENABLE_PROFILING=1", logs)
             self.assertIn(
                 "DOTNET_STARTUP_HOOKS=/opt/aws/otel/dotnet/net/"
@@ -253,6 +151,8 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 "OpenTelemetry.Instrumentation.EntityFrameworkCore",
                 "OpenTelemetry.Instrumentation.GrpcNetClient",
                 "OpenTelemetry.Instrumentation.StackExchangeRedis",
+                "OpenTelemetry.Instrumentation.AWS",
+                "OpenTelemetry.Extensions.AWS",
             ):
                 escaped_name = assembly_name.replace(".", r"\.")
                 self.assertRegex(
@@ -264,22 +164,6 @@ class SpanMetricsContractTestBase(ContractTestBase):
                     f"Instrumentation assembly {assembly_name}=not-loaded",
                     logs,
                 )
-            self.assertRegex(
-                logs,
-                r"Instrumentation assembly OpenTelemetry\.Instrumentation\.AWS, "
-                r"Version=1\.0\.0\.0, Culture=neutral, PublicKeyToken=6ba7de5ce46d6af3 "
-                r"location=/app/OpenTelemetry\.Instrumentation\.AWS\.dll",
-            )
-            self.assertRegex(
-                logs,
-                r"Instrumentation assembly OpenTelemetry\.Extensions\.AWS, "
-                r"Version=1\.16\.0\.1120, .+ "
-                r"location=/app/OpenTelemetry\.Extensions\.AWS\.dll",
-            )
-            self.assertNotIn(
-                "Instrumentation assembly OpenTelemetry.Instrumentation.AWS=not-loaded",
-                logs,
-            )
             return
 
         expected_method = (
@@ -425,7 +309,9 @@ class SpanMetricsContractTestBase(ContractTestBase):
         exercise_trace_ids = {
             resource_scope_span.span.trace_id
             for resource_scope_span in spans
-            if self._attributes(resource_scope_span.span.attributes).get("http.route")
+            if self._get_attribute_values(resource_scope_span.span.attributes).get(
+                "http.route"
+            )
             == "/exercise"
         }
         self.assertEqual(1, len(exercise_trace_ids))
@@ -442,10 +328,11 @@ class SpanMetricsContractTestBase(ContractTestBase):
             self.assertEqual(exercise_trace_id, span.trace_id)
 
         for span in [*exercise_spans, error_span]:
-            attributes = self._attributes(span.attributes)
+            attributes = self._get_attribute_values(span.attributes)
             self.assertEqual("v1", attributes["aws.otel.span.metrics.schema"])
             self.assertEqual(
-                _LIBRARY_VERSION, attributes["aws.otel.extension.lib.version"]
+                self._get_library_version(),
+                attributes["aws.otel.extension.lib.version"],
             )
 
     def _assert_exercise_metrics(self, metrics: List[ResourceScopeMetric]) -> None:
@@ -551,35 +438,46 @@ class SpanMetricsContractTestBase(ContractTestBase):
         self,
         required_attribute_sets: List[Dict[str, Any]],
     ) -> List[ResourceScopeMetric]:
-        deadline = time.time() + 30
-        plugin_metrics: List[ResourceScopeMetric] = []
-        while time.time() < deadline:
-            metrics = self.mock_collector_client.get_metrics(
-                {"traces.span.metrics.calls", "traces.span.metrics.duration"},
-                exact_match=False,
-            )
-            plugin_metrics = [
-                metric
-                for metric in metrics
-                if metric.scope_metrics.scope.name == _SCOPE_NAME
-            ]
-            if all(
+        def has_required_data_points(metrics: List[ResourceScopeMetric]) -> bool:
+            plugin_metrics = self._filter_plugin_metrics(metrics)
+            return all(
                 self._get_matching_data_points(
                     plugin_metrics,
                     "traces.span.metrics.calls",
                     required_attributes,
                 )
                 for required_attributes in required_attribute_sets
-            ):
-                for metric in plugin_metrics:
-                    self.assertEqual(
-                        _LIBRARY_VERSION, metric.scope_metrics.scope.version
-                    )
-                return plugin_metrics
-            time.sleep(0.1)
-        raise AssertionError(
-            f"No plugin calls datapoints matched all required attribute sets {required_attribute_sets}"
-        )
+            )
+
+        try:
+            metrics = self.mock_collector_client.get_metrics(
+                {"traces.span.metrics.calls", "traces.span.metrics.duration"},
+                exact_match=False,
+                content_condition=has_required_data_points,
+            )
+        except RuntimeError as error:
+            raise AssertionError(
+                "No plugin calls datapoints matched all required attribute sets "
+                f"{required_attribute_sets}"
+            ) from error
+
+        plugin_metrics = self._filter_plugin_metrics(metrics)
+        for metric in plugin_metrics:
+            self.assertEqual(
+                self._get_library_version(),
+                metric.scope_metrics.scope.version,
+            )
+        return plugin_metrics
+
+    @staticmethod
+    def _filter_plugin_metrics(
+        metrics: List[ResourceScopeMetric],
+    ) -> List[ResourceScopeMetric]:
+        return [
+            metric
+            for metric in metrics
+            if metric.scope_metrics.scope.name == _SCOPE_NAME
+        ]
 
     def _assert_span_metrics_recorded(
         self,
@@ -589,14 +487,15 @@ class SpanMetricsContractTestBase(ContractTestBase):
         calls = self._get_latest_data_point(
             metrics, "traces.span.metrics.calls", expected
         )
-        calls_attributes = self._attributes(calls.attributes)
+        calls_attributes = self._get_attribute_values(calls.attributes)
         value_field = calls.WhichOneof("value")
         self.assertIsNotNone(value_field)
         self.assertEqual(1, getattr(calls, value_field))
         self.assertEqual(_SERVICE_NAME, calls_attributes["service.name"])
         self.assertEqual("v1", calls_attributes["aws.otel.span.metrics.schema"])
         self.assertEqual(
-            _LIBRARY_VERSION, calls_attributes["aws.otel.extension.lib.version"]
+            self._get_library_version(),
+            calls_attributes["aws.otel.extension.lib.version"],
         )
 
         duration = self._get_latest_data_point(
@@ -648,7 +547,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
             else:
                 data_points = []
             for data_point in data_points:
-                attributes = self._attributes(data_point.attributes)
+                attributes = self._get_attribute_values(data_point.attributes)
                 if all(attributes.get(key) == value for key, value in expected.items()):
                     candidates.append(data_point)
         return candidates
@@ -664,7 +563,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
         candidates: List[Dict[str, Any]] = []
         for resource_scope_span in spans:
             span = resource_scope_span.span
-            attributes = self._attributes(span.attributes)
+            attributes = self._get_attribute_values(span.attributes)
             if span.kind != kind:
                 continue
             candidates.append({"name": span.name, "attributes": attributes})
@@ -691,14 +590,7 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 continue
         raise AssertionError(f"No span matched any attribute variant {variants}")
 
-    @staticmethod
-    def _attributes(attributes: Any) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
-        for attribute in attributes:
-            value_field = attribute.value.WhichOneof("value")
-            result[attribute.key] = (
-                getattr(attribute.value, value_field)
-                if value_field is not None
-                else None
-            )
-        return result
+    def _get_library_version(self) -> str:
+        image_labels = self.application.get_wrapped_container().image.labels
+        self.assertIn(_IMAGE_VERSION_LABEL, image_labels)
+        return image_labels[_IMAGE_VERSION_LABEL]
