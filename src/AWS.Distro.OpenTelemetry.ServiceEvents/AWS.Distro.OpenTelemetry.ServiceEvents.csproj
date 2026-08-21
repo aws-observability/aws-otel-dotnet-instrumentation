@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Modern .NET only (runs on Windows, Linux, and macOS alike). .NET Framework
+         (net462) is deliberately not targeted: the classic ASP.NET request hooks were
+         never implemented, and the exporters use .NET 7+ APIs
+         (JsonSerializerOptions.TypeInfoResolver, ArgumentException.ThrowIfNullOrEmpty,
+         DateTime.UnixEpoch) that net462 does not provide. On a .NET Framework app the
+         ADOT distro still loads; ServiceEvents simply does not initialize. Supporting
+         it is tracked as follow-up work and needs its own test coverage. -->
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>ServiceEvents deep-observability plugin for AWS Distro for OpenTelemetry .NET.</Description>
+    <AssemblyName>AWS.Distro.OpenTelemetry.ServiceEvents</AssemblyName>
+    <RootNamespace>AWS.Distro.OpenTelemetry.ServiceEvents</RootNamespace>
+    <!-- Held to the same StyleCop bar as the main AutoInstrumentation project. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Strong-name signed with the same key as the rest of the distro's assemblies, so this
+         plugin ships with the same identity guarantees as everything bundled alongside it. -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- OpenTelemetry SDK + OTLP exporter (logs + metrics + traces).
+         Pinned to 1.16.0 to match AWS.Distro.OpenTelemetry.AutoInstrumentation, which this
+         project references; a lower floor here resolves as a package downgrade (NU1605). -->
+    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+
+    <!-- AWS resource detectors (EC2/ECS/EKS) for host/container/k8s/cloud resource attributes,
+         matching the AWS distro's resource. -->
+    <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.16.0" />
+
+    <!-- ASP.NET Core instrumentation hooks -->
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <!-- Upstream OTel semantic-convention attribute keys, so the resource keys this project reads
+         and emits are not hand-typed. Same version the AutoInstrumentation project already uses;
+         1.0.0-rc9.9 is the only version ever published, so it cannot drift.
+         The members are `const`, which the compiler inlines, so this reference adds no runtime
+         dependency and ships no additional assembly. -->
+    <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
+
+    <!-- Logging abstractions, version-pinned per target framework to match the AWS distro's pattern. -->
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+</Project>

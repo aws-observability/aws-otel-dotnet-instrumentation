@@ -24,6 +24,8 @@ using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+using AWS.Distro.OpenTelemetry.ServiceEvents;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 #endif
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
@@ -100,6 +102,7 @@ public class Plugin
     {
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
+        this.InitializeServiceEvents();
 #endif
     }
 
@@ -270,8 +273,18 @@ public class Plugin
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            var alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
-            builder.SetSampler(alwaysRecordSampler);
+        }
+
+        // AlwaysRecordSampler upgrades a Drop decision to RecordOnly so processors still observe
+        // the activity. Application Signals needs that for its span metrics; ServiceEvents needs it
+        // for exactly the same reason — EndpointActivityProcessor.OnEnd only runs for activities the
+        // SDK considers recorded, so without this a standalone ServiceEvents deployment using a
+        // sampling sampler (OTEL_TRACES_SAMPLER=traceidratio, always_off, ...) would silently thin
+        // out or lose its endpoint metrics. The customer's own sampling decision is untouched: the
+        // configured sampler still decides what gets exported as a trace.
+        if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
+        {
+            builder.SetSampler(AlwaysRecordSampler.Create(this.sampler));
         }
         else
         {
@@ -285,7 +298,7 @@ public class Plugin
         if (BackupSamplerEnabled == "true" && SamplerUtil.IsXraySampler())
         {
             var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
-            if (this.IsApplicationSignalsEnabled())
+            if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
             {
                 builder.SetSampler(AlwaysRecordSampler.Create(alwaysOnSampler));
             }
@@ -294,6 +307,27 @@ public class Plugin
                 builder.SetSampler(alwaysOnSampler);
             }
         }
+
+#if !NETFRAMEWORK
+        // ServiceEvents registers its BaseProcessor<Activity> collectors last, so they observe
+        // activities after the distro's own processors. No-op when ServiceEvents is disabled
+        // (Current is null), and never allowed to break the customer's tracer pipeline.
+        try
+        {
+            // Gated on IsInitialized for the same reason as the RecordException site below:
+            // Current is non-null even when ServiceEvents is disabled. RegisterTracerProcessors
+            // also no-ops internally when the collectors were never created, but relying on that
+            // would be an implicit contract rather than an explicit gate.
+            if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+            {
+                ServiceEventsInstrumentation.Current.RegisterTracerProcessors(builder);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents processor registration failed; feature degraded.");
+        }
+#endif
 
         return builder;
     }
@@ -449,6 +483,21 @@ public class Plugin
                 this.ShouldSampleParent(activity);
             }
         };
+
+        // Deliberately does NOT set options.RecordException, even though ServiceEvents wants the
+        // exception type for EndpointErrorMetrics' `exception` dimension.
+        //
+        // RecordException makes OTel attach an `exception` event carrying exception.message and
+        // exception.stacktrace to the customer's own server spans, which their trace pipeline then
+        // exports. Messages and stacks routinely contain connection strings, tokens and user
+        // identifiers, so switching it on would leak that into customer-visible telemetry — and
+        // because ServiceEvents is on by default with Application Signals, it would do so silently
+        // on upgrade, for customers who never asked for ServiceEvents at all. Self-telemetry must
+        // not change what the customer's spans contain.
+        //
+        // ServiceEvents gets the type from the `error.type` tag instead, which the ASP.NET Core
+        // instrumentation sets on the error path regardless of this option, and which is a type name
+        // rather than a message. See EndpointActivityProcessor.ReadExceptionDetails.
     }
 #endif
 
@@ -487,6 +536,46 @@ public class Plugin
         };
     }
 #endif
+
+    /// <summary>
+    /// Read a boolean environment flag the way this distro reads every boolean environment flag:
+    /// case-insensitively.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Extracted so there is exactly one answer to "does this value mean true", because there being
+    /// two answers was a real bug. These comparisons used to be written inline and ordinally, so
+    /// <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED=True</c> read as disabled here while ServiceEvents
+    /// (<c>ServiceEventsConfig.GetBool</c>, case-insensitive, matching the Java/Python/JS distros)
+    /// read it as enabled. ServiceEvents then suppressed its own EndpointSummary on the grounds that
+    /// App Signals already carries that data, while this side never configured App Signals at all —
+    /// so the per-endpoint summary was emitted by neither pipeline, silently, and the customer's
+    /// sampler was swapped for AlwaysRecordSampler as well.
+    /// </para>
+    /// <para>
+    /// Use this rather than an inline comparison for any new flag, so the next reader cannot
+    /// reintroduce the disagreement.
+    /// </para>
+    /// </remarks>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>true</c> in any casing.</returns>
+    internal static bool IsEnvFlagTrue(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a boolean environment flag is explicitly set to <c>false</c>, in any casing. Used for
+    /// flags that default to on, where only an explicit false turns them off.
+    /// </summary>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>false</c> in any casing.</returns>
+    internal static bool IsEnvFlagFalse(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "false",
+            StringComparison.OrdinalIgnoreCase);
 
     private static int GetMetricExportInterval()
     {
@@ -565,6 +654,22 @@ public class Plugin
         return headers;
     }
 
+    // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
+    // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
+    // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
+    //
+    // Deliberately declared outside the #if !NETFRAMEWORK region below. The sampler gate in
+    // AfterConfigureTracerProvider calls this unconditionally, so the method has to exist on every
+    // target framework — including net472, where ServiceEvents is not shipped and it returns false.
+    private static bool IsServiceEventsActive()
+    {
+#if !NETFRAMEWORK
+        return ServiceEventsInstrumentation.Current?.IsInitialized == true;
+#else
+        return false;
+#endif
+    }
+
 #if !NETFRAMEWORK
     // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
@@ -591,6 +696,49 @@ public class Plugin
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
+        }
+    }
+
+    // ServiceEvents is hosted by this plugin (rather than a separate plugin/DLL) so it ships and
+    // loads with the existing distribution — customers get the feature on upgrade with no
+    // OTEL_DOTNET_AUTO_PLUGINS change. Enablement follows Application Signals unless
+    // OTEL_AWS_SERVICE_EVENTS_ENABLED is set explicitly, and is always off in Lambda; that rule
+    // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
+    // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
+    // shipped in the .NET Framework build.
+    private void InitializeServiceEvents()
+    {
+        try
+        {
+            // The distro owns the authoritative version string; pass it in so ServiceEvents'
+            // resource reports the same telemetry.distro.version as DistroAttributes above.
+            var config = ServiceEventsConfig.FromEnvironment() with { DistroVersion = Version.version };
+            var instrumentation = ServiceEventsInstrumentation.GetOrCreate(config);
+            instrumentation.Initialize();
+
+            // Without this, Dispose() never runs outside tests: the agent does not own the
+            // providers ServiceEvents builds privately, so the final endpoint drain, the shutdown
+            // DeploymentEvent and any buffered logs are lost on a graceful exit. ProcessExit is the
+            // broadest hook available here — it covers a normal return from Main and SIGTERM on
+            // Linux (which the runtime surfaces as ProcessExit), though not SIGKILL or a crash,
+            // where no in-process hook could help anyway. The runtime allows only a couple of
+            // seconds in this handler, so Dispose must stay bounded; it is idempotent, so a later
+            // ResetForTests or explicit dispose is harmless.
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try
+                {
+                    instrumentation.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    Logger.LogWarning(disposeEx, "ServiceEvents shutdown flush failed.");
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents initialization failed; feature disabled.");
         }
     }
 #endif
@@ -637,15 +785,14 @@ public class Plugin
         }
     }
 
-    private bool IsApplicationSignalsEnabled()
-    {
-        return System.Environment.GetEnvironmentVariable(ApplicationSignalsEnabledConfig) == "true";
-    }
+    private bool IsApplicationSignalsEnabled() => IsEnvFlagTrue(ApplicationSignalsEnabledConfig);
 
     private bool IsApplicationSignalsRuntimeEnabled()
     {
+        // Defaults to on, so only an explicit false disables it. An operator writing
+        // RUNTIME_ENABLED=False plainly means off, and the previous ordinal comparison left it on.
         return this.IsApplicationSignalsEnabled() &&
-               !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
+               !IsEnvFlagFalse(ApplicationSignalsRuntimeEnabledConfig);
     }
 
     private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)

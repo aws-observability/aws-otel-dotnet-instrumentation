@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cmock_collector_service.proto\"\x0e\n\x0c\x43learRequest\"\x0f\n\rClearResponse\"\x12\n\x10GetTracesRequest\"#\n\x11GetTracesResponse\x12\x0e\n\x06traces\x18\x01 \x03(\x0c\"\x13\n\x11GetMetricsRequest\"%\n\x12GetMetricsResponse\x12\x0f\n\x07metrics\x18\x01 \x03(\x0c\x32\xb1\x01\n\x14MockCollectorService\x12(\n\x05\x63lear\x12\r.ClearRequest\x1a\x0e.ClearResponse\"\x00\x12\x35\n\nget_traces\x12\x11.GetTracesRequest\x1a\x12.GetTracesResponse\"\x00\x12\x38\n\x0bget_metrics\x12\x12.GetMetricsRequest\x1a\x13.GetMetricsResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cmock_collector_service.proto\"\x0e\n\x0c\x43learRequest\"\x0f\n\rClearResponse\"\x12\n\x10GetTracesRequest\"#\n\x11GetTracesResponse\x12\x0e\n\x06traces\x18\x01 \x03(\x0c\"\x13\n\x11GetMetricsRequest\"%\n\x12GetMetricsResponse\x12\x0f\n\x07metrics\x18\x01 \x03(\x0c\"\x10\n\x0eGetLogsRequest\"\x1f\n\x0fGetLogsResponse\x12\x0c\n\x04logs\x18\x01 \x03(\x0c\x32\xe2\x01\n\x14MockCollectorService\x12(\n\x05\x63lear\x12\r.ClearRequest\x1a\x0e.ClearResponse\"\x00\x12\x35\n\nget_traces\x12\x11.GetTracesRequest\x1a\x12.GetTracesResponse\"\x00\x12\x38\n\x0bget_metrics\x12\x12.GetMetricsRequest\x1a\x13.GetMetricsResponse\"\x00\x12/\n\x08get_logs\x12\x0f.GetLogsRequest\x1a\x10.GetLogsResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,6 +33,10 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_GETMETRICSREQUEST']._serialized_end=141
   _globals['_GETMETRICSRESPONSE']._serialized_start=143
   _globals['_GETMETRICSRESPONSE']._serialized_end=180
-  _globals['_MOCKCOLLECTORSERVICE']._serialized_start=183
-  _globals['_MOCKCOLLECTORSERVICE']._serialized_end=360
+  _globals['_GETLOGSREQUEST']._serialized_start=182
+  _globals['_GETLOGSREQUEST']._serialized_end=198
+  _globals['_GETLOGSRESPONSE']._serialized_start=200
+  _globals['_GETLOGSRESPONSE']._serialized_end=231
+  _globals['_MOCKCOLLECTORSERVICE']._serialized_start=234
+  _globals['_MOCKCOLLECTORSERVICE']._serialized_end=460
 # @@protoc_insertion_point(module_scope)

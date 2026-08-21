@@ -7,7 +7,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 /// value, and classifies whether a result is a permanent failure worth reporting as an ERROR status.</summary>
 // The instrumentation-failed taxonomy (this type) is deliberately separate from the capture-failed taxonomy
 // (Capture.NotCapturedReason): a value that couldn't be fully serialized is a per-snapshot NotCapturedReason,
-// NOT an ERROR on the configuration. Only weave failures reach here. Emission lands with StatusReporter (PR3).
+// NOT an ERROR on the configuration. Only weave failures reach here; the ERROR status is emitted by StatusReporter.
 internal static class InstrumentationApplyResultExtensions
 {
     /// <summary>
