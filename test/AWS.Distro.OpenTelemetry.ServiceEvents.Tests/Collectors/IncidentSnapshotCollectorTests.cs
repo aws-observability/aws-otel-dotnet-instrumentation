@@ -30,7 +30,8 @@ public class IncidentSnapshotCollectorTests
             new Meter("test-" + Guid.NewGuid().ToString("N")),
             deploymentId: "dep",
             gitCommitSha: "sha",
-            gitRepoUrl: "repo");
+            gitRepoUrl: "repo",
+            serviceCodeNamespace: string.Empty);
 
         return new IncidentSnapshotCollector(flushIntervalMs: 60_000, emitter, config ?? new ServiceEventsConfig());
     }
@@ -40,7 +41,8 @@ public class IncidentSnapshotCollectorTests
     /// assert on the emitted record rather than on the collector's return value.
     /// </summary>
     private static (IncidentSnapshotCollector Collector, CapturingLogger Logger) NewCapturingCollector(
-        ServiceEventsConfig? config = null)
+        ServiceEventsConfig? config = null,
+        string serviceCodeNamespace = "")
     {
         var logger = new CapturingLogger();
         var emitter = new ServiceEventsOtlpEmitter(
@@ -48,7 +50,8 @@ public class IncidentSnapshotCollectorTests
             new Meter("test-" + Guid.NewGuid().ToString("N")),
             deploymentId: "dep",
             gitCommitSha: "sha",
-            gitRepoUrl: "repo");
+            gitRepoUrl: "repo",
+            serviceCodeNamespace: serviceCodeNamespace);
 
         return (new IncidentSnapshotCollector(flushIntervalMs: 60_000, emitter, config ?? new ServiceEventsConfig()), logger);
     }
@@ -520,6 +523,44 @@ public class IncidentSnapshotCollectorTests
         using var parsed = JsonDocument.Parse(body!);
         parsed.RootElement.GetProperty("request_context").GetProperty("timestamp").GetInt64()
             .Should().Be(1_000_000L, "request_context carries request start, not incident time");
+    }
+
+    /// <summary>
+    /// The configured service code namespace reaches the emitted IncidentSnapshot record, and is
+    /// omitted entirely rather than emitted empty when unset.
+    /// </summary>
+    /// <remarks>
+    /// IncidentSnapshot is the only signal that carries it: Java attaches it to IncidentSnapshot and
+    /// AggregateProfile, and AggregateProfile is not implemented here.
+    /// </remarks>
+    [Theory]
+    [InlineData("Contoso.Services", true)]
+    [InlineData("", false)]
+    public void ServiceCodeNamespace_IsEmittedWhenSet_AndOmittedWhenNot(string configured, bool expectPresent)
+    {
+        var (collector, logger) = NewCapturingCollector(serviceCodeNamespace: configured);
+
+        collector.ProcessPotentialIncident(
+            route: "/x", method: "GET", statusCode: 500, durationMs: 1,
+            exceptionType: "BoomException", exceptionMessage: "m", stackTrace: "   at A.B() in /f.cs:line 1",
+            traceId: null, spanId: null, requestTimestampMs: 1000)
+            .Should().NotBeNull();
+
+        collector.Dispose();
+
+        var record = logger.Records.Should().ContainSingle(
+            r => r.Any(kv => kv.Key == "event.name"
+                             && (kv.Value as string) == "aws.service_events.incident_snapshot"))
+            .Subject;
+
+        var present = record.Any(kv => kv.Key == "aws.service_events.service_code_namespace");
+        present.Should().Be(expectPresent);
+
+        if (expectPresent)
+        {
+            record.Single(kv => kv.Key == "aws.service_events.service_code_namespace").Value
+                .Should().Be(configured);
+        }
     }
 
     /// <summary>Exception text at or under the cap is emitted unchanged, with no marker.</summary>

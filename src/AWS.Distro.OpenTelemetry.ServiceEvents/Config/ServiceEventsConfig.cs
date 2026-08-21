@@ -264,16 +264,12 @@ public sealed record ServiceEventsConfig
     /// supplied.</summary>
     public string DeploymentTimestamp { get; init; } = string.Empty;
 
-    /// <summary>Gets resource attributes from OTel detectors (cloud/host/container/k8s).</summary>
-    public ResourceAttributes ResourceAttributes { get; init; } = new();
-
     /// <summary>
     /// Build a <see cref="ServiceEventsConfig" /> from environment variables, applying
     /// the defaults from this class for missing values.
     /// </summary>
-    /// <param name="resourceAttributes">Optional resource attributes from OTel detectors.</param>
     /// <returns>A populated config.</returns>
-    public static ServiceEventsConfig FromEnvironment(ResourceAttributes? resourceAttributes = null)
+    public static ServiceEventsConfig FromEnvironment()
     {
         var defaults = new ServiceEventsConfig();
 
@@ -324,8 +320,6 @@ public sealed record ServiceEventsConfig
             DeploymentId = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID", defaults.DeploymentId),
             DeploymentUrl = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL", defaults.DeploymentUrl),
             DeploymentTimestamp = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP", defaults.DeploymentTimestamp),
-
-            ResourceAttributes = resourceAttributes ?? new ResourceAttributes(),
         };
     }
 

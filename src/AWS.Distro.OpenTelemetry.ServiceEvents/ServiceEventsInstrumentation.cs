@@ -498,7 +498,8 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             this.meter,
             deploymentId: this.config.DeploymentId,
             gitCommitSha: this.config.GitCommitSha,
-            gitRepoUrl: this.config.GitRepoUrl);
+            gitRepoUrl: this.config.GitRepoUrl,
+            serviceCodeNamespace: this.config.DotnetServiceCodeNamespace);
     }
 
     private Dictionary<string, object> BuildResourceAttributes()
@@ -586,11 +587,6 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         if (!attrs.ContainsKey("service.instance.id"))
         {
             attrs["service.instance.id"] = Guid.NewGuid().ToString();
-        }
-
-        foreach (var (key, value) in this.config.ResourceAttributes.ToDictionary())
-        {
-            attrs[key] = value;
         }
 
         return attrs;

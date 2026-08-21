@@ -63,18 +63,21 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
     private readonly string deploymentId;
     private readonly string gitCommitSha;
     private readonly string gitRepoUrl;
+    private readonly string serviceCodeNamespace;
 
     public ServiceEventsOtlpEmitter(
         ILogger generalLogger,
         Meter meter,
         string deploymentId,
         string gitCommitSha,
-        string gitRepoUrl)
+        string gitRepoUrl,
+        string serviceCodeNamespace)
     {
         this.generalLogger = generalLogger;
         this.deploymentId = deploymentId ?? string.Empty;
         this.gitCommitSha = gitCommitSha ?? string.Empty;
         this.gitRepoUrl = gitRepoUrl ?? string.Empty;
+        this.serviceCodeNamespace = serviceCodeNamespace ?? string.Empty;
         this.errorCounter = meter.CreateCounter<long>(name: "count", unit: "Count");
         this.functionDuration = meter.CreateHistogram<double>(
             name: "service.function.duration",
@@ -131,6 +134,16 @@ internal sealed class ServiceEventsOtlpEmitter : IFunctionCallRecorder
             new("http.response.status_code", snapshot.StatusCode),
             new("aws.service_events.request.type", "http"),
         };
+
+        // Only IncidentSnapshot carries this. Java attaches it to exactly two signals, IncidentSnapshot
+        // and AggregateProfile, and AggregateProfile is not implemented here — so this is the whole of
+        // the .NET surface for it. Omitted when unset, matching Java's own empty guard, so a customer
+        // who does not configure the namespace sees no empty attribute.
+        if (!string.IsNullOrEmpty(this.serviceCodeNamespace))
+        {
+            attrs.Add(new("aws.service_events.service_code_namespace", this.serviceCodeNamespace));
+        }
+
         this.AppendVcsAndDeploymentAttributes(attrs);
 
         var body = new Dictionary<string, object?>();
