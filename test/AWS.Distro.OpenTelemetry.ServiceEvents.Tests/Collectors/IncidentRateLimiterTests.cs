@@ -123,7 +123,7 @@ public class IncidentRateLimiterTests
     public void CheckDeduplication_AllowsUpToMaxSameError_ThenRejects()
     {
         var limiter = this.NewLimiter(maxSameError: 2);
-        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException");
+        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
         limiter.CheckDeduplication(hash).Should().BeTrue();
         limiter.CheckDeduplication(hash).Should().BeTrue();
@@ -134,8 +134,8 @@ public class IncidentRateLimiterTests
     public void CheckDeduplication_DifferentHashesTrackedIndependently()
     {
         var limiter = this.NewLimiter(maxSameError: 1);
-        var a = IncidentRateLimiter.GenerateErrorHash("GET /a", "ArgumentException");
-        var b = IncidentRateLimiter.GenerateErrorHash("GET /b", "ArgumentException");
+        var a = IncidentRateLimiter.GenerateErrorHash("GET /a", "ArgumentException", originMethod: null);
+        var b = IncidentRateLimiter.GenerateErrorHash("GET /b", "ArgumentException", originMethod: null);
 
         limiter.CheckDeduplication(a).Should().BeTrue();
         limiter.CheckDeduplication(a).Should().BeFalse();
@@ -146,7 +146,7 @@ public class IncidentRateLimiterTests
     public void CheckDeduplication_ResetsAfterWindowRollover()
     {
         var limiter = this.NewLimiter(maxSameError: 1);
-        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException");
+        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
         limiter.CheckDeduplication(hash).Should().BeTrue();
         limiter.CheckDeduplication(hash).Should().BeFalse();
@@ -160,22 +160,73 @@ public class IncidentRateLimiterTests
     public void GenerateErrorHash_ExcludesExceptionMessage()
     {
         // Same operation + type, different messages → same hash (message excluded).
-        var h1 = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException");
-        var h2 = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException");
+        var h1 = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
+        var h2 = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
         h1.Should().Be(h2);
+    }
+
+    /// <summary>
+    /// The throw-site origin is part of the key, so two unrelated failures that happen to share an
+    /// exception type on the same route get separate dedup budgets instead of collapsing into one.
+    /// </summary>
+    /// <remarks>
+    /// This is the behaviour the two-part key lacked: with the origin excluded, the second failure
+    /// below would hash identically to the first and be silently suppressed for the window while the
+    /// first reported. Matches Java and Python, which both key on operation + exception type + origin.
+    /// </remarks>
+    [Fact]
+    public void GenerateErrorHash_DiffersByThrowSiteOrigin()
+    {
+        var atValidate = IncidentRateLimiter.GenerateErrorHash(
+            "GET /x", "ArgumentException", "Contoso.Orders.Validate");
+        var atPrice = IncidentRateLimiter.GenerateErrorHash(
+            "GET /x", "ArgumentException", "Contoso.Pricing.Compute");
+
+        atPrice.Should().NotBe(atValidate, "same route and type, different throw site → distinct keys");
+
+        // Stable for a repeat of the same failure, which is what makes dedup work at all.
+        IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", "Contoso.Orders.Validate")
+            .Should().Be(atValidate);
+    }
+
+    /// <summary>
+    /// An absent origin degrades to the two-part key rather than folding an empty segment in, so a
+    /// trace-less exception still groups by operation and type. Mirrors Java's middle branch.
+    /// </summary>
+    [Fact]
+    public void GenerateErrorHash_WithoutOrigin_DegradesToOperationAndType()
+    {
+        var noOrigin = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", null);
+
+        IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", string.Empty)
+            .Should().Be(noOrigin, "null and empty origin are the same case");
+
+        IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", "Contoso.Orders.Validate")
+            .Should().NotBe(noOrigin, "supplying an origin changes the key");
+    }
+
+    /// <summary>
+    /// A latency incident has no exception, so it keys on the operation alone and any origin is
+    /// ignored — Java's first branch.
+    /// </summary>
+    [Fact]
+    public void GenerateErrorHash_WithoutExceptionType_IgnoresOrigin()
+    {
+        IncidentRateLimiter.GenerateErrorHash("GET /slow", null, "Contoso.Anything.AtAll")
+            .Should().Be(IncidentRateLimiter.GenerateErrorHash("GET /slow", null, null));
     }
 
     [Fact]
     public void GenerateErrorHash_DiffersByOperationAndType()
     {
-        var baseHash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException");
+        var baseHash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
-        IncidentRateLimiter.GenerateErrorHash("GET /y", "ArgumentException")
+        IncidentRateLimiter.GenerateErrorHash("GET /y", "ArgumentException", originMethod: null)
             .Should().NotBe(baseHash, "different operation → different hash");
-        IncidentRateLimiter.GenerateErrorHash("GET /x", "NullReferenceException")
+        IncidentRateLimiter.GenerateErrorHash("GET /x", "NullReferenceException", originMethod: null)
             .Should().NotBe(baseHash, "different exception type → different hash");
-        IncidentRateLimiter.GenerateErrorHash("GET /x", null)
+        IncidentRateLimiter.GenerateErrorHash("GET /x", null, originMethod: null)
             .Should().NotBe(baseHash, "op-only (no exception) → different hash");
     }
 

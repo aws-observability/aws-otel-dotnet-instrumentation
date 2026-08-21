@@ -32,8 +32,13 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// disagree about what "per minute" means.
 /// </para>
 /// <para>
-/// The error hash deliberately <b>excludes the exception message</b> (matching Java) so
-/// request-specific data in messages (ids, timestamps) can't explode hash cardinality.
+/// The error hash keys on operation + exception type + throw-site method, matching Java and Python.
+/// It deliberately <b>excludes the exception message</b>, so request-specific data in messages (ids,
+/// timestamps) can't explode hash cardinality, while the throw-site origin still keeps genuinely
+/// distinct failures apart: without it, two unrelated errors sharing an exception type on the same
+/// route would collapse into one dedup budget and one of them would be silently suppressed. The
+/// origin is bounded — a service has finitely many methods — and stable across deploys, since the
+/// source line number is not part of it.
 /// </para>
 /// </remarks>
 internal sealed class IncidentRateLimiter
@@ -90,12 +95,29 @@ internal sealed class IncidentRateLimiter
     /// </remarks>
     /// <param name="operation">Operation, e.g. <c>"GET /users/{id}"</c>.</param>
     /// <param name="exceptionType">Exception type name, or null for status-only errors.</param>
+    /// <param name="originMethod">
+    /// Fully-qualified throw-site method, or null/empty when unavailable. From
+    /// <c>IncidentSnapshotCollector.ExtractOriginMethod</c>.
+    /// </param>
     /// <returns>A stable hex hash string.</returns>
-    public static string GenerateErrorHash(string operation, string? exceptionType)
+    public static string GenerateErrorHash(string operation, string? exceptionType, string? originMethod)
     {
-        var input = string.IsNullOrEmpty(exceptionType)
-            ? "op:" + operation
-            : "op:" + operation + "|exc:" + exceptionType;
+        // Three branches, matching Java's key construction exactly — including the "op:" and "|exc:"
+        // prefixes and the ":" before the origin — so the same failure produces the same grouping
+        // across distros. A latency incident has no exception, so it keys on the operation alone.
+        string input;
+        if (string.IsNullOrEmpty(exceptionType))
+        {
+            input = "op:" + operation;
+        }
+        else if (string.IsNullOrEmpty(originMethod))
+        {
+            input = "op:" + operation + "|exc:" + exceptionType;
+        }
+        else
+        {
+            input = "op:" + operation + "|exc:" + exceptionType + ":" + originMethod;
+        }
 
         try
         {
@@ -137,11 +159,12 @@ internal sealed class IncidentRateLimiter
     /// without producing a snapshot. It is deliberately <b>not</b> Java's order — Java checks the
     /// global rate limit first and dedups second.
     /// <para>
-    /// The cost of this order is the mirror image: an occurrence counted here still counts if the
-    /// global cap then rejects the incident, so a burst that exhausts the global cap also spends
-    /// per-error budget on snapshots that were never emitted. Python pays the same cost for the same
-    /// reason — its dedup check records the occurrence before the rate slot is reserved. Both
-    /// counters here reset on the same window boundary, which bounds the effect to one minute.
+    /// The cost of this order is the mirror image, and it is ours alone: an occurrence counted here
+    /// still counts if the global cap then rejects the incident, so a burst that exhausts the global
+    /// cap also spends per-error budget on snapshots that were never emitted. Both counters here reset
+    /// on the same window boundary, which bounds the effect to one minute. Python and JS avoid it by
+    /// splitting the check from the record and recording only once a rate slot is secured; adopting
+    /// that split here would remove the cost rather than bound it.
     /// </para>
     /// </remarks>
     /// <param name="errorHash">Hash from <see cref="GenerateErrorHash" />.</param>

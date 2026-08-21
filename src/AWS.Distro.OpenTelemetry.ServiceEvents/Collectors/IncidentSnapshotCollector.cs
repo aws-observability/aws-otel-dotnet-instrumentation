@@ -139,7 +139,12 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
             return null;
         }
 
-        var errorHash = IncidentRateLimiter.GenerateErrorHash(operation, exceptionType);
+        // Keyed on operation + exception type + throw-site method, matching Java and Python. The
+        // origin is what keeps two unrelated failures that happen to share an exception type on one
+        // route in separate dedup budgets, instead of collapsing them so that one is silently
+        // suppressed while the other reports.
+        var errorHash = IncidentRateLimiter.GenerateErrorHash(
+            operation, exceptionType, ExtractOriginMethod(stackTrace));
 
         // Batch dedup: one snapshot per error hash per flush cycle. The check and the claim are a
         // single atomic step, which makes this the serialization point for concurrent same-hash
@@ -149,9 +154,8 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         // The claim has to be released if a limiter then rejects this request, or the error would be
         // marked "handled this cycle" on behalf of a snapshot that was never emitted, suppressing
         // every later occurrence in the same cycle. Both rejection paths below therefore unclaim.
-        // Note this is deliberately not what the other distros do: Python and JS both claim the batch
-        // hash up front and never release it, so a limiter rejection there silently suppresses the
-        // error for the rest of the interval, and Java has no batch dedup at all.
+        // Python takes the same claim-then-release shape, discarding the hash on both of its rejection
+        // paths, so this converges with it rather than diverging. Java has no batch dedup at all.
         // The set this claim landed in is captured so the release below targets the same one. Collect()
         // replaces the set on a flush, so without this a claim made just before a flush would be
         // released out of the *new* set — cancelling a different request's legitimate claim.
@@ -253,16 +257,7 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         foreach (var rawLine in stackTrace!.Split('\n'))
         {
             var line = rawLine.Trim();
-            if (!line.StartsWith("at ", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            // "at Namespace.Class.Method(args) in file:line N" -> "Namespace.Class.Method"
-            var afterAt = line.Substring(3);
-            var paren = afterAt.IndexOf('(');
-            var name = (paren > 0 ? afterAt.Substring(0, paren) : afterAt).Trim();
-            if (string.IsNullOrEmpty(name))
+            if (!TryParseFrameName(line, out var name))
             {
                 continue;
             }
@@ -299,6 +294,45 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         return frames;
     }
 
+    /// <summary>
+    /// Extract the throw-site method — the innermost frame's <c>Namespace.Class.Method</c> — from a
+    /// stack trace, or an empty string when there is no trace or no parseable frame.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Feeds the dedup key, so it runs on every candidate incident, before the limiter gates. It stops
+    /// at the first frame rather than parsing the whole trace, and shares
+    /// <see cref="TryParseFrameName" /> with <see cref="ParseStackTrace" /> so the two cannot drift on
+    /// what counts as a frame.
+    /// </para>
+    /// <para>
+    /// The source line number is deliberately not part of this, and falls out of the shared parse:
+    /// the name is cut at the opening parenthesis, so <c>in file:line N</c> never reaches the key. It
+    /// is the least stable part of a frame — any edit above the throw site shifts it — so including it
+    /// would make a recurring error re-fire as a brand-new incident after every deploy. Java documents
+    /// the same reasoning for the same exclusion.
+    /// </para>
+    /// </remarks>
+    /// <param name="stackTrace">Formatted stack trace, or null.</param>
+    /// <returns>The throw-site method name, or an empty string.</returns>
+    internal static string ExtractOriginMethod(string? stackTrace)
+    {
+        if (string.IsNullOrEmpty(stackTrace))
+        {
+            return string.Empty;
+        }
+
+        foreach (var rawLine in stackTrace!.Split('\n'))
+        {
+            if (TryParseFrameName(rawLine.Trim(), out var name))
+            {
+                return name;
+            }
+        }
+
+        return string.Empty;
+    }
+
     /// <summary>Test seam: force a flush cycle (drain pending + reset batch dedup).</summary>
     internal void Flush() => this.Collect();
 
@@ -316,6 +350,39 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         {
             this.emitter.EmitIncidentSnapshot(snapshot);
         }
+    }
+
+    /// <summary>
+    /// Decide whether one already-trimmed stack-trace line is a frame, and if so extract its
+    /// <c>Namespace.Class.Method</c>.
+    /// </summary>
+    /// <remarks>
+    /// The single definition of "what is a frame" for this file. Both the call-path parser and the
+    /// dedup-key origin extractor go through it, so a change to the grammar cannot apply to one and
+    /// not the other — the divergence that a second private copy would invite.
+    /// </remarks>
+    /// <param name="trimmedLine">A stack-trace line, already trimmed.</param>
+    /// <param name="name">The extracted method name, or empty when this is not a frame.</param>
+    /// <returns><c>true</c> when the line yielded a name.</returns>
+    private static bool TryParseFrameName(string trimmedLine, out string name)
+    {
+        name = string.Empty;
+        if (!trimmedLine.StartsWith("at ", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // "at Namespace.Class.Method(args) in file:line N" -> "Namespace.Class.Method"
+        var afterAt = trimmedLine.Substring(3);
+        var paren = afterAt.IndexOf('(');
+        var candidate = (paren > 0 ? afterAt.Substring(0, paren) : afterAt).Trim();
+        if (candidate.Length == 0)
+        {
+            return false;
+        }
+
+        name = candidate;
+        return true;
     }
 
     /// <summary>

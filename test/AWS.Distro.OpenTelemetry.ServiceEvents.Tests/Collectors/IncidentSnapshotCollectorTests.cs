@@ -266,6 +266,34 @@ public class IncidentSnapshotCollectorTests
     }
 
     /// <summary>
+    /// The origin extractor returns the innermost frame's method and agrees with the call-path parser,
+    /// which is the point of them sharing one frame rule.
+    /// </summary>
+    [Fact]
+    public void ExtractOriginMethod_ReturnsInnermostFrame_AndAgreesWithTheCallPath()
+    {
+        const string trace =
+            "System.ArgumentException: boom\n" +
+            "   at Contoso.Orders.Validate(System.String id) in /src/Orders.cs:line 42\n" +
+            "   at Contoso.Orders.Handle() in /src/Orders.cs:line 17\n";
+
+        var origin = IncidentSnapshotCollector.ExtractOriginMethod(trace);
+
+        origin.Should().Be("Contoso.Orders.Validate", "the throw site, without the source line");
+        IncidentSnapshotCollector.ParseStackTrace(trace)[0].FunctionName.Should().Be(origin);
+    }
+
+    /// <summary>No trace, or a trace with no frame lines, yields an empty origin rather than throwing.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("System.ArgumentException: boom with no frames")]
+    public void ExtractOriginMethod_WithoutAParseableFrame_ReturnsEmpty(string? trace)
+    {
+        IncidentSnapshotCollector.ExtractOriginMethod(trace).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// The exemplar timestamp is the incident time — when the request finished and the breach became
     /// true — not when the request started. It is derived from request start plus duration, so it
     /// stays consistent with the emitted <c>duration_ms</c> without a second clock read.
