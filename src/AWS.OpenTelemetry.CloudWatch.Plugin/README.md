@@ -12,7 +12,7 @@ Amazon CloudWatch plugin for OpenTelemetry .NET.
 This package extends the upstream OpenTelemetry .NET Automatic Instrumentation
 distribution. It does not require the AWS Distro for OpenTelemetry.
 
-The `1.0.x` package line supports OpenTelemetry SDK versions greater than or
+The `0.1.x` package line supports OpenTelemetry SDK versions greater than or
 equal to `1.15.3` and less than `2.0.0`.
 
 For automatic instrumentation, use a distribution that contains a supported

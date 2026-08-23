@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>0.1.0</Version>
     <PackageId>AWS.OpenTelemetry.CloudWatch.Plugin</PackageId>
     <Title>Amazon CloudWatch plugin for OpenTelemetry .NET</Title>
     <Description>Amazon CloudWatch plugin for OpenTelemetry .NET.</Description>
