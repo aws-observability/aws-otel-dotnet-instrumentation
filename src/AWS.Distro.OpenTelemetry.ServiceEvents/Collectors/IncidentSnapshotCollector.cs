@@ -53,7 +53,23 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
     /// </summary>
     internal const int MaxStackTraceChars = 32768;
 
-    /// <summary>Appended in place of the removed tail, mirroring <see cref="CallPathCapture.TruncatedSentinel" />.</summary>
+    /// <summary>
+    /// Appended in place of a removed string tail, marking <c>exception_message</c> or
+    /// <c>stack_trace</c> as clipped.
+    /// </summary>
+    /// <remarks>
+    /// Follows the same angle-bracketed sentinel convention as
+    /// <see cref="CallPathCapture.TruncatedSentinel" /> but is deliberately a <b>different value</b>,
+    /// because the two mark different things: this is a suffix on a string that was cut short, while
+    /// that one is a synthetic <i>frame</i> standing in for the call-path entries that were dropped.
+    /// Sharing one value would make each less accurate — a stack trace ending in a call-path marker,
+    /// or a frame that does not say what was truncated.
+    /// <para>
+    /// A single <c>IncidentSnapshot</c> can carry both, so a consumer asking "was any of this record
+    /// clipped?" has to check both: this suffix on the two exception text fields, and that sentinel as
+    /// the last <c>call_path</c> entry.
+    /// </para>
+    /// </remarks>
     internal const string TruncatedSuffix = "<truncated>";
 
     /// <summary>
