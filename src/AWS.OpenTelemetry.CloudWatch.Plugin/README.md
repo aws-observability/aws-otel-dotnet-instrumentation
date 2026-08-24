@@ -28,7 +28,7 @@ upstream OpenTelemetry .NET Automatic Instrumentation versions:
 Install the package in the instrumented application:
 
 ```console
-dotnet add package AWS.OpenTelemetry.CloudWatch.Plugin
+dotnet add package AWS.OpenTelemetry.CloudWatchPluginOtel
 ```
 
 Then add the plugin's assembly-qualified type to the upstream OTel

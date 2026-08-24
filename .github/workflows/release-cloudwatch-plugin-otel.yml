@@ -13,12 +13,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-cloudwatch-plugin
+  group: release-cloudwatch-plugin-otel
   cancel-in-progress: false
 
 env:
+  ASSEMBLY_NAME: AWS.OpenTelemetry.CloudWatch.Plugin
   AWS_SIGNING_KEY_REGION: us-west-2
-  PACKAGE_ID: AWS.OpenTelemetry.CloudWatch.Plugin
+  PACKAGE_ID: AWS.OpenTelemetry.CloudWatchPluginOtel
   VERSION_INPUT: ${{ inputs.version }}
 
 jobs:
@@ -26,11 +27,32 @@ jobs:
     name: Validate release version
     runs-on: ubuntu-latest
     steps:
-      - name: Validate semantic version
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate release version
         shell: bash
         run: |
           if [[ ! "$VERSION_INPUT" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "::error::Version must be a SemVer value such as 1.0.0 or 1.0.0-rc.1."
+            exit 1
+          fi
+
+          project="src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj"
+          source_version="$(dotnet msbuild "$project" -nologo -getProperty:Version)"
+          if [[ "$VERSION_INPUT" != "$source_version" ]]; then
+            echo "::error::Input version $VERSION_INPUT does not match source version $source_version."
+            exit 1
+          fi
+
+          changelog="src/AWS.OpenTelemetry.CloudWatch.Plugin/CHANGELOG.md"
+          if ! grep -Fq "## $VERSION_INPUT - " "$changelog"; then
+            echo "::error::CHANGELOG.md does not contain a release entry for $VERSION_INPUT."
             exit 1
           fi
 
@@ -148,7 +170,6 @@ jobs:
           dotnet restore
           .\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj
           -p:_IsPacking=true
-          -p:Version=$env:VERSION_INPUT
 
       - name: Build plugin
         shell: pwsh
@@ -158,7 +179,6 @@ jobs:
           --configuration Release
           --no-restore
           -p:ContinuousIntegrationBuild=true
-          -p:Version=$env:VERSION_INPUT
 
       - name: Assume signer role
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
@@ -174,7 +194,7 @@ jobs:
         run: |
           $outputPath = ".\src\AWS.OpenTelemetry.CloudWatch.Plugin\bin\Release"
           .\buildtools\sign_files.ps1 `
-            -Filters "$env:PACKAGE_ID.dll" `
+            -Filters "$env:ASSEMBLY_NAME.dll" `
             -Recurse `
             -Path $outputPath
 
@@ -184,7 +204,7 @@ jobs:
           $assemblies = @(
             Get-ChildItem `
               -Path ".\src\AWS.OpenTelemetry.CloudWatch.Plugin\bin\Release" `
-              -Filter "$env:PACKAGE_ID.dll" `
+              -Filter "$env:ASSEMBLY_NAME.dll" `
               -File `
               -Recurse
           )
@@ -203,15 +223,14 @@ jobs:
       - name: Pack plugin
         shell: pwsh
         run: |
-          $outputPath = ".\Deployment\cloudwatch-plugin"
+          $outputPath = ".\Deployment\cloudwatch-plugin-otel"
           New-Item -Path $outputPath -ItemType Directory -Force | Out-Null
 
           dotnet pack `
             .\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj `
             --configuration Release `
             --no-build `
-            --output $outputPath `
-            -p:Version=$env:VERSION_INPUT
+            --output $outputPath
 
           $packages = @(Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File)
           if ($packages.Count -ne 1) {
@@ -228,7 +247,7 @@ jobs:
           try {
             $entries = @($archive.Entries | ForEach-Object { $_.FullName })
             foreach ($framework in @("net472", "net8.0", "net9.0", "net10.0")) {
-              $expectedAssembly = "lib/$framework/$env:PACKAGE_ID.dll"
+              $expectedAssembly = "lib/$framework/$env:ASSEMBLY_NAME.dll"
               if ($expectedAssembly -notin $entries) {
                 throw "Package is missing $expectedAssembly."
               }
@@ -237,7 +256,7 @@ jobs:
             $unexpectedAssemblies = @(
               $entries | Where-Object {
                 $_ -like "lib/*.dll" -and
-                $_ -notlike "lib/*/$env:PACKAGE_ID.dll"
+                $_ -notlike "lib/*/$env:ASSEMBLY_NAME.dll"
               }
             )
             if ($unexpectedAssemblies.Count -ne 0) {
@@ -251,7 +270,7 @@ jobs:
       - name: Create package checksum
         shell: pwsh
         run: |
-          $packagePath = ".\Deployment\cloudwatch-plugin\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
           $hash = (Get-FileHash -Path $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $(Split-Path -Path $packagePath -Leaf)" |
             Out-File -FilePath "$packagePath.sha256" -Encoding ascii
@@ -259,10 +278,10 @@ jobs:
       - name: Upload package artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: cloudwatch-plugin-${{ inputs.version }}
+          name: cloudwatch-plugin-otel-${{ inputs.version }}
           path: |
-            Deployment/cloudwatch-plugin/*.nupkg
-            Deployment/cloudwatch-plugin/*.sha256
+            Deployment/cloudwatch-plugin-otel/*.nupkg
+            Deployment/cloudwatch-plugin-otel/*.sha256
 
       - name: Assume NuGet role
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
@@ -290,7 +309,7 @@ jobs:
           }
           Write-Output "::add-mask::$nugetKey"
 
-          $packagePath = ".\Deployment\cloudwatch-plugin\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
           nuget push $packagePath `
             -Source "https://api.nuget.org/v3/index.json" `
             -ApiKey $nugetKey
@@ -304,8 +323,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "cloudwatch-plugin-v$env:VERSION_INPUT"
-          $packagePath = ".\Deployment\cloudwatch-plugin\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          $tag = "cloudwatch-plugin-otel/v$env:VERSION_INPUT"
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
           $checksumPath = "$packagePath.sha256"
 
           @"
