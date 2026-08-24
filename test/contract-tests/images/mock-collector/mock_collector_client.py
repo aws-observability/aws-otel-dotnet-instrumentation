@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from logging import Logger, getLogger
 from time import sleep
-from typing import Callable, List, Set, TypeVar
+from typing import Callable, List, Optional, Set, TypeVar
 
 from google.protobuf.internal.containers import RepeatedScalarFieldContainer
 from grpc import Channel, insecure_channel
@@ -103,7 +103,12 @@ class MockCollectorClient:
                         spans.append(ResourceScopeSpan(resource_span, scope_span, span))
         return spans
 
-    def get_metrics(self, present_metrics: Set[str], exact_match=True) -> List[ResourceScopeMetric]:
+    def get_metrics(
+        self,
+        present_metrics: Set[str],
+        exact_match=True,
+        content_condition: Optional[Callable[[List[ResourceScopeMetric]], bool]] = None,
+    ) -> List[ResourceScopeMetric]:
         """Get all metrics that are currently stored in the mock collector.
 
         Returns:
@@ -121,24 +126,24 @@ class MockCollectorClient:
         def wait_condition(
             exported: List[ExportMetricsServiceRequest], current: List[ExportMetricsServiceRequest]
         ) -> bool:
-            received_metrics: Set[str] = set()
-            for exported_metric in current:
-                for resource_metric in exported_metric.resource_metrics:
-                    for scope_metric in resource_metric.scope_metrics:
-                        for metric in scope_metric.metrics:
-                            received_metrics.add(metric.name.lower())
+            current_metrics = _flatten_metrics(current)
+            received_metrics = {
+                resource_scope_metric.metric.name.lower()
+                for resource_scope_metric in current_metrics
+            }
             if exact_match:
-                return 0 < len(exported) == (len(current) - 2) and present_metrics_lower.issubset(received_metrics)
-            return present_metrics_lower.issubset(received_metrics)
+                content_ready = (
+                    0 < len(exported) == (len(current) - 2)
+                    and present_metrics_lower.issubset(received_metrics)
+                )
+            else:
+                content_ready = present_metrics_lower.issubset(received_metrics)
+            return content_ready and (
+                content_condition is None or content_condition(current_metrics)
+            )
 
         exported_metrics: List[ExportMetricsServiceRequest] = _wait_for_content(get_export, wait_condition)
-        metrics: List[ResourceScopeMetric] = []
-        for exported_metric in exported_metrics:
-            for resource_metric in exported_metric.resource_metrics:
-                for scope_metric in resource_metric.scope_metrics:
-                    for metric in scope_metric.metrics:
-                        metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
-        return metrics
+        return _flatten_metrics(exported_metrics)
 
     def get_logs(self) -> List[ResourceScopeLogRecord]:
         """Get all logs that are currently stored in the mock collector.
@@ -195,7 +200,22 @@ class MockCollectorClient:
         ]
 
 
-def _wait_for_content(get_export: Callable[[], List[T]], wait_condition: Callable[[List[T], List[T]], bool]) -> List[T]:
+def _flatten_metrics(
+    exported_metrics: List[ExportMetricsServiceRequest],
+) -> List[ResourceScopeMetric]:
+    metrics: List[ResourceScopeMetric] = []
+    for exported_metric in exported_metrics:
+        for resource_metric in exported_metric.resource_metrics:
+            for scope_metric in resource_metric.scope_metrics:
+                for metric in scope_metric.metrics:
+                    metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
+    return metrics
+
+
+def _wait_for_content(
+    get_export: Callable[[], List[T]],
+    wait_condition: Callable[[List[T], List[T]], bool],
+) -> List[T]:
     # Verify that there is no more data to be received
     deadline: datetime = datetime.now() + _TIMEOUT_DELAY
     exported: List[T] = []

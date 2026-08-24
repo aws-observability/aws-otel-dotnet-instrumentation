@@ -2,12 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from logging import INFO, Logger, getLogger
 from typing import Dict, List
-from docker.types import EndpointConfig
+
 from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from testcontainers.localstack import LocalStackContainer
 from typing_extensions import override
 
-from amazon.base.contract_test_base import NETWORK_NAME, ContractTestBase
+from amazon.base.contract_test_base import ContractTestBase
+from amazon.base.dependency_containers import (
+    create_localstack_container,
+    log_and_stop_container,
+)
 from amazon.utils.application_signals_constants import (
     AWS_LOCAL_SERVICE,
     AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER,
@@ -87,33 +91,25 @@ class AWSSdkTest(ContractTestBase):
     @classmethod
     @override
     def set_up_dependency_container(cls):
-        local_stack_networking_config: Dict[str, EndpointConfig] = {
-            NETWORK_NAME: EndpointConfig(
-                version="1.22",
-                aliases=[
-                    "localstack",
-                    "s3.localstack",
-                ],
-            )
-        }
-        cls._local_stack: LocalStackContainer = (
-            LocalStackContainer(image="localstack/localstack:4.0.0")
-            .with_name("localstack")
-            .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
-            .with_env("DEFAULT_REGION", "us-west-2")
-            .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
+        cls._local_stack = create_localstack_container(
+            "localstack",
+            (
+                "s3",
+                "secretsmanager",
+                "sns",
+                "sqs",
+                "stepfunctions",
+                "dynamodb",
+                "kinesis",
+            ),
+            "us-west-2",
         )
         cls._local_stack.start()
-
 
     @classmethod
     @override
     def tear_down_dependency_container(cls):
-        _logger.info("LocalStack stdout")
-        _logger.info(cls._local_stack.get_logs()[0].decode())
-        _logger.info("LocalStack stderr")
-        _logger.info(cls._local_stack.get_logs()[1].decode())
-        cls._local_stack.stop()
+        log_and_stop_container(cls._local_stack, "LocalStack", _logger)
 
     def test_s3_create_bucket(self):
         self.do_test_requests(
