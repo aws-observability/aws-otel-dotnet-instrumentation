@@ -4,13 +4,13 @@
 
 check_if_step_failed_and_exit() {
   if [ $? -ne 0 ]; then
-    echo $1
+    echo "$1"
     exit 1
   fi
 }
 
 # Build distro
-cd ..
+cd .. || exit 1
 
 # Compile the VENDORED native profiler first, so the distribution the contract tests install actually
 # supports line-level Dynamic Instrumentation.
@@ -40,7 +40,7 @@ fi
 bash build.sh
 check_if_step_failed_and_exit "There was an error building AWS Otel DotNet, exiting"
 
-cd test
+cd test || exit 1
 # Clear the PREVIOUS copy before installing the new one.
 #
 # This deliberately removes ./dist/OpenTelemetryDistribution, which is where the copy below actually lands.
