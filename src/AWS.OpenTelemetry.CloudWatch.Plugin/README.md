@@ -25,9 +25,6 @@ upstream OpenTelemetry .NET Automatic Instrumentation versions:
 | `1.16.0`                  | `1.16.0`          |
 | `1.16.0`                  | `1.17.0`          |
 
-Later automatic instrumentation versions that require the experimental public
-plugin API are not supported by this adapter.
-
 Install the package in the instrumented application:
 
 ```console
