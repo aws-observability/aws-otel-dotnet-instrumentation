@@ -20,9 +20,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// not updated over WATCHER, so a change to those needs a process restart.
 /// </para>
 /// <para>
-/// The class is deliberately small and dependency-free at this stage —
-/// concrete collector references are added in M4 (IncidentSnapshot) and M5
-/// (FunctionCall) when those collectors land.
+/// The class is deliberately small and dependency-free: it holds a sink interface rather than a
+/// concrete collector type, so the collectors can be constructed and registered independently of it.
 /// </para>
 /// </remarks>
 internal sealed class WatcherConfigSyncer
@@ -33,7 +32,7 @@ internal sealed class WatcherConfigSyncer
     /// <summary>
     /// Register the incident-snapshot collector so config updates can be
     /// pushed to it. Called by <see cref="ServiceEventsInstrumentation" /> when
-    /// the collector is constructed (M4).
+    /// the collector is constructed.
     /// </summary>
     /// <param name="sink">The incident-snapshot configuration sink.</param>
     public void SetIncidentSnapshotSink(IIncidentSnapshotConfigSink sink)

@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 
@@ -263,16 +264,12 @@ public sealed record ServiceEventsConfig
     /// supplied.</summary>
     public string DeploymentTimestamp { get; init; } = string.Empty;
 
-    /// <summary>Gets resource attributes from OTel detectors (cloud/host/container/k8s).</summary>
-    public ResourceAttributes ResourceAttributes { get; init; } = new();
-
     /// <summary>
     /// Build a <see cref="ServiceEventsConfig" /> from environment variables, applying
     /// the defaults from this class for missing values.
     /// </summary>
-    /// <param name="resourceAttributes">Optional resource attributes from OTel detectors.</param>
     /// <returns>A populated config.</returns>
-    public static ServiceEventsConfig FromEnvironment(ResourceAttributes? resourceAttributes = null)
+    public static ServiceEventsConfig FromEnvironment()
     {
         var defaults = new ServiceEventsConfig();
 
@@ -323,8 +320,6 @@ public sealed record ServiceEventsConfig
             DeploymentId = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID", defaults.DeploymentId),
             DeploymentUrl = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL", defaults.DeploymentUrl),
             DeploymentTimestamp = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP", defaults.DeploymentTimestamp),
-
-            ResourceAttributes = resourceAttributes ?? new ResourceAttributes(),
         };
     }
 
@@ -411,6 +406,14 @@ public sealed record ServiceEventsConfig
     /// </summary>
     /// <param name="operation">Operation string, e.g. <c>"GET /users/{id}"</c>.</param>
     /// <returns>The threshold in milliseconds.</returns>
+    /// <remarks>
+    /// Re-parses <see cref="LatencyThresholds" /> on each call. Deliberate: the expensive part was
+    /// compiling a regex per pattern per call, and <see cref="GlobMatches" /> now caches those, so
+    /// what remains is splitting a short configured string. Memoizing the parse on the instance would
+    /// mean caching derived state on a record, where a <c>with</c> expression copies the cache while
+    /// replacing the source list — a stale-cache trap worse than the work it saves. If this ever
+    /// shows up in a profile, the fix belongs in the caller, which can parse once at construction.
+    /// </remarks>
     public double GetLatencyThresholdMs(string operation)
     {
         foreach (var (pattern, thresholdMs) in this.GetLatencyThresholdPatterns())
@@ -432,7 +435,7 @@ public sealed record ServiceEventsConfig
     /// <returns><c>true</c> if the endpoint should be tracked.</returns>
     public bool ShouldTrackEndpoint(string route, string method)
     {
-        var endpointStr = $"{method.ToUpperInvariant()} {route}";
+        var endpointStr = HttpOperationResolver.ResolveOperation(method, route);
 
         if (this.EndpointIncludePatterns.Count > 0)
         {
