@@ -38,11 +38,6 @@ auto-instrumentation configuration:
 export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
 ```
 
-Keep the application's existing upstream OTel auto-instrumentation settings,
-including `CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`,
-`CORECLR_PROFILER_PATH`, `DOTNET_ADDITIONAL_DEPS`, `DOTNET_SHARED_STORE`,
-`DOTNET_STARTUP_HOOKS`, and exporter configuration.
-
 For a deployment that cannot add a package reference, extract the
 framework-specific `AWS.OpenTelemetry.CloudWatch.Plugin.dll` from the NuGet
 package into the upstream distribution's managed assemblies directory under
@@ -74,12 +69,9 @@ tracerBuilder
 meterBuilder.AddCloudWatchSpanMetrics();
 ```
 
-The tracer extension wraps the supplied sampler so the connector observes every
-span without changing which spans are exported. The meter extension subscribes
-the application's existing `MeterProvider`; it does not create another
-provider. Use the parameterless tracer extension to use the OpenTelemetry SDK
-default sampler. Register span metrics after all other sampler configuration;
-a later `SetSampler` call replaces the required always-record wrapper.
+To generate complete span metrics, the plugin records every span in-process.
+The configured sampler's export decisions are preserved, so spans it drops are
+not exported.
 
 Do not combine manual registration with the auto-instrumentation plugin.
 
