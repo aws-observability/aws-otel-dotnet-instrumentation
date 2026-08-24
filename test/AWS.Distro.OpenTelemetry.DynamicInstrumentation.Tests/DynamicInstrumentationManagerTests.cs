@@ -3,7 +3,10 @@
 
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
+using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Instrumentation.LineLevel;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests;
 
@@ -14,6 +17,213 @@ public class DynamicInstrumentationManagerTests : IDisposable
     // DIDataStore. Shut it down after every test so its drain thread is joined and stops competing
     // with other global-state suites for the shared queue.
     public void Dispose() => DynamicInstrumentationManager.Instance.Shutdown();
+
+    // ---------------------------------------------------------------------------------------------
+    // APPLIED-PATH ORCHESTRATION.
+    //
+    // Everything below was UNREACHABLE before the Initialize seam existed, and branch coverage is what
+    // exposed it: both translators end in a P/Invoke that no test process can satisfy, so every apply
+    // failed and the code downstream of a success never ran. These stub ONLY the native boundary --
+    // the registry, sink, status reporter, PDB resolution and the manager's own logic are all real.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>A line translator whose native calls are stubbed, so resolution can actually succeed.</summary>
+    private static LineProbeTranslator StubbedLineTranslator(List<int>? removedProbeIds = null) =>
+        new(
+            addLineProbesOverride: (_, _, _) => { },
+            removeLineProbeOverride: id => removedProbeIds?.Add(id),
+            typeResolver: _ => typeof(PdbReaderTargets));
+
+    /// <summary>A method-level translator whose native call is stubbed, so applies report Applied.</summary>
+    private static ProfilerTranslator StubbedProfilerTranslator() =>
+        new(addInstrumentationsOverride: (_, _, _) => { });
+
+    private static InstrumentationConfiguration RealLineConfig(string locationHash, string marker, string local) =>
+        new()
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Instrumentation.LineLevel",
+            ClassName = "PdbReaderTargets",
+            MethodName = "ThreeStatements",
+            LineNumber = PdbReaderTargets.LineOf(marker),
+            LocationHash = locationHash,
+            Capture = CaptureConfiguration.Default with { CaptureLocals = [local] }
+        };
+
+    [Fact]
+    public void ApplyLineProbe_WhenResolutionSucceeds_RegistersTheProbeAndMarksItApplied()
+    {
+        // The success path of ApplyLineProbe, which no test could reach before: the defensive
+        // single-location Register, and MarkApplied -- the ONLY thing that makes a config eligible for READY.
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(), null, StubbedLineTranslator());
+
+        var config = RealLineConfig("applied-line-hash", "assignsA", "a");
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { config }).Should().BeTrue(
+            "a resolved line probe needs no retry, so the poller may latch this set");
+
+        manager.Registry!.Get(config.InstrumentationKey).Should().NotBeNull();
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void RemovingAnAppliedLineConfig_UnregistersEveryProbeAndTellsTheProfiler()
+    {
+        // THE BLIND SPOT. OnConfigurationsChanged_RemovesStaleLineLevelConfigs passes today WITHOUT ever
+        // entering this block: nothing registered, so `Unregister(...) == true` was false and the whole body
+        // -- RemoveLineProbe per probe, plus the weave-verdict Forget -- was skipped. Measured as 0 lines
+        // executed. Removal is the path that stops a deleted probe capturing, so it cannot be untested.
+        //
+        // THREE locals on purpose: a multi-local config owns one probe per local, and the bug this guards is
+        // removing only the first and leaving the rest woven AND registered -- still capturing after the
+        // operator deleted the configuration.
+        var removed = new List<int>();
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(), null, StubbedLineTranslator(removed));
+
+        var config = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Instrumentation.LineLevel",
+            ClassName = "PdbReaderTargets",
+            MethodName = "ThreeStatements",
+            LineNumber = PdbReaderTargets.LineOf("assignsA"),
+            LocationHash = "removal-line-hash",
+            Capture = CaptureConfiguration.Default with { CaptureLocals = ["a", "b", "c"] }
+        };
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { config });
+        manager.Registry!.Get(config.InstrumentationKey).Should().NotBeNull("precondition: it applied");
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration>());
+
+        manager.Registry.Get(config.InstrumentationKey).Should().BeNull("the config must leave the registry");
+        removed.Should().HaveCountGreaterThan(
+            1,
+            "EVERY probe the config owned must be handed to RemoveLineProbe, not just the first -- three "
+            + "captured locals means several probes at one line");
+        removed.Should().OnlyHaveUniqueItems();
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void EditingAnAppliedLineConfigInPlace_RetiresTheOldProbesBeforeApplyingTheNew()
+    {
+        // The retire-on-edit path (branch coverage 2/6, the worst in the file). An in-place edit keeps the
+        // SAME InstrumentationKey and changes the LocationHash, so RemoveStale never sees it as stale --
+        // RetireAppliedConfiguration is the only thing that drops the previous incarnation's probes. Without
+        // it they keep firing under a LocationHash the operator already replaced.
+        var removed = new List<int>();
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(), null, StubbedLineTranslator(removed));
+
+        var before = RealLineConfig("edit-hash-v1", "assignsA", "a");
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { before });
+        removed.Should().BeEmpty("nothing has been retired yet");
+
+        // Same key (type+method+line), new identity.
+        var after = RealLineConfig("edit-hash-v2", "assignsA", "a");
+        after.InstrumentationKey.Should().Be(before.InstrumentationKey, "an in-place edit keeps the key");
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { after });
+
+        removed.Should().NotBeEmpty(
+            "the previous incarnation's probes must be handed to RemoveLineProbe when the config is edited");
+
+        manager.Shutdown();
+    }
+
+    [Fact]
+    public void MethodLevelApplied_MarksAppliedAndReportsOverloadedMethodsForSameArityCollisions()
+    {
+        // The method-level Applied arm, also unreachable before the seam: MarkApplied plus the
+        // OVERLOADED_METHODS collision loop, which reports an ERROR against EVERY config in an ambiguous
+        // bucket rather than only the one that applied last -- captures on same-arity overloads cannot be
+        // told apart by args.Length, so the operator needs the whole set named.
+        var statusBodies = new List<string>();
+        using var server = StatusCapturingApiServer.Start(statusBodies);
+
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(apiUrl: server.Url), StubbedProfilerTranslator(), null);
+
+        // Two configs on the SAME type, both resolving to a 1-parameter method => a same-arity collision.
+        var first = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests",
+            ClassName = "DynamicInstrumentationManagerTests",
+            MethodName = nameof(EditableTarget),
+            LocationHash = "collide-a",
+            Capture = CaptureConfiguration.Default
+        };
+        var second = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.PROBE,
+            CodeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests",
+            ClassName = "DynamicInstrumentationManagerTests",
+            MethodName = nameof(SecondTarget),
+            LocationHash = "collide-b",
+            Capture = CaptureConfiguration.Default
+        };
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { first, second });
+
+        server.WaitForStatusContaining("OVERLOADED_METHODS", TimeSpan.FromSeconds(10)).Should().BeTrue(
+            "two same-arity methods on one type cannot be disambiguated, so both must be reported");
+
+        manager.Shutdown();
+    }
+
+    /// <summary>Second same-arity target, so a collision can be provoked. See the collision test.</summary>
+    /// <param name="x">Any value.</param>
+    /// <returns>x + 2.</returns>
+    public static int SecondTarget(int x) => x + 2;
+
+    [Fact]
+    public void AMalformedNegativeLineNumber_IsRefused_NotWovenAsAWholeMethodProbe()
+    {
+        // IsLineLevel (LineNumber > 0) and IsMethodLevel (LineNumber == 0) do NOT partition -- a negative
+        // LineNumber satisfies NEITHER. It passes the IsSupported check (which only refuses ctors on the
+        // method-level side), gets registered, and then has to be caught explicitly. Falling through to the
+        // method-level branch instead wove a FULL METHOD probe for a config the operator scoped to a line,
+        // capturing entry/exit arguments they never asked for -- data exfiltration by typo.
+        //
+        // Parse() rejects LineNumber < 0, so production cannot reach this from the wire; the guard protects
+        // the internal API surface, and this test is the only thing that proves it fires.
+        var statusBodies = new List<string>();
+        using var server = StatusCapturingApiServer.Start(statusBodies);
+
+        var manager = DynamicInstrumentationManager.Instance;
+        manager.Shutdown();
+        manager.Initialize(CreateConfig(apiUrl: server.Url), StubbedProfilerTranslator(), StubbedLineTranslator());
+
+        var malformed = new InstrumentationConfiguration
+        {
+            Type = InstrumentationType.BREAKPOINT,
+            CodeUnit = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests",
+            ClassName = "DynamicInstrumentationManagerTests",
+            MethodName = nameof(EditableTarget),
+            LineNumber = -1,
+            LocationHash = "malformed-negative-line",
+            Capture = CaptureConfiguration.Default
+        };
+
+        malformed.IsLineLevel.Should().BeFalse("a negative line number is not line-level");
+        malformed.IsMethodLevel.Should().BeFalse("nor is it method-level -- that is the whole hazard");
+
+        manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { malformed });
+
+        server.WaitForStatusContaining("UNSUPPORTED_TARGET", TimeSpan.FromSeconds(10)).Should().BeTrue(
+            "a config that is neither line- nor method-level must be refused and reported, never woven");
+
+        manager.Shutdown();
+    }
 
     [Fact]
     public void ReportLineProbeWeaveFailures_AfterInitialize_IsWiredUpAndSurvivesAMissingProfiler()

@@ -13,6 +13,12 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.Functi
 /// </summary>
 internal static class DiIntegrationHelper
 {
+    // Read off this assembly rather than written out. The literal it replaces would have silently stopped
+    // filtering the moment the assembly was renamed, and the symptom is agent frames leaking into a
+    // CUSTOMER's captured stack trace — noise in their data, not an error anyone would ever see.
+    private static readonly string OwnAssemblyNamePrefix =
+        typeof(DiIntegrationHelper).Assembly.GetName().Name!;
+
     private static volatile InstrumentationRegistry? registry;
     private static CaptureConfiguration defaultLimits = CaptureConfiguration.Default;
 
@@ -363,7 +369,7 @@ internal static class DiIntegrationHelper
     }
 
     private static bool IsInternalFrame(string typeName) =>
-        typeName.StartsWith("AWS.Distro.OpenTelemetry.DynamicInstrumentation") ||
-        typeName.StartsWith("System.Runtime") ||
-        typeName.StartsWith("System.Threading");
+        typeName.StartsWith(OwnAssemblyNamePrefix, StringComparison.Ordinal) ||
+        typeName.StartsWith("System.Runtime", StringComparison.Ordinal) ||
+        typeName.StartsWith("System.Threading", StringComparison.Ordinal);
 }

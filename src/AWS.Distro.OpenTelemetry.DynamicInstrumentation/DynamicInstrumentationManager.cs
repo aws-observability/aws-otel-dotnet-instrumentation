@@ -89,7 +89,61 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
     /// <summary>Initializes the manager and starts configuration polling. Idempotent.</summary>
     /// <param name="config">The resolved configuration.</param>
-    public void Initialize(DynamicInstrumentationConfig config)
+    public void Initialize(DynamicInstrumentationConfig config) => this.Initialize(config, null, null);
+
+    /// <summary>Stops polling and releases resources. Idempotent.</summary>
+    public void Shutdown()
+    {
+        if (!this.initialized)
+        {
+            return;
+        }
+
+        lock (this.initLock)
+        {
+            if (!this.initialized)
+            {
+                return;
+            }
+
+            this.cts?.Cancel();
+            this.initialized = false;
+            this.Cleanup();
+        }
+    }
+
+    /// <summary>Disposes the manager by shutting it down.</summary>
+    public void Dispose()
+    {
+        this.Shutdown();
+    }
+
+    /// <summary>
+    /// Initializes the manager, optionally with pre-built translators.
+    /// </summary>
+    /// <param name="config">The resolved configuration.</param>
+    /// <param name="profilerTranslatorOverride">
+    /// Replaces the method-level translator. Null builds the production one.
+    /// </param>
+    /// <param name="lineProbeTranslatorOverride">
+    /// Replaces the line-level translator. Null builds the production one.
+    /// </param>
+    // A TEST SEAM, and it exists because branch coverage proved a real blind spot rather than because it
+    // seemed tidy. Both translators end in a P/Invoke to the native profiler, which is absent from a test
+    // process — so ApplyInstrumentation and ApplyLineProbe ALWAYS fail there, and every path downstream of a
+    // successful apply was unreachable: MarkApplied, the OVERLOADED_METHODS collision report, and — because
+    // nothing ever registered in the sink — the whole line-level removal and retire-on-edit orchestration.
+    // Measured: 0 of those lines executed across 442 tests, while
+    // OnConfigurationsChanged_RemovesStaleLineLevelConfigs passed without entering the block it names.
+    //
+    // Injecting the TRANSLATORS rather than adding a new abstraction is deliberate: both already carry their
+    // own override delegates for exactly this purpose (addInstrumentationsOverride / addLineProbesOverride),
+    // so a test stubs the one call that needs a profiler and everything else stays production code. Nothing
+    // is faked except the boundary itself.
+    internal void Initialize(
+        DynamicInstrumentationConfig config,
+        ProfilerTranslator? profilerTranslatorOverride,
+        LineProbeTranslator? lineProbeTranslatorOverride)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -116,13 +170,13 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
                 // Capture engine must exist before the poller starts, or the first poll hits a null registry.
                 this.registry = new InstrumentationRegistry();
-                this.profilerTranslator = new ProfilerTranslator();
+                this.profilerTranslator = profilerTranslatorOverride ?? new ProfilerTranslator();
                 DiIntegrationHelper.Configure(this.registry);
 
                 // Line-level. The sink must be configured BEFORE any probe is applied: weaving is what makes
                 // the callback reachable, so an applied probe can fire on a customer thread the instant the
                 // ReJIT completes. With no sink the callback is a silent no-op and that first hit is lost.
-                this.lineProbeTranslator = new LineProbeTranslator();
+                this.lineProbeTranslator = lineProbeTranslatorOverride ?? new LineProbeTranslator();
                 this.lineProbeSink = new LineProbeSink(this.registry);
                 DiLineIntegrationHelper.Configure(this.lineProbeSink);
 
@@ -172,33 +226,6 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 throw;
             }
         }
-    }
-
-    /// <summary>Stops polling and releases resources. Idempotent.</summary>
-    public void Shutdown()
-    {
-        if (!this.initialized)
-        {
-            return;
-        }
-
-        lock (this.initLock)
-        {
-            if (!this.initialized)
-            {
-                return;
-            }
-
-            this.cts?.Cancel();
-            this.initialized = false;
-            this.Cleanup();
-        }
-    }
-
-    /// <summary>Disposes the manager by shutting it down.</summary>
-    public void Dispose()
-    {
-        this.Shutdown();
     }
 
     /// <summary>

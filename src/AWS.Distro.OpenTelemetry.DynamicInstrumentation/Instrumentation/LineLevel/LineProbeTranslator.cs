@@ -22,21 +22,17 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 // the fork lands.
 internal sealed class LineProbeTranslator : IDisposable
 {
-    /// <summary>Simple name of the assembly hosting the managed line-probe callback.</summary>
-    internal const string CallbackAssembly = "AWS.Distro.OpenTelemetry.DynamicInstrumentation";
-
-    /// <summary>Fully-qualified type hosting the managed line-probe callback.</summary>
-    internal const string CallbackType =
-        "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLevel.DiLineIntegration";
-
     /// <summary>Capture callback for <see cref="LineProbeEmissionMode.LocalCapture"/>: <c>void CaptureLocal(int32, object)</c>.</summary>
-    internal const string CaptureMethod = "CaptureLocal";
+    // nameof, NOT a literal, for all three callback names. The native rewriter emits a MemberRef by NAME
+    // into the customer's method body; a rename here compiles fine and then resolves to no method at
+    // runtime, so the probe weaves a call to nothing. nameof turns that into a build error.
+    internal const string CaptureMethod = nameof(DiLineIntegration.CaptureLocal);
 
     /// <summary>Callback for <see cref="LineProbeEmissionMode.Legacy"/> (no local): <c>void Probe(int32)</c>.</summary>
-    internal const string ProbeMethod = "Probe";
+    internal const string ProbeMethod = nameof(DiLineIntegration.Probe);
 
     /// <summary>Rate-limit gate name: <c>bool ShouldCapture(int32)</c>.</summary>
-    internal const string GateMethod = "ShouldCapture";
+    internal const string GateMethod = nameof(DiLineIntegration.ShouldCapture);
 
     /// <summary>
     /// Maximum locals captured at one line. Extra names are dropped, not refused.
@@ -56,6 +52,11 @@ internal sealed class LineProbeTranslator : IDisposable
     // this a performance choice rather than a correctness limit.
     internal const int InitialWeaveResultCapacity = 64;
 
+    /// <summary>Simple name of the assembly hosting the managed line-probe callback.</summary>
+    // The fallback for CallbackAssemblyFullName, and derived for the same reason: see that field.
+    internal static readonly string CallbackAssembly =
+        typeof(DiLineIntegration).Assembly.GetName().Name!;
+
     /// <summary>
     /// Full display name of the callback assembly — what actually crosses the ABI.
     /// </summary>
@@ -70,10 +71,18 @@ internal sealed class LineProbeTranslator : IDisposable
     // token would silently rot the moment the signing key or version changed. A ref carrying the WRONG token
     // does not fail loudly — it binds to nothing, and the woven call resolves to no method at runtime.
     //
-    // Declared BELOW the constants, not next to CallbackAssembly which it derives from, purely to satisfy
-    // SA1203 (constants before non-constant fields).
+    // Declared AFTER CallbackAssembly ON PURPOSE: static field initializers run in DECLARATION order, so
+    // with the fallback declared later this read it while it was still null. Latent rather than fatal --
+    // Assembly.FullName is effectively never null, so the ?? branch never runs -- but the compiler flagged it
+    // (CS8601) and an ordering trap that only bites in an unreachable branch is worth removing outright.
     internal static readonly string CallbackAssemblyFullName =
         typeof(DiLineIntegration).Assembly.FullName ?? CallbackAssembly;
+
+    /// <summary>Fully-qualified type hosting the managed line-probe callback.</summary>
+    // typeof().FullName rather than the name typed out. This string is handed to the native rewriter, which
+    // emits a TypeRef for it into the customer's module; a namespace move would compile and then bind to
+    // nothing, producing a probe that reports READY and can never fire.
+    internal static readonly string CallbackType = typeof(DiLineIntegration).FullName!;
 
     private readonly Action<string, NativeLineProbeDefinition[], int>? addLineProbesOverride;
     private readonly Action<int>? removeLineProbeOverride;

@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Reflection;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 
@@ -727,6 +728,44 @@ public class LineProbeTranslatorTests
         defA.ProbeId.Should().NotBe(defB.ProbeId);
         defA.BoxValue.Should().NotBe(
             defB.BoxValue, "each probe reads its own local slot, so the slot operands must differ");
+    }
+
+    [Fact]
+    public void TheCallbackNamesHandedToTheNativeRewriter_ResolveToRealPublicStaticMethods()
+    {
+        // These four strings are emitted BY NAME into the customer's method body as a TypeRef plus a
+        // MemberRef. Nothing checks them: a rename or a namespace move compiles, the rewriter emits a
+        // reference that binds to nothing, and the probe reports READY and can never fire. They are derived
+        // via typeof/nameof for that reason; this test proves the derivation still names something real,
+        // with the exact shape the emitted signature claims.
+        var callbackType = Type.GetType(
+            $"{LineProbeTranslator.CallbackType}, {LineProbeTranslator.CallbackAssembly}");
+
+        callbackType.Should().NotBeNull(
+            $"'{LineProbeTranslator.CallbackType}' in '{LineProbeTranslator.CallbackAssembly}' must exist");
+        callbackType!.IsPublic.Should().BeTrue("the woven call crosses an assembly boundary");
+
+        // void Probe(int32) — the Legacy no-local sequence.
+        var probe = callbackType.GetMethod(
+            LineProbeTranslator.ProbeMethod, BindingFlags.Public | BindingFlags.Static, [typeof(int)]);
+        probe.Should().NotBeNull($"{LineProbeTranslator.ProbeMethod}(int32) is emitted as a MemberRef");
+        probe!.ReturnType.Should().Be(typeof(void));
+
+        // void CaptureLocal(int32, object) — the local/hoisted capture sequence. The `object` parameter is
+        // why a value-type local must be boxed; a mismatch here is an InvalidProgramException at first hit.
+        var capture = callbackType.GetMethod(
+            LineProbeTranslator.CaptureMethod,
+            BindingFlags.Public | BindingFlags.Static,
+            [typeof(int), typeof(object)]);
+        capture.Should().NotBeNull($"{LineProbeTranslator.CaptureMethod}(int32, object) is emitted");
+        capture!.ReturnType.Should().Be(typeof(void));
+
+        // bool ShouldCapture(int32) — the gate the GatedBox sequence branches on.
+        var gate = callbackType.GetMethod(
+            LineProbeTranslator.GateMethod, BindingFlags.Public | BindingFlags.Static, [typeof(int)]);
+        gate.Should().NotBeNull($"{LineProbeTranslator.GateMethod}(int32) is emitted for the gated mode");
+        gate!.ReturnType.Should().Be(
+            typeof(bool), "the emitted gate signature declares BOOLEAN and brfalse depends on it");
     }
 
     [Fact]
