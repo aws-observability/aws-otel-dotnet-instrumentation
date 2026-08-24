@@ -21,8 +21,8 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 /// frame on end; the server processor drains it on span end.
 /// </para>
 /// <para>
-/// Exception incidents use the stack-trace-derived call path instead (C1); this span
-/// buffer backs the latency path where no exception/stack is available.
+/// Exception incidents use the stack-trace-derived call path instead, because it names the real
+/// throwing method; this span buffer backs the latency path, where no exception or stack is available.
 /// </para>
 /// </remarks>
 internal static class CallPathCapture
@@ -32,6 +32,15 @@ internal static class CallPathCapture
     /// <summary>Max frames retained per request before the truncation sentinel is appended.</summary>
     internal const int MaxFrames = 100;
 
+    /// <summary>
+    /// Synthetic final frame standing in for call-path entries that were dropped past
+    /// <see cref="MaxFrames" />.
+    /// </summary>
+    /// <remarks>
+    /// A frame name, not a string suffix — the counterpart for clipped exception text is
+    /// <c>IncidentSnapshotCollector.TruncatedSuffix</c>, which is deliberately a different value.
+    /// Both use the same angle-bracketed sentinel convention, and one record can carry both.
+    /// </remarks>
     internal const string TruncatedSentinel = "<call_path_truncated>";
 
     /// <summary>Create the per-request frame buffer on a server span. Call from OnStart.</summary>

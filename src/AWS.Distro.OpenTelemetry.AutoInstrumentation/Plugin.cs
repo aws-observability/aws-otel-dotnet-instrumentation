@@ -498,6 +498,33 @@ public class Plugin
         // ServiceEvents gets the type from the `error.type` tag instead, which the ASP.NET Core
         // instrumentation sets on the error path regardless of this option, and which is a type name
         // rather than a message. See EndpointActivityProcessor.ReadExceptionDetails.
+        //
+        // IncidentSnapshot additionally needs the message and stack trace, which no span tag carries.
+        // Those are captured through EnrichWithException, which hands us the live Exception without
+        // touching the span, and stashed privately on the Activity for ServiceEvents' own collectors
+        // to read. Gated on ServiceEvents actually running, for the same reason CallPathCapture is
+        // gated on an incident trigger existing: otherwise this allocates per failed request for a
+        // consumer that is not there.
+        if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+        {
+            // Chain rather than assign. This is the customer's options object and they may have set
+            // their own enrichment; overwriting it would silently delete their callback.
+            var customerEnrich = options.EnrichWithException;
+            options.EnrichWithException = (activity, exception) =>
+            {
+                try
+                {
+                    ServiceEventsInstrumentation.Current?.CaptureException(activity, exception);
+                }
+                catch (Exception captureEx)
+                {
+                    // Telemetry must never interfere with the customer's request pipeline.
+                    Logger.LogWarning(captureEx, "ServiceEvents exception capture failed.");
+                }
+
+                customerEnrich?.Invoke(activity, exception);
+            };
+        }
     }
 #endif
 
