@@ -370,8 +370,54 @@ class DIContractTestBase(ContractTestBase):
         if max_hits is not None:
             code_capture["CaptureLimits"] = {"MaxHits": max_hits}
 
+        return DIContractTestBase._method_config("PROBE", method_name, location_hash, code_capture)
+
+    @staticmethod
+    def method_breakpoint(
+        method_name: str,
+        location_hash: str,
+        capture_arguments: Optional[List[str]] = None,
+        capture_return_value: bool = True,
+        max_hits: Optional[int] = None,
+        max_string_length: Optional[int] = None,
+        max_collection_width: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """A METHOD-LEVEL BREAKPOINT configuration -- LineNumber 0, so the whole method body is the location.
+
+        Distinct from `method_probe` in exactly one field that changes behaviour: `InstrumentationType`.
+        BREAKPOINT is the only type for which the agent honours MaxHits
+        (InstrumentationConfiguration parses `maxHits` as null when the type is PROBE), so every bounded-capture
+        test has to go through here rather than through method_probe.
+        """
+        code_capture: Dict[str, Any] = {"CaptureReturn": capture_return_value}
+        if capture_arguments is not None:
+            code_capture["CaptureArguments"] = capture_arguments
+
+        # Requested values, NOT effective ones. The agent clamps each to its enforced maximum, so a test can
+        # legitimately ask for something absurd here and assert the clamp -- which is the point of the
+        # capture-limit tests.
+        limits: Dict[str, Any] = {}
+        if max_hits is not None:
+            limits["MaxHits"] = max_hits
+        if max_string_length is not None:
+            limits["MaxStringLength"] = max_string_length
+        if max_collection_width is not None:
+            limits["MaxCollectionWidth"] = max_collection_width
+        if limits:
+            code_capture["CaptureLimits"] = limits
+
+        return DIContractTestBase._method_config("BREAKPOINT", method_name, location_hash, code_capture)
+
+    @staticmethod
+    def _method_config(
+        instrumentation_type: str,
+        method_name: str,
+        location_hash: str,
+        code_capture: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """The wire envelope both method-level types share. LineNumber 0 means "the method, not a line"."""
         return {
-            "InstrumentationType": "PROBE",
+            "InstrumentationType": instrumentation_type,
             "LocationHash": location_hash,
             "Location": {
                 "CodeLocation": {
@@ -385,3 +431,42 @@ class DIContractTestBase(ContractTestBase):
             },
             "CaptureConfiguration": {"CodeCapture": code_capture},
         }
+
+    # --- snapshot attribute access ------------------------------------------------------------------
+
+    def snapshot_attribute(self, snapshot: Dict[str, Any], key: str) -> Any:
+        """One `aws.di.*` attribute as a plain Python value, failing loudly if it is absent.
+
+        Reaching into `record.attributes[key].string_value` directly works until an attribute is emitted as a
+        different AnyValue kind (int_value for line_number, for instance), at which point the wrong accessor
+        silently yields "" or 0 -- an assertion comparing against "" would then PASS. Going through the same
+        coercion the template comparator uses keeps every test reading attributes the same way.
+        """
+        attributes: Dict[str, Any] = snapshot["_attributes"]
+        self.assertIn(key, attributes, f"snapshot carried no {key} attribute")
+        return _coerce_attribute_value(attributes[key])
+
+    # --- snapshot filtering -------------------------------------------------------------------------
+
+    def snapshots_for_method(self, snapshots: List[Dict[str, Any]], method_name: str) -> List[Dict[str, Any]]:
+        """Snapshots whose aws.di.method_name attribute matches, mirroring Java's findSnapshotsByMethod.
+
+        Needed once a container carries MORE THAN ONE configuration: `wait_for_snapshots(1)[0]` is whichever
+        snapshot landed first, so a test asserting on the wrong probe's capture would pass or fail for
+        unrelated reasons.
+        """
+        matched: List[Dict[str, Any]] = []
+        for snapshot in snapshots:
+            attribute = snapshot["_attributes"].get("aws.di.method_name")
+            if attribute is not None and _coerce_attribute_value(attribute) == method_name:
+                matched.append(snapshot)
+        return matched
+
+    def snapshots_for_location(self, snapshots: List[Dict[str, Any]], location_hash: str) -> List[Dict[str, Any]]:
+        """Snapshots for one configuration, by the LocationHash the test seeded."""
+        matched: List[Dict[str, Any]] = []
+        for snapshot in snapshots:
+            attribute = snapshot["_attributes"].get("aws.di.location_hash")
+            if attribute is not None and _coerce_attribute_value(attribute) == location_hash:
+                matched.append(snapshot)
+        return matched

@@ -37,4 +37,20 @@ app.MapGet("/probe-target/failing", (string reason) =>
     }
 });
 
+// The SIZES live here, not in the test, because they must exceed the agent's enforced capture maxima
+// (MaxStringLength 255, MaxCollectionWidth 20) for truncation to be observable at all. A request-supplied
+// size would let a test silently ask for something under the limit and then "pass" by observing no
+// truncation.
+app.MapGet("/probe-target/long-string", () =>
+    Results.Ok(new { length = ProbeTargets.ProcessLongString(new string('x', 500)) }));
+
+app.MapGet("/probe-target/large-collection", () =>
+    Results.Ok(new { count = ProbeTargets.ProcessLargeCollection(Enumerable.Range(0, 50).ToList()) }));
+
+// Each call gets a distinct argument so the MaxHits tests can tell snapshots apart and prove which calls
+// were captured, rather than only counting them.
+var limitedCalls = 0;
+app.MapGet("/probe-target/limited", () =>
+    Results.Ok(new { value = ProbeTargets.LimitedFunction(Interlocked.Increment(ref limitedCalls)) }));
+
 app.Run();

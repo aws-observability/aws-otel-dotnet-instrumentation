@@ -59,4 +59,32 @@ public static class ProbeTargets
     {
         throw new InvalidOperationException($"probe target failed: {reason}");
     }
+
+    // TARGETS BELOW ARE APPENDED, AND MUST STAY APPENDED. The `@probe:` markers above resolve to line
+    // numbers that are part of the line-level test contract, so a new target inserted between existing ones
+    // would silently move a probe onto a different statement. Add to the end.
+
+    /// <summary>A string longer than the enforced capture maximum, so truncation is observable.</summary>
+    /// <param name="text">Text whose captured form must be clamped to MaxStringLength.</param>
+    /// <returns>The untruncated length, so the app's own view differs from the captured one.</returns>
+    public static int ProcessLongString(string text)
+    {
+        return text.Length;
+    }
+
+    /// <summary>A collection wider than the enforced capture maximum, so element capping is observable.</summary>
+    /// <param name="items">Items whose captured form must be capped at MaxCollectionWidth.</param>
+    /// <returns>The untruncated count.</returns>
+    public static int ProcessLargeCollection(List<int> items)
+    {
+        return items.Count;
+    }
+
+    /// <summary>Target for a BREAKPOINT with MaxHits: called more often than the limit allows.</summary>
+    /// <param name="callNumber">Which call this is, so snapshots can be told apart.</param>
+    /// <returns>The call number, echoed.</returns>
+    public static int LimitedFunction(int callNumber)
+    {
+        return callNumber;
+    }
 }

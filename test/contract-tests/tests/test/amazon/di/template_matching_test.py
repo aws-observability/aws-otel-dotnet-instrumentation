@@ -140,3 +140,31 @@ class GoldenTemplateFilesTest(TestCase):
         function_level_body: Dict[str, Any] = {"captures": {"entry": {"arguments": {}}}}
         with self.assertRaises(AssertionError):
             compare_against_template(function_level_body, load_di_template("line_level_snapshot")["body"])
+
+    def test_method_level_template_matches_a_measured_method_level_body(self) -> None:
+        """Method-level BREAKPOINT bodies are shaped exactly like PROBE bodies -- only the type attribute
+        differs -- so this must accept the same measured body."""
+        measured_body: Dict[str, Any] = {
+            "captures": {
+                "entry": {"arguments": {"callNumber": {"type": "System.Int32", "value": "1"}}},
+                "return": {"return_value": {"type": "System.Int32", "value": "1"}},
+            }
+        }
+        compare_against_template(measured_body, load_di_template("method_level_snapshot")["body"])
+
+    def test_probe_and_method_level_templates_differ_only_in_instrumentation_type(self) -> None:
+        """Pins the ONE difference. If these two templates ever diverge elsewhere, one of them is describing a
+        shape the emitter does not produce -- the bodies come from the same code path."""
+        probe = load_di_template("probe_snapshot")
+        method_level = load_di_template("method_level_snapshot")
+
+        self.assertEqual(probe["body"], method_level["body"], "the two bodies are emitted by one code path")
+
+        differing = {
+            key
+            for key in set(probe["attributes"]) | set(method_level["attributes"])
+            if probe["attributes"].get(key) != method_level["attributes"].get(key)
+        }
+        self.assertEqual(differing, {"aws.di.instrumentation_type", "aws.di.method_name"})
+        self.assertEqual(probe["attributes"]["aws.di.instrumentation_type"], "PROBE")
+        self.assertEqual(method_level["attributes"]["aws.di.instrumentation_type"], "BREAKPOINT")

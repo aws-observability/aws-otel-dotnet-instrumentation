@@ -1,0 +1,28 @@
+{
+  "$comment": "Golden template for a METHOD-LEVEL BREAKPOINT snapshot (.NET) - ProbeTargets.LimitedFunction. The body is identical to a PROBE's (entry arguments + return), which is the point: the only observable difference between the two method-level types is aws.di.instrumentation_type, and BREAKPOINT is the type for which MaxHits is honoured. Line 0 because the location is the method, not a line. Java's equivalent is templates/di/method_level_snapshot.json.",
+  "body": {
+    "captures": {
+      "entry": {
+        "arguments": "*"
+      },
+      "return": {
+        "return_value": "*"
+      }
+    }
+  },
+  "attributes": {
+    "event.name": "aws.dynamic_instrumentation.snapshot",
+    "aws.di.snapshot_id": "*",
+    "aws.di.location_hash": "*",
+    "aws.di.instrumentation_level": "method",
+    "aws.di.instrumentation_type": "BREAKPOINT",
+    "aws.di.code_unit": "DynamicInstrumentation.NetCore",
+    "aws.di.class_name": "ProbeTargets",
+    "aws.di.method_name": "LimitedFunction",
+    "aws.di.file_path": "*",
+    "aws.di.line_number": 0,
+    "aws.di.duration_ms": "*",
+    "aws.di.thread_id": "*",
+    "aws.di.thread_name": "*"
+  }
+}

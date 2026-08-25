@@ -5,11 +5,25 @@ name: Dynamic Instrumentation Contract Tests
 # di suite and is scoped to DI-related paths for a faster, targeted signal. Mirrors
 # serviceevents-contract-tests.yml.
 
+# The path list is duplicated across the two triggers because GitHub does not expand YAML anchors in
+# workflow files. Keep the two copies in step.
+#
+# WHAT BELONGS IN IT: everything this suite's result actually depends on. The DI project is the obvious one,
+# but the AutoInstrumentation plugin HOSTS DI (Plugin.cs calls InitializeDynamicInstrumentation and
+# OnTracerProviderInitialized, and its csproj is what copies the DI DLL into the distribution), and the two
+# shell scripts below are what this job runs to build and install that distribution -- a change to any of
+# them can break DI while leaving this workflow unfired. Anything more distant is covered by pr-build.yml's
+# `contract-test` job, which has no path filter at all.
 on:
   pull_request:
     paths:
       - "src/AWS.Distro.OpenTelemetry.DynamicInstrumentation/**"
+      - "src/AWS.Distro.OpenTelemetry.AutoInstrumentation/**"
+      - "test/build-and-install-distro.sh"
+      - "test/set-up-contract-tests.sh"
       - "test/contract-tests/tests/test/amazon/di/**"
+      - "test/contract-tests/tests/test/amazon/base/**"
+      - "test/contract-tests/templates/di/**"
       - "test/contract-tests/images/applications/DynamicInstrumentation.NetCore/**"
       - "test/contract-tests/images/mock-di-api/**"
       - "test/contract-tests/images/mock-collector/**"
@@ -20,7 +34,12 @@ on:
       - "release/v*"
     paths:
       - "src/AWS.Distro.OpenTelemetry.DynamicInstrumentation/**"
+      - "src/AWS.Distro.OpenTelemetry.AutoInstrumentation/**"
+      - "test/build-and-install-distro.sh"
+      - "test/set-up-contract-tests.sh"
       - "test/contract-tests/tests/test/amazon/di/**"
+      - "test/contract-tests/tests/test/amazon/base/**"
+      - "test/contract-tests/templates/di/**"
       - "test/contract-tests/images/applications/DynamicInstrumentation.NetCore/**"
       - "test/contract-tests/images/mock-di-api/**"
       - "test/contract-tests/images/mock-collector/**"
@@ -49,9 +68,13 @@ jobs:
         with:
           python-version: '3.10'
 
+      # Name the application explicitly. With no arguments set-up-contract-tests.sh builds ALL SEVEN
+      # applications -- including cloudwatch-plugin-otel, which needs build args and has its own job -- for a
+      # run that only ever starts one of them. Naming it also keeps this workflow honest: it must not pass
+      # because some other application's image happened to be lying around.
       - name: Set up and run the DI contract tests
         run: |
           cd test
           bash ./build-and-install-distro.sh
-          bash ./set-up-contract-tests.sh
+          bash ./set-up-contract-tests.sh DynamicInstrumentation.NetCore
           pytest contract-tests/tests/test/amazon/di -v
