@@ -1,0 +1,23 @@
+{
+  "$comment": "Golden template for a line-level BREAKPOINT snapshot (.NET). Body carries ONLY captures.lines.<line>.locals - no entry, no return, no duration-bearing exit block, because a line probe is a point observation. The line key is the source line number as a STRING (JSON object keys), which is why it is wildcarded here and asserted separately by the test that knows the resolved line. Not yet wired to a test: the line-level contract tests are Step 5 of CI-COMPLETION-PLAN.md.",
+  "body": {
+    "captures": {
+      "lines": "*"
+    }
+  },
+  "attributes": {
+    "event.name": "aws.dynamic_instrumentation.snapshot",
+    "aws.di.snapshot_id": "*",
+    "aws.di.location_hash": "*",
+    "aws.di.instrumentation_level": "line",
+    "aws.di.instrumentation_type": "BREAKPOINT",
+    "aws.di.code_unit": "DynamicInstrumentation.NetCore",
+    "aws.di.class_name": "ProbeTargets",
+    "aws.di.method_name": "*",
+    "aws.di.file_path": "*",
+    "aws.di.line_number": "*",
+    "aws.di.duration_ms": "*",
+    "aws.di.thread_id": "*",
+    "aws.di.thread_name": "*"
+  }
+}

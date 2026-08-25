@@ -20,6 +20,7 @@ the suite uses is not an option for snapshots.
 """
 
 import json
+import os
 import time
 from logging import INFO, Logger, getLogger
 from typing import Any, Dict, List, Optional
@@ -44,7 +45,15 @@ _SNAPSHOT_ENDPOINT: str = "http://collector:4316/v1/logs"
 
 # Minimum the agent accepts; anything lower is clamped to 10. Configurations are seeded BEFORE the
 # application starts so the agent's first poll already sees them and no test waits out an interval.
-_POLL_INTERVAL_SECONDS: str = "10"
+# The agent CLAMPS this to a floor of 10s, so a smaller value here would not speed anything up -- it would
+# just make the code lie about what the agent does. Kept as an int and stringified at the point of use so
+# anything deriving a wait from it (see wait_for_poll and the disabled test) cannot drift from the real value.
+# PUBLIC (no leading underscore) because the disabled-agent test derives its settle time from it. A private
+# name imported across modules is exactly the kind of thing pylint flags, and the alternative -- duplicating
+# the number in the test -- is what let the old fixed 15s drift out of step with the interval in the first
+# place.
+POLL_INTERVAL_SECONDS_VALUE: int = 10
+_POLL_INTERVAL_SECONDS: str = str(POLL_INTERVAL_SECONDS_VALUE)
 
 _SNAPSHOT_EVENT_NAME: str = "aws.dynamic_instrumentation.snapshot"
 _SNAPSHOT_SCOPE_NAME: str = "aws.dynamic_instrumentation"
@@ -55,6 +64,89 @@ _SNAPSHOT_POLL_SLEEP: float = 0.5
 # Type name the agent binds against: CodeUnit + "." + ClassName.
 PROBE_TARGET_CODE_UNIT: str = "DynamicInstrumentation.NetCore"
 PROBE_TARGET_CLASS: str = "ProbeTargets"
+
+# Golden snapshot templates, resolved relative to the directory pytest runs from (test/). Deliberately
+# OUTSIDE contract-tests/tests so they are not swallowed into the contract_tests wheel -- the same placement
+# Java (appsignals-tests/di-contract-tests/templates/di) and JS (contract-tests/templates/di) use, so the
+# three SDKs' expected shapes sit in comparable files.
+TEMPLATES_DIR: str = os.path.join(os.getcwd(), "contract-tests", "templates", "di")
+
+# Wildcard: the key must be PRESENT, its value is not asserted. Used for ids, timings and thread names.
+_ANY: str = "*"
+
+
+def load_di_template(name: str) -> Dict[str, Any]:
+    """Read a golden template by base name, e.g. "probe_snapshot"."""
+    path: str = os.path.join(TEMPLATES_DIR, f"{name}.json")
+    if not os.path.isfile(path):
+        raise AssertionError(f"golden template not found: {path}")
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def compare_against_template(actual: Any, expected: Any, path: str = "") -> None:
+    """Compare a snapshot fragment against a template fragment. Raises AssertionError on the first mismatch.
+
+    BIDIRECTIONAL, AND THAT IS THE POINT. Java's and JS's comparators iterate only the template's keys, so a
+    snapshot that grows an EXTRA or RENAMED field passes -- which is precisely how a shape drifts without any
+    test noticing. Here the key sets must match exactly in both directions, so adding a field to the emitter
+    is a deliberate act that requires updating the template.
+
+    A module-level function rather than a TestCase method so it can be exercised directly, with no containers.
+    """
+    if expected == _ANY:
+        return
+
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            raise AssertionError(f"{path or 'root'}: expected an object, got {type(actual).__name__}")
+
+        expected_keys = {key for key in expected if not key.startswith("$")}
+        actual_keys = set(actual)
+
+        missing = sorted(expected_keys - actual_keys)
+        if missing:
+            raise AssertionError(f"{path or 'root'}: missing key(s) {missing}")
+
+        unexpected = sorted(actual_keys - expected_keys)
+        if unexpected:
+            raise AssertionError(
+                f"{path or 'root'}: unexpected key(s) {unexpected} -- if the emitter gained a field on "
+                f"purpose, add it to the golden template"
+            )
+
+        for key in sorted(expected_keys):
+            compare_against_template(actual[key], expected[key], f"{path}.{key}" if path else key)
+        return
+
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            raise AssertionError(f"{path or 'root'}: expected a list, got {type(actual).__name__}")
+        if len(actual) != len(expected):
+            raise AssertionError(f"{path}: list length {len(actual)} != expected {len(expected)}")
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
+            compare_against_template(actual_item, expected_item, f"{path}[{index}]")
+        return
+
+    if actual != expected:
+        raise AssertionError(f"{path or 'root'}: expected {expected!r}, got {actual!r}")
+
+
+def is_di_owned_attribute(key: str) -> bool:
+    """Whether an attribute key is part of DI's own contract, as opposed to logging-pipeline furniture."""
+    return key == "event.name" or key.startswith("aws.di.")
+
+
+def _coerce_attribute_value(any_value: Any) -> Any:
+    """Flatten an OTLP AnyValue to a plain Python value so templates can hold literals.
+
+    Templates carry `0` and `"PROBE"`, not protobuf wrappers, so the comparison has to see plain values --
+    otherwise every attribute would have to be wildcarded and the template would assert nothing but presence.
+    """
+    which: Optional[str] = any_value.WhichOneof("value") if hasattr(any_value, "WhichOneof") else None
+    if which is None:
+        return any_value
+    return getattr(any_value, which)
 
 
 # pylint: disable=broad-exception-caught
@@ -132,6 +224,29 @@ class DIContractTestBase(ContractTestBase):
         )
         self.assertEqual(response.status_code, 200, f"seeding configurations failed: {response.text}")
 
+    def get_poll_count(self) -> int:
+        """How many times the agent has polled the configuration API, across both instrumentation types."""
+        response = requests.get(self._di_api_url("/_test/poll-counts"), timeout=10)
+        response.raise_for_status()
+        return int(response.json().get("TotalPolls", 0))
+
+    def wait_for_poll(self, min_count: int = 1, timeout: float = _SNAPSHOT_WAIT_TIMEOUT) -> int:
+        """Blocks until the agent has polled at least `min_count` times.
+
+        A POSITIVE anchor for tests that would otherwise sleep and hope. Waiting for the agent's own first poll
+        is strictly better than a fixed sleep: it collapses the wall time on a fast runner and, unlike a sleep,
+        it actually PROVES the agent got as far as talking to the API.
+        """
+        deadline: float = time.time() + timeout
+        observed: int = 0
+        while time.time() < deadline:
+            observed = self.get_poll_count()
+            if observed >= min_count:
+                return observed
+            time.sleep(_SNAPSHOT_POLL_SLEEP)
+
+        self.fail(f"timed out waiting for {min_count} agent poll(s); observed {observed}")
+
     def get_status_reports(self) -> List[Dict[str, Any]]:
         """Status entries the agent has reported so far (READY / ACTIVE / ERROR / DISABLED)."""
         response = requests.get(self._di_api_url("/_test/status-reports"), timeout=10)
@@ -198,7 +313,34 @@ class DIContractTestBase(ContractTestBase):
             time.sleep(_SNAPSHOT_POLL_SLEEP)
 
         self.fail(f"timed out waiting for {min_count} snapshot(s); received {len(snapshots)}")
-        return snapshots
+
+    # --- golden template helpers ---------------------------------------------------------------------
+
+    def assert_snapshot_matches_template(self, snapshot: Dict[str, Any], template_name: str) -> None:
+        """Assert a snapshot's BODY and ATTRIBUTES both match a checked-in golden template.
+
+        WHY A TEMPLATE RATHER THAN MORE assertEquals. The snapshot shape is a contract with the backend's
+        ingest, and until now it existed only as scattered assertions across individual tests -- nothing a
+        reviewer could read as "the shape", and nothing comparable against the other SDKs. Java keeps its
+        expected shapes in templates/di/*.json; this is the same idea in .NET's terms.
+        """
+        template: Dict[str, Any] = load_di_template(template_name)
+
+        body: Dict[str, Any] = {key: value for key, value in snapshot.items() if not key.startswith("_")}
+        compare_against_template(body, template["body"], path="body")
+
+        expected_attributes: Optional[Dict[str, Any]] = template.get("attributes")
+        if expected_attributes is not None:
+            # Scoped to the attributes DI owns. The logging provider and OTLP exporter are free to add their
+            # own (a logger category, a formatted-message marker), and failing on those would be asserting
+            # someone else's contract -- but WITHIN our namespace the match stays exact in both directions, so
+            # a renamed or newly added aws.di.* attribute still fails.
+            actual_attributes: Dict[str, Any] = {
+                key: _coerce_attribute_value(value)
+                for key, value in snapshot["_attributes"].items()
+                if is_di_owned_attribute(key)
+            }
+            compare_against_template(actual_attributes, expected_attributes, path="attributes")
 
     # --- configuration builders ---------------------------------------------------------------------
 

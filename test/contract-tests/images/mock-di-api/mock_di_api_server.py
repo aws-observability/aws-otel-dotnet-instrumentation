@@ -41,12 +41,28 @@ class _State:
         # lets the mock answer "nothing changed since you last asked" the way the real API does instead of
         # re-sending everything forever.
         self._generation: int = 1
+        # How many times the agent has polled, per instrumentation type.
+        #
+        # EXISTS FOR THE ABSENCE TESTS. "No snapshots arrived" is a weak assertion on its own: it is equally
+        # true of a disabled agent and of an agent that was simply too slow to poll before the test looked.
+        # Counting polls turns that into a DIRECT claim -- a disabled agent must never poll at all -- and the
+        # enabled tests assert the counter moves, so a zero can never be a broken counter.
+        self._poll_counts: Dict[str, int] = {}
 
     def set_configurations(self, configurations: List[Dict[str, Any]]) -> int:
         with self._lock:
             self._configurations = configurations
             self._generation += 1
             return self._generation
+
+    def record_poll(self, instrumentation_type: str) -> None:
+        with self._lock:
+            key = instrumentation_type.upper() or "UNKNOWN"
+            self._poll_counts[key] = self._poll_counts.get(key, 0) + 1
+
+    def poll_counts(self) -> Dict[str, int]:
+        with self._lock:
+            return dict(self._poll_counts)
 
     def configurations_for(self, instrumentation_type: str) -> Tuple[List[Dict[str, Any]], int]:
         with self._lock:
@@ -74,9 +90,27 @@ class _State:
             self._configurations = []
             self._status_reports = []
             self._generation += 1
+            # Cleared with the rest. A stale non-zero count would make the disabled test's "never polled"
+            # assertion fail for a reason that has nothing to do with the agent under test.
+            self._poll_counts = {}
 
 
 _STATE = _State()
+
+
+def _as_cursor(synced_at: Any) -> int:
+    """Coerces the agent's SyncedAt cursor to an int, treating anything unusable as "never synced".
+
+    `int(synced_at)` raised ValueError on a non-numeric cursor, and because this runs inside do_POST the
+    request died in BaseHTTPRequestHandler's default handling -- a 500 with no body, which the agent sees as a
+    broken poll. The mock then looks like the thing under test. -1 is below every real generation, so an
+    unparseable cursor means Changed=true, which is the safe direction: the agent re-reads the configurations
+    rather than trusting a cache it may not have.
+    """
+    try:
+        return int(synced_at)
+    except (TypeError, ValueError):
+        return -1
 
 
 class MockDiApiHandler(BaseHTTPRequestHandler):
@@ -86,7 +120,21 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
 
     # pylint: disable=invalid-name
     def do_POST(self) -> None:
-        body = self._read_json()
+        parsed = self._read_json_or_none()
+
+        # MALFORMED BODIES ARE TREATED DIFFERENTLY BY AUDIENCE, on purpose.
+        #
+        # The `/_test/*` control API is driven by the TEST, so bad JSON there is a bug in the test and must say
+        # so. Swallowing it to `{}` seeded zero configurations and surfaced later as "why was my probe never
+        # applied?" -- a confusing failure a long way from its cause.
+        #
+        # The agent-facing endpoints stay lenient (`{}`): they are a stand-in for a production API, and a
+        # 400 there would turn a malformed poll into an agent-side error, which is not what this mock is for.
+        if parsed is None and self.path.startswith("/_test/"):
+            self._send_json({"Message": "request body was not valid JSON"}, status=400)
+            return
+
+        body: Dict[str, Any] = parsed if parsed is not None else {}
         if self.path.startswith("/list-instrumentation-configurations"):
             self._handle_list(body)
         elif self.path.startswith("/report-instrumentation-configuration-status"):
@@ -105,6 +153,9 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path.startswith("/_test/status-reports"):
             self._send_json({"StatusReports": _STATE.status_reports()})
+        elif self.path.startswith("/_test/poll-counts"):
+            counts = _STATE.poll_counts()
+            self._send_json({"PollCounts": counts, "TotalPolls": sum(counts.values())})
         elif self.path.startswith("/_test/health"):
             self._send_json({"Status": "ok"})
         else:
@@ -113,12 +164,17 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
     def _handle_list(self, body: Dict[str, Any]) -> None:
         instrumentation_type = str(body.get("InstrumentationType", "")) if isinstance(body, dict) else ""
         synced_at = body.get("SyncedAt") if isinstance(body, dict) else None
+
+        # Recorded BEFORE anything that could fail, so the count reflects "the agent asked", which is what the
+        # absence tests assert on -- not "the mock answered successfully".
+        _STATE.record_poll(instrumentation_type)
+
         configurations, generation = _STATE.configurations_for(instrumentation_type)
 
         # Mirrors the real API's caching contract: Changed=false means "your cache is still valid", and the
         # agent then keeps what it has. Exercising this path matters — an always-Changed=true mock would hide
         # a client that mishandles the unchanged case.
-        changed = synced_at is None or int(synced_at) < generation
+        changed = synced_at is None or _as_cursor(synced_at) < generation
 
         self._send_json(
             {
@@ -141,15 +197,21 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
         _STATE.add_status_reports(service, environment, entries)
         self._send_json({"Service": service, "Environment": environment, "UnprocessedStatusEvents": []})
 
-    def _read_json(self) -> Dict[str, Any]:
+    def _read_json_or_none(self) -> Optional[Dict[str, Any]]:
+        """Parses the body, returning None when it is present but NOT a valid JSON object.
+
+        None and `{}` are deliberately different: an EMPTY body is a legitimate request (`{}`), while an
+        unparseable one is a caller error the `/_test/*` endpoints report as a 400. Collapsing both to `{}`
+        is what made a malformed test payload look like a silently ignored one.
+        """
         raw = self._read_body()
         if not raw:
             return {}
         try:
             parsed = json.loads(raw.decode("utf-8"))
-            return parsed if isinstance(parsed, dict) else {}
         except (ValueError, UnicodeDecodeError):
-            return {}
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
     def _read_body(self) -> bytes:
         """Reads the request body, handling BOTH Content-Length and chunked transfer encoding.

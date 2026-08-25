@@ -14,7 +14,7 @@ and are gated behind the merge-point rules. ProbeTargets.cs already carries `@pr
 import time
 from typing import Any, Dict, List
 
-from amazon.di.di_contract_test_base import DIContractTestBase
+from amazon.di.di_contract_test_base import DIContractTestBase, POLL_INTERVAL_SECONDS_VALUE
 
 
 class DotnetDynamicInstrumentationTest(DIContractTestBase):
@@ -41,6 +41,19 @@ class DotnetDynamicInstrumentationTest(DIContractTestBase):
 
         self.assertGreaterEqual(len(snapshots), 1)
 
+    def test_snapshot_matches_the_probe_golden_template(self) -> None:
+        """The WHOLE shape in one assertion, against a checked-in artifact.
+
+        The other tests here each pick one field out of a snapshot, which proves those fields are right but
+        says nothing about the shape as a whole -- a renamed or newly added key passes every one of them. This
+        compares body and attributes against templates/di/probe_snapshot.json in both directions, so the shape
+        is reviewable as a file and cannot drift silently. Mirrors what Java asserts with its own templates.
+        """
+        self._invoke_order(order_id="ORD-42", quantity=5)
+        snapshot = self.wait_for_snapshots(min_count=1)[0]
+
+        self.assert_snapshot_matches_template(snapshot, "probe_snapshot")
+
     def test_snapshot_captures_arguments(self) -> None:
         self._invoke_order(order_id="ORD-42", quantity=5)
         snapshot = self.wait_for_snapshots(min_count=1)[0]
@@ -50,6 +63,16 @@ class DotnetDynamicInstrumentationTest(DIContractTestBase):
         self.assertIn("quantity", arguments)
         self.assertEqual(arguments["orderId"]["value"], "ORD-42")
         self.assertEqual(arguments["quantity"]["value"], "5")
+
+    def test_agent_polls_the_configuration_api(self) -> None:
+        """THE CONTROL for DotnetDynamicInstrumentationDisabledTest's "never polled" assertion.
+
+        That test proves a disabled agent produces nothing by asserting the poll count is ZERO. A zero is also
+        what a broken counter, a mis-wired `/_test/poll-counts` endpoint, or an agent pointed at the wrong URL
+        would produce -- so on its own it proves nothing. This asserts the SAME counter moves when the agent is
+        enabled, which is what gives the zero meaning.
+        """
+        self.assertGreaterEqual(self.wait_for_poll(min_count=1), 1)
 
     def test_snapshot_captures_return_value(self) -> None:
         # unitCost is 7 in ProbeTargets.ComputeOrderTotal, so 7 * 4 == 28. Asserting the arithmetic rather
@@ -148,8 +171,28 @@ class DotnetDynamicInstrumentationDisabledTest(DIContractTestBase):
     def test_no_snapshots_when_disabled(self) -> None:
         self.do_send_request("probe-target/greeting?name=contract", "GET", 200)
 
-        # Nothing to wait FOR, so this asserts an absence: give the agent the time it would have needed to
-        # poll, weave and export, then require that none of it happened.
-        time.sleep(15)
+        # AN ABSENCE TEST, so it cannot wait for the thing it is asserting -- and a DISABLED agent never polls,
+        # so there is no signal of its own to wait for either. Two things make it sound rather than a hopeful
+        # sleep:
+        #
+        #   1. The wait is DERIVED from the agent's real poll interval instead of a magic 15. Two full cycles
+        #      plus a buffer, so a working agent would certainly have polled by now. The previous fixed 15s
+        #      allowed only one 10s cycle plus 5s of slack, which cold-start and image-pull jitter on a shared
+        #      runner can eat -- and then "no snapshots" would have been trivially true without proving
+        #      anything. Derived from the same constant the container is configured with, so the two cannot
+        #      drift apart.
+        #   2. It asserts the agent NEVER POLLED, which is a direct claim about the master switch rather than a
+        #      downstream symptom. "No snapshots" is equally true of an agent that polled and found nothing, or
+        #      one that was merely slow; "no polls at all" is only true of an agent that stayed off.
+        #      DotnetDynamicInstrumentationTest.test_agent_polls_the_configuration_api is the control proving
+        #      this counter moves when DI is enabled, so a zero here cannot be a broken counter.
+        settle_seconds = POLL_INTERVAL_SECONDS_VALUE * 2 + 5
+        time.sleep(settle_seconds)
+
+        self.assertEqual(
+            self.get_poll_count(),
+            0,
+            f"a disabled agent must never poll the configuration API, but it did within {settle_seconds}s",
+        )
         self.assertEqual(self.get_snapshots(), [], "a disabled agent must not export snapshots")
         self.assertEqual(self.get_status_reports(), [], "a disabled agent must not report status")
