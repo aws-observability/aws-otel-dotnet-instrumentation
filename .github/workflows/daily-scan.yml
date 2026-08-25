@@ -59,9 +59,15 @@ jobs:
           dotnet restore --packages ./packages
 
       # See http://jeremylong.github.io/DependencyCheck/dependency-check-cli/ for installation explanation.
-      # Wrapped in execute_and_retry because the Sonatype OSS Index Analyzer intermittently fails to
-      # fetch component-reports (dependency-check exits 14 on the resulting non-fatal exceptions), which
-      # would otherwise fail the whole scan on a transient error.
+      #
+      # --ossIndexRemoteErrorWarnOnly true: the Sonatype OSS Index Analyzer's component-report requests
+      # can fail (remote outage/throttle, or expired OSS Index credentials); by default dependency-check
+      # treats those as errors and exits 14 ("non-fatal exception collection"), failing the entire scan
+      # even though the NVD-based analysis succeeded. Degrading OSS Index remote errors to warnings keeps
+      # the scan meaningful (NVD + CVSS gating still apply) instead of breaking on an OSS Index issue.
+      #
+      # Wrapped in execute_and_retry so transient failures in the earlier install steps (gpg key fetch,
+      # release download, NVD update) get retried rather than failing the scan outright.
       - name: Install and run dependency scan
         id: dep_scan
         if: always()
@@ -73,7 +79,7 @@ jobs:
                     curl -Ls "https://github.com/dependency-check/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip.asc" --output dependency-check.zip.asc &&
                     gpg --verify dependency-check.zip.asc &&
                     unzip dependency-check.zip &&
-                    ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --failOnCVSS 0 --suppression .github/dependency-check-suppressions.xml --out . -s "scan-target/"'
+                    ./dependency-check/bin/dependency-check.sh --project "AWS.Distro.OpenTelemetry.AutoInstrumentation" --nvdApiKey ${{ env.NVD_API_KEY_NVD_API_KEY }} --ossIndexUsername ${{ env.OSS_INDEX_USERNAME }} --ossIndexPassword ${{ env.OSS_INDEX_PASSWORD }} --ossIndexRemoteErrorWarnOnly true --failOnCVSS 0 --suppression .github/dependency-check-suppressions.xml --out . -s "scan-target/"'
           cleanup: 'rm -f ./dependency-check.zip && rm -f ./dependency-check.zip.asc && rm -rf ./dependency-check || true'
           max_retry: 5
           sleep_time: 60
