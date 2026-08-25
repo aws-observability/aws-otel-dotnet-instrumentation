@@ -276,10 +276,26 @@ class ServiceEventsTestInfrastructure(TestCase):
             self.fail(f"Timed out waiting for EndpointSummary log for {method} {route} after {timeout}s.")
         return logs
 
+    def wait_for_incident_snapshot(self, route: str, timeout: Optional[float] = None) -> List:
+        """Poll for IncidentSnapshot logs on a specific url.route."""
+        if timeout is None:
+            timeout = OTLP_POLL_TIMEOUT
+        start = time.time()
+        matched: List = []
+        while time.time() - start < timeout:
+            logs = self.get_otlp_logs_by_event_name("aws.service_events.incident_snapshot")
+            matched = [log for log in logs if self.attrs(log).get("url.route") == route]
+            if matched:
+                return matched
+            time.sleep(OTLP_POLL_INTERVAL)
+        self.fail(f"Timed out waiting for IncidentSnapshot for route '{route}'.")
+        return matched
+
     # -------------------------------------------------------------------------
     # OTLP metric helpers
     # -------------------------------------------------------------------------
 
+    _FUNCTION_DURATION_METRIC_NAME: str = "service.function.duration"
     _ERROR_COUNT_METRIC_NAME: str = "count"
 
     def _peek_metric(self, metric_name: str) -> List:
@@ -291,6 +307,46 @@ class ServiceEventsTestInfrastructure(TestCase):
         except RuntimeError:
             return []
         return [rsm for rsm in metrics if rsm.metric.name == metric_name]
+
+    def _peek_function_duration_data_points(self) -> List:
+        data_points: List = []
+        for rsm in self._peek_metric(self._FUNCTION_DURATION_METRIC_NAME):
+            kind = rsm.metric.WhichOneof("data")
+            if kind == "exponential_histogram":
+                data_points.extend(rsm.metric.exponential_histogram.data_points)
+            elif kind == "histogram":
+                data_points.extend(rsm.metric.histogram.data_points)
+        return data_points
+
+    def wait_for_function_duration_metric(self, min_count: int = 1, timeout: Optional[float] = None) -> List:
+        if timeout is None:
+            timeout = METRIC_POLL_TIMEOUT
+        start = time.time()
+        data_points: List = []
+        while time.time() - start < timeout:
+            data_points = self._peek_function_duration_data_points()
+            if len(data_points) >= min_count:
+                return data_points
+            time.sleep(OTLP_POLL_INTERVAL)
+        self.fail(
+            f"Timed out waiting for {min_count} '{self._FUNCTION_DURATION_METRIC_NAME}' "
+            f"histogram data point(s). Found {len(data_points)}."
+        )
+        return data_points
+
+    def wait_for_function_duration_resource_metric(self, timeout: Optional[float] = None) -> Any:
+        """Return the first ResourceScopeMetric for service.function.duration (for
+        resource/scope-level assertions)."""
+        if timeout is None:
+            timeout = METRIC_POLL_TIMEOUT
+        start = time.time()
+        while time.time() - start < timeout:
+            rsms = self._peek_metric(self._FUNCTION_DURATION_METRIC_NAME)
+            if rsms:
+                return rsms[0]
+            time.sleep(OTLP_POLL_INTERVAL)
+        self.fail(f"Timed out waiting for '{self._FUNCTION_DURATION_METRIC_NAME}' metric.")
+        return None
 
     def _peek_error_count_data_points(self) -> List:
         data_points: List = []
@@ -324,6 +380,17 @@ class ServiceEventsTestInfrastructure(TestCase):
         if data_point.WhichOneof("value") == "as_int":
             return data_point.as_int
         return data_point.as_double
+
+    def assert_function_duration_data_point(self, data_point, **kwargs) -> None:
+        attrs = self.dp_attrs(data_point)
+        self.assertIn("function.name", attrs)
+        self.assertGreater(data_point.count, 0, "Expected histogram data point count > 0")
+        if "function_name" in kwargs:
+            self.assertEqual(attrs["function.name"], kwargs["function_name"])
+        if "status" in kwargs:
+            self.assertEqual(attrs.get("status"), kwargs["status"])
+        if "has_caller" in kwargs and kwargs["has_caller"]:
+            self.assertIn("aws.service_events.caller", attrs)
 
     # -------------------------------------------------------------------------
     # Request helper
@@ -360,6 +427,42 @@ class ServiceEventsTestInfrastructure(TestCase):
             self.assertEqual(attrs["url.route"], kwargs["route"])
         if "operation" in kwargs:
             self.assertEqual(attrs["aws.service_events.operation"], kwargs["operation"])
+
+    def assert_incident_snapshot(self, log, **kwargs) -> None:
+        attrs = self.attrs(log)
+        body = self.body(log)
+        self.assertEqual(attrs.get("event.name"), "aws.service_events.incident_snapshot")
+        for key in (
+            "aws.service_events.snapshot_id",
+            "aws.service_events.trigger_type",
+            "aws.service_events.operation",
+            "aws.service_events.duration_ms",
+            "aws.service_events.is_partial",
+            "http.response.status_code",
+        ):
+            self.assertIn(key, attrs, f"Missing attr {key}")
+        self.assertIsInstance(body, dict)
+        self.assertIn("exception_info", body)
+        if "trigger_type" in kwargs:
+            self.assertEqual(attrs["aws.service_events.trigger_type"], kwargs["trigger_type"])
+        if "operation" in kwargs:
+            self.assertEqual(attrs["aws.service_events.operation"], kwargs["operation"])
+        if "status_code" in kwargs:
+            self.assertEqual(attrs.get("http.response.status_code"), kwargs["status_code"])
+        if "method" in kwargs:
+            self.assertEqual(attrs.get("http.request.method"), kwargs["method"])
+        if "exception_type" in kwargs:
+            exc_info = body.get("exception_info", [])
+            self.assertTrue(len(exc_info) > 0, "Expected non-empty exception_info")
+            self.assertEqual(exc_info[0].get("exception_type"), kwargs["exception_type"])
+        if "has_call_path" in kwargs and kwargs["has_call_path"]:
+            exc_info = body.get("exception_info", [])
+            self.assertTrue(len(exc_info) > 0, "Expected non-empty exception_info")
+            call_path = exc_info[0].get("call_path", [])
+            self.assertTrue(len(call_path) > 0, "Expected non-empty call_path")
+            first = call_path[0]
+            self.assertIn("function_name", first)
+            self.assertIn("caller_function_name", first)
 
     def assert_duration_structure(self, duration: Dict) -> None:
         for key in ("Values", "Counts", "Max", "Min", "Count", "Sum"):
@@ -453,6 +556,114 @@ class ServiceEventsContractTestBase(ServiceEventsTestInfrastructure):
         self.assertEqual(_sum("/error", "aws.service_events.request.faults"), 0, "/error must record no faults")
         self.assertEqual(_sum("/fault", "aws.service_events.request.errors"), 0, "/fault must record no errors")
 
+    # ----- FunctionCall (service.function.duration histogram) -----
+
+    def test_function_call_records_exist(self) -> None:
+        for _ in range(3):
+            self.send_request("GET", "success")
+        data_points = self.wait_for_function_duration_metric()
+        self.assertGreater(len(data_points), 0)
+        for dp in data_points:
+            self.assert_function_duration_data_point(dp)
+        has_caller = any("aws.service_events.caller" in self.dp_attrs(dp) for dp in data_points)
+        self.assertTrue(has_caller, "Expected at least one data point with 'aws.service_events.caller'")
+        has_operation = any("operation" in self.dp_attrs(dp) for dp in data_points)
+        self.assertTrue(has_operation, "Expected at least one data point with 'operation'")
+
+    def test_function_duration_resource_vs_datapoint_attributes(self) -> None:
+        """Java-derived cardinality gate: process-constants ride on the Resource, not on
+        each data point; per-data-point attrs carry only function.name/status/Telemetry.Source
+        (+ optional caller/operation) — never service.name, exception.type, or vcs/deployment."""
+        self.send_request("GET", "success")
+        rsm = self.wait_for_function_duration_resource_metric()
+        # Scope
+        self.assertEqual(rsm.scope_metrics.scope.name, "serviceevents")
+        self.assertEqual(rsm.scope_metrics.scope.version, "1.0")
+        # Resource carries service.name
+        res_attrs = {kv.key: self._any_value_to_python(kv.value) for kv in rsm.resource_metrics.resource.attributes}
+        self.assertEqual(res_attrs.get("service.name"), self.get_application_otel_service_name())
+        # Per-data-point attrs must NOT carry high-cardinality / process-constant keys
+        forbidden = {
+            "service.name",
+            "exception.type",
+            "aws.service_events.version",
+            "aws.service_events.deployment.id",
+            "vcs.ref.head.revision",
+            "vcs.repository.url.full",
+        }
+        for dp in self._peek_function_duration_data_points():
+            attrs = self.dp_attrs(dp)
+            self.assertIn("function.name", attrs)
+            self.assertIn("status", attrs)
+            self.assertEqual(attrs.get("Telemetry.Source"), "ServiceEvents")
+            self.assertIn(attrs.get("status"), ("success", "error"))
+            for key in forbidden:
+                self.assertNotIn(key, attrs, f"'{key}' must not be a per-data-point attribute")
+
+    # ----- IncidentSnapshot -----
+
+    def test_incident_snapshot_on_exception(self) -> None:
+        self.assertEqual(500, self.send_request("GET", "exception").status_code)
+        logs = self.wait_for_incident_snapshot("/exception")
+        self.assert_incident_snapshot(
+            logs[0],
+            trigger_type="exception",
+            exception_type=EXCEPTION_TYPE,
+            operation="GET /exception",
+            status_code=500,
+        )
+        # Trace correlation is sampling-conditional; always_on guarantees it here.
+        self.assertTrue(any(logs[0].log_record.trace_id), "Expected non-zero trace_id")
+        self.assertTrue(any(logs[0].log_record.span_id), "Expected non-zero span_id")
+        req_ctx = self.body(logs[0]).get("request_context", {})
+        self.assertEqual(req_ctx.get("type"), "http")
+        self.assertEqual(req_ctx.get("status_code"), 500)
+
+    def test_incident_snapshot_on_fault(self) -> None:
+        self.assertEqual(500, self.send_request("GET", "fault").status_code)
+        logs = self.wait_for_incident_snapshot("/fault")
+        self.assert_incident_snapshot(logs[0], trigger_type="exception", exception_type=FAULT_EXCEPTION_TYPE)
+
+    def test_incident_snapshot_has_call_path(self) -> None:
+        self.send_request("GET", "exception")
+        logs = self.wait_for_incident_snapshot("/exception")
+        self.assert_incident_snapshot(logs[0], has_call_path=True)
+
+    def test_incident_snapshot_error_status_trigger(self) -> None:
+        """/error-status returns 500 WITHOUT throwing; still trigger_type=exception."""
+        for _ in range(3):
+            self.assertEqual(500, self.send_request("GET", "error-status").status_code)
+        logs = self.wait_for_incident_snapshot("/error-status")
+        attrs = self.attrs(logs[0])
+        self.assertEqual(attrs.get("aws.service_events.trigger_type"), "exception")
+        self.assertEqual(attrs.get("http.response.status_code"), 500)
+
+    def test_incident_snapshot_post_method(self) -> None:
+        """POST /data with {forceError:true} throws — verifies non-GET method capture."""
+        self.assertEqual(500, self.send_request("POST", "data", json={"forceError": True}).status_code)
+        logs = self.wait_for_incident_snapshot("/data")
+        self.assert_incident_snapshot(logs[0], method="POST", trigger_type="exception")
+
+    def test_incident_snapshot_latency_trigger(self) -> None:
+        """/slow sleeps ~6s (> 5000ms global) and returns 200 with no exception, so only the
+        latency trigger can produce an incident."""
+        self.assertEqual(200, self.send_request("GET", "slow").status_code)
+        logs = self.wait_for_incident_snapshot("/slow")
+        attrs = self.attrs(logs[0])
+        self.assertEqual(attrs.get("aws.service_events.trigger_type"), "latency")
+        self.assertEqual(attrs.get("http.response.status_code"), 200)
+        self.assertGreater(attrs.get("aws.service_events.duration_ms", 0), float(GLOBAL_LATENCY_THRESHOLD_MS))
+
+    def test_incident_snapshot_per_endpoint_latency_override(self) -> None:
+        """Java-derived: /slow-success sleeps ~1s — below the 5000ms global threshold but above
+        the per-endpoint override (GET /slow-success:500). An incident here proves the
+        per-endpoint LATENCY_THRESHOLDS override was applied."""
+        self.assertEqual(200, self.send_request("GET", "slow-success").status_code)
+        logs = self.wait_for_incident_snapshot("/slow-success")
+        attrs = self.attrs(logs[0])
+        self.assertEqual(attrs.get("aws.service_events.trigger_type"), "latency")
+        self.assertEqual(attrs.get("aws.service_events.operation"), "GET /slow-success")
+
     # ----- EndpointErrorMetrics (count) -----
 
     def test_endpoint_error_metric_emitted(self) -> None:
@@ -494,3 +705,49 @@ class ServiceEventsContractTestBase(ServiceEventsTestInfrastructure):
         self.assertIsInstance(exemplars, list)
         self.assertEqual(len(exemplars), 0, "success endpoint should have no incident exemplars")
 
+    def test_incidents_exemplar_populated_and_cross_referenced(self) -> None:
+        for _ in range(3):
+            self.send_request("GET", "fault")
+        # Collect fault EndpointSummaries with a populated incidents_exemplar.
+        start = time.time()
+        exemplar_ids: set = set()
+        while time.time() - start < OTLP_POLL_TIMEOUT and not exemplar_ids:
+            for log in self.get_endpoint_summary_logs("GET", "/fault"):
+                for ex in self.body(log).get("incidents_exemplar") or []:
+                    self.assertIn("snapshot_id", ex)
+                    self.assertIn("trigger_type", ex)
+                    self.assertIn("timestamp", ex)
+                    self.assertEqual(ex["trigger_type"], "exception")
+                    exemplar_ids.add(ex["snapshot_id"])
+            if exemplar_ids:
+                break
+            time.sleep(OTLP_POLL_INTERVAL)
+        self.assertTrue(exemplar_ids, "Expected at least one incidents_exemplar on /fault EndpointSummary")
+        # Cross-reference: every exemplar snapshot_id matches an IncidentSnapshot record.
+        snapshot_ids = {
+            self.attrs(log).get("aws.service_events.snapshot_id")
+            for log in self.wait_for_incident_snapshot("/fault")
+        }
+        self.assertTrue(
+            exemplar_ids.issubset(snapshot_ids),
+            f"Exemplar ids {exemplar_ids} should be a subset of IncidentSnapshot ids {snapshot_ids}",
+        )
+
+    # ----- Cross-cutting -----
+
+    def test_all_telemetry_types_present(self) -> None:
+        self.send_request("GET", "success")
+        self.send_request("GET", "exception")
+        self.wait_for_function_duration_metric()
+        self.wait_for_otlp_logs("aws.service_events.endpoint_summary")
+        self.wait_for_otlp_logs("aws.service_events.incident_snapshot")
+        self.wait_for_otlp_logs("aws.service_events.deployment_event")
+
+    def test_function_call_logrecord_suppressed(self) -> None:
+        """Java-derived: FunctionCall flows through the histogram, so the legacy
+        aws.service_events.function_call LogRecord must not be emitted."""
+        for _ in range(3):
+            self.send_request("GET", "success")
+        self.wait_for_function_duration_metric()
+        legacy = self.get_otlp_logs_by_event_name("aws.service_events.function_call")
+        self.assertEqual(len(legacy), 0, "Legacy function_call LogRecord must be suppressed (histogram-only)")

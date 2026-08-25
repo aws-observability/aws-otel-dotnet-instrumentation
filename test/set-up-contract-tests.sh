@@ -6,16 +6,83 @@
 set -e
 
 # Check script is running in contract-tests
-current_path=`pwd`
+current_path=$(pwd)
 current_dir="${current_path##*/}"
 if [ "$current_dir" != "test" ]; then
   echo "Please run from test dir"
-  exit
+  exit 1
+fi
+
+applications=("$@")
+for application in "${applications[@]}"; do
+  if [ ! -d "contract-tests/images/applications/${application}" ]; then
+    echo "Unknown contract-test application: ${application}"
+    exit 1
+  fi
+done
+
+cloudwatch_plugin_selected=false
+if [ "${#applications[@]}" -eq 0 ]; then
+  cloudwatch_plugin_selected=true
+else
+  for application in "${applications[@]}"; do
+    if [ "$application" = "cloudwatch-plugin-otel" ]; then
+      cloudwatch_plugin_selected=true
+      break
+    fi
+  done
 fi
 
 # Remove old whl files (excluding distro whl)
 rm -rf dist/mock_collector*
 rm -rf dist/contract_tests*
+
+if [ "$cloudwatch_plugin_selected" = true ]; then
+  plugin_project="../src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj"
+  aws_instrumentation_project="../src/OpenTelemetry.Instrumentation.AWS/OpenTelemetry.Instrumentation.AWS.csproj"
+  otel_version="${OTEL_VERSION:-1.16.0}"
+  otel_auto_instrumentation_version="${OTEL_AUTO_INSTRUMENTATION_VERSION:-1.16.0}"
+  otel_instrumentation_version="${OTEL_INSTRUMENTATION_VERSION:-1.16.0}"
+  otel_auto_instrumentation_tag="v${otel_auto_instrumentation_version#v}"
+  otel_auto_download_dir="$(mktemp -d)"
+  otel_auto_installer="${otel_auto_download_dir}/otel-dotnet-auto-install.sh"
+  otel_auto_installer_url="https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/${otel_auto_instrumentation_tag}/otel-dotnet-auto-install.sh"
+
+  mkdir -p ./dist
+  curl --fail --location --retry 3 --output "$otel_auto_installer" "$otel_auto_installer_url"
+  OS_TYPE=linux-glibc \
+    ARCHITECTURE=x64 \
+    VERSION="$otel_auto_instrumentation_tag" \
+    OTEL_DOTNET_AUTO_HOME="$(pwd)/dist/UpstreamOpenTelemetryDistribution" \
+    DOWNLOAD_DIR="$otel_auto_download_dir" \
+    sh "$otel_auto_installer"
+  rm -rf "$otel_auto_download_dir"
+
+  rm -rf ./dist/nuget
+  mkdir -p ./dist/nuget
+  dotnet pack "$plugin_project" --configuration Release --output ./dist/nuget
+  dotnet pack "$aws_instrumentation_project" --configuration Release --output ./dist/nuget
+
+  shopt -s nullglob
+  cloudwatch_plugin_packages=(./dist/nuget/AWS.OpenTelemetry.CloudWatch.Plugin.*.nupkg)
+  aws_instrumentation_packages=(./dist/nuget/OpenTelemetry.Instrumentation.AWS.*.nupkg)
+  shopt -u nullglob
+  if [ "${#cloudwatch_plugin_packages[@]}" -ne 1 ]; then
+    echo "Expected exactly one CloudWatch plugin package in test/dist/nuget"
+    exit 1
+  fi
+  if [ "${#aws_instrumentation_packages[@]}" -ne 1 ]; then
+    echo "Expected exactly one AWS instrumentation package in test/dist/nuget"
+    exit 1
+  fi
+
+  cloudwatch_plugin_package="${cloudwatch_plugin_packages[0]##*/}"
+  cloudwatch_plugin_version="${cloudwatch_plugin_package#AWS.OpenTelemetry.CloudWatch.Plugin.}"
+  cloudwatch_plugin_version="${cloudwatch_plugin_version%.nupkg}"
+  aws_instrumentation_package="${aws_instrumentation_packages[0]##*/}"
+  aws_instrumentation_version="${aws_instrumentation_package#OpenTelemetry.Instrumentation.AWS.}"
+  aws_instrumentation_version="${aws_instrumentation_version%.nupkg}"
+fi
 
 # Install python dependency for contract-test
 pip3 install pymysql
@@ -46,17 +113,48 @@ fi
 
 # Create application images
 cd ../../..
+applications_built=0
 for dir in contract-tests/images/applications/*
 do
-  application="${dir##*/}"
-  application=$(echo "$application" | tr '[:upper:]' '[:lower:]')
+  application_directory="${dir##*/}"
+  if [ "${#applications[@]}" -gt 0 ]; then
+    application_included=false
+    for included_application in "${applications[@]}"; do
+      if [ "$application_directory" = "$included_application" ]; then
+        application_included=true
+        break
+      fi
+    done
+    if [ "$application_included" = false ]; then
+      continue
+    fi
+  fi
+
+  application=$(echo "$application_directory" | tr '[:upper:]' '[:lower:]')
   echo "application: ${application}"
-  docker build . -t aws-application-signals-tests-${application}-app -f ${dir}/Dockerfile
+  if [ "$application_directory" = "cloudwatch-plugin-otel" ]; then
+    docker build --platform linux/amd64 . \
+      --build-arg "CLOUDWATCH_PLUGIN_VERSION=${cloudwatch_plugin_version}" \
+      --build-arg "AWS_INSTRUMENTATION_VERSION=${aws_instrumentation_version}" \
+      --build-arg "OTEL_VERSION=${otel_version}" \
+      --build-arg "OTEL_AUTO_INSTRUMENTATION_VERSION=${otel_auto_instrumentation_version}" \
+      --build-arg "OTEL_INSTRUMENTATION_VERSION=${otel_instrumentation_version}" \
+      -t "aws-application-signals-tests-${application}-app" \
+      -f "${dir}/Dockerfile"
+  else
+    docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile"
+  fi
   if [ $? = 1 ]; then
     echo "Docker build for ${application} application failed"
     exit 1
   fi
+  applications_built=$((applications_built + 1))
 done
+
+if [ "$applications_built" -eq 0 ]; then
+  echo "No contract-test application images matched the configured filters"
+  exit 1
+fi
 
 # Build and install mock-collector
 cd contract-tests/images/mock-collector
