@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ASSEMBLY_NAME: AWS.OpenTelemetry.CloudWatch.Plugin
+  ASSEMBLY_NAME: AWS.OpenTelemetry.CloudWatchPluginOtel
   AWS_SIGNING_KEY_REGION: us-west-2
   PACKAGE_ID: AWS.OpenTelemetry.CloudWatchPluginOtel
   VERSION_INPUT: ${{ inputs.version }}

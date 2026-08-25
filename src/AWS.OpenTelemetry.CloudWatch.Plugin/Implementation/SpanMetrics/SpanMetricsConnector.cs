@@ -3,11 +3,11 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation;
 using OpenTelemetry;
-using static AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics.SpanMetricsAttributeKeys;
+using static AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics.SpanMetricsAttributeKeys;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 
 /// <summary>
 /// Derives call count and duration metrics from every recorded span.
@@ -21,10 +21,13 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
 
     private const string MetricsExporterEnvironmentVariable = "OTEL_METRICS_EXPORTER";
     private const string RecordingStatePropertyName =
-        "AWS.OpenTelemetry.CloudWatch.Plugin.SpanMetrics.RecordingState";
+        "AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetrics.RecordingState";
 
     private static readonly Meter Meter = new(SpanMetricsConstants.ScopeName, SpanMetricsConstants.LibraryVersion);
-    private static readonly Counter<long> Calls = Meter.CreateCounter<long>(SpanMetricsConstants.CallsName);
+    private static readonly Counter<long> Calls = Meter.CreateCounter<long>(
+        SpanMetricsConstants.CallsName,
+        unit: SpanMetricsConstants.CallsUnit);
+
     private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>(
         SpanMetricsConstants.DurationName,
         unit: SpanMetricsConstants.DurationUnit,
@@ -268,7 +271,6 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
             { SpanMetricsConstants.LibraryVersionKey, SpanMetricsConstants.LibraryVersion },
         };
 
-        this.CopyServiceName(ref tags);
         Copy(ref tags, activity, AttributeHttpRequestMethod, AttributeHttpMethod);
         Copy(ref tags, activity, AttributeHttpResponseStatusCode, AttributeHttpStatusCode);
         Copy(ref tags, activity, AttributeHttpRoute);
@@ -300,18 +302,6 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         }
 
         return tags;
-    }
-
-    private void CopyServiceName(ref TagList tags)
-    {
-        foreach (var attribute in this.ParentProvider.GetResource().Attributes)
-        {
-            if (attribute.Key == AttributeServiceName && attribute.Value is not null)
-            {
-                tags.Add(attribute.Key, attribute.Value);
-                return;
-            }
-        }
     }
 
     // Captures which span metrics were active when the span started.

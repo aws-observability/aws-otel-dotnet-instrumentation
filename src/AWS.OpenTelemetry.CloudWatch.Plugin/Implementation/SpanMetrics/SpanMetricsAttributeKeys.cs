@@ -1,13 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 
 // TODO: Use generated semantic convention constants once all of these keys are officially available.
 internal static class SpanMetricsAttributeKeys
 {
-    public const string AttributeServiceName = "service.name";
-
     public const string AttributeHttpRequestMethod = "http.request.method";
     public const string AttributeHttpMethod = "http.method";
     public const string AttributeHttpResponseStatusCode = "http.response.status_code";

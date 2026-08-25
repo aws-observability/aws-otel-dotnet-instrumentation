@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Globalization;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
 
 internal static class SamplerFactory
 {

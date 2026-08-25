@@ -13,6 +13,7 @@ using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using AWS.OpenTelemetry.CloudWatchPluginOtel;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Server.Kestrel.Core;

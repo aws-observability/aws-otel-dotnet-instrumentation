@@ -3,14 +3,14 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Tests.Implementation.SpanMetrics;
 
 [Collection(SpanMetricsTestsCollection.Name)]
 public class SpanMetricsConnectorTests
@@ -73,6 +73,7 @@ public class SpanMetricsConnectorTests
         Assert.Equal(SpanMetricsConstants.LibraryVersion, callsMetric.MeterVersion);
         Assert.Equal(SpanMetricsConnector.ScopeName, durationMetric.MeterName);
         Assert.Equal(SpanMetricsConstants.LibraryVersion, durationMetric.MeterVersion);
+        Assert.Equal("{call}", callsMetric.Unit);
         Assert.Equal(SpanMetricsConstants.DurationUnit, durationMetric.Unit);
         Assert.Equal(1, calls.GetSumLong());
         Assert.Equal(1, duration.GetHistogramCount());
@@ -80,7 +81,6 @@ public class SpanMetricsConnectorTests
         Assert.True(duration.TryGetHistogramMinMaxValues(out var minimum, out var maximum));
         Assert.Equal(activity.Duration.TotalSeconds, minimum, precision: 8);
         Assert.Equal(activity.Duration.TotalSeconds, maximum, precision: 8);
-        Assert.Equal("orders-service", callTags["service.name"]);
         Assert.Equal("SERVER", callTags["span.kind"]);
         Assert.Equal("ERROR", callTags["status.code"]);
         Assert.Equal("GET", callTags["http.request.method"]);
@@ -283,7 +283,7 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
-    public void SpanMetricsConnectorUsesDefaultKindAndStatusAndOmitsMissingServiceName()
+    public void SpanMetricsConnectorUsesDefaultKindAndStatus()
     {
         using var pipeline = new TestPipeline(
             new AlwaysOnSampler(),
@@ -294,7 +294,6 @@ public class SpanMetricsConnectorTests
         var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "defaults"));
 
         Assert.Equal(5, tags.Count);
-        Assert.DoesNotContain("service.name", tags.Keys);
         Assert.Equal("defaults", tags["span.name"]);
         Assert.Equal("INTERNAL", tags["span.kind"]);
         Assert.Equal("UNSET", tags["status.code"]);

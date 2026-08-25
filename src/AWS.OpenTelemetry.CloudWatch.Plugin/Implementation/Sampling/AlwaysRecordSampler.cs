@@ -3,7 +3,7 @@
 
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
 
 /// <summary>
 /// Converts drop decisions from another sampler to record-only decisions.

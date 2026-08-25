@@ -1,7 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-namespace OpenTelemetry.Metrics;
+using OpenTelemetry.Metrics;
+
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel;
 
 /// <summary>
 /// Extension methods for registering CloudWatch span metrics.
@@ -21,7 +23,6 @@ public static class SpanMetricsMeterProviderBuilderExtensions
             throw new ArgumentNullException(nameof(builder));
         }
 
-        return builder.AddMeter(
-            AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics.SpanMetricsConnector.ScopeName);
+        return builder.AddMeter(Implementation.SpanMetrics.SpanMetricsConnector.ScopeName);
     }
 }
