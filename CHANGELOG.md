@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+
+## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
   service investigation experience. Targets modern .NET (net8.0/net9.0/net10.0); does not
