@@ -1,0 +1,347 @@
+name: Release AWS OpenTelemetry CloudWatch Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The plugin version to release, e.g. 1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-cloudwatch-plugin-otel
+  cancel-in-progress: false
+
+env:
+  ASSEMBLY_NAME: AWS.OpenTelemetry.CloudWatch.Plugin
+  AWS_SIGNING_KEY_REGION: us-west-2
+  PACKAGE_ID: AWS.OpenTelemetry.CloudWatchPluginOtel
+  VERSION_INPUT: ${{ inputs.version }}
+
+jobs:
+  validate-version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          if [[ ! "$VERSION_INPUT" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Version must be a SemVer value such as 1.0.0 or 1.0.0-rc.1."
+            exit 1
+          fi
+
+          project="src/AWS.OpenTelemetry.CloudWatch.Plugin/AWS.OpenTelemetry.CloudWatch.Plugin.csproj"
+          source_version="$(dotnet msbuild "$project" -nologo -getProperty:Version)"
+          if [[ "$VERSION_INPUT" != "$source_version" ]]; then
+            echo "::error::Input version $VERSION_INPUT does not match source version $source_version."
+            exit 1
+          fi
+
+          changelog="src/AWS.OpenTelemetry.CloudWatch.Plugin/CHANGELOG.md"
+          if ! grep -Fq "## $VERSION_INPUT - " "$changelog"; then
+            echo "::error::CHANGELOG.md does not contain a release entry for $VERSION_INPUT."
+            exit 1
+          fi
+
+  unit-tests:
+    name: Unit | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }} | ${{ matrix.platform.tfm }}
+    needs: validate-version
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency:
+          - otel: 1.15.3
+            auto: 1.15.0
+          - otel: 1.17.0
+            auto: 1.16.0
+        platform:
+          - os: ubuntu-latest
+            tfm: net8.0
+          - os: ubuntu-latest
+            tfm: net9.0
+          - os: ubuntu-latest
+            tfm: net10.0
+          - os: windows-2022
+            tfm: net472
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Run unit tests
+        run: >
+          dotnet test test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests
+          --configuration Release
+          --framework ${{ matrix.platform.tfm }}
+          -p:OpenTelemetryVersion=${{ matrix.dependency.otel }}
+          -p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto }}
+          -p:TreatWarningsAsErrors=true
+
+  contract-tests:
+    name: Contract | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }}
+    needs: validate-version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency:
+          - otel: 1.15.3
+            auto: 1.15.0
+            instrumentation: 1.15.0
+          - otel: 1.17.0
+            auto: 1.16.0
+            instrumentation: 1.16.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Set up contract tests
+        env:
+          OTEL_VERSION: ${{ matrix.dependency.otel }}
+          OTEL_AUTO_INSTRUMENTATION_VERSION: ${{ matrix.dependency.auto }}
+          OTEL_INSTRUMENTATION_VERSION: ${{ matrix.dependency.instrumentation }}
+        run: |
+          cd test
+          bash ./set-up-contract-tests.sh cloudwatch-plugin-otel
+
+      - name: Run contract tests
+        run: |
+          cd test
+          pytest contract-tests/tests/test/amazon/cloudwatch_plugin_otel
+
+  release-nuget:
+    name: Sign and publish NuGet package
+    needs:
+      - unit-tests
+      - contract-tests
+    environment: Release
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore plugin
+        shell: pwsh
+        run: >
+          dotnet restore
+          .\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj
+          -p:_IsPacking=true
+
+      - name: Build plugin
+        shell: pwsh
+        run: >
+          dotnet build
+          .\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj
+          --configuration Release
+          --no-restore
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Assume signer role
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ARTIFACT_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Sign plugin assemblies
+        shell: pwsh
+        env:
+          UNSIGNED_BUCKET: ${{ secrets.AWS_UNSIGNED_BUCKET_NAME }}
+          SIGNED_BUCKET: ${{ secrets.AWS_SIGNED_BUCKET_NAME }}
+        run: |
+          $outputPath = ".\src\AWS.OpenTelemetry.CloudWatch.Plugin\bin\Release"
+          .\buildtools\sign_files.ps1 `
+            -Filters "$env:ASSEMBLY_NAME.dll" `
+            -Recurse `
+            -Path $outputPath
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $assemblies = @(
+            Get-ChildItem `
+              -Path ".\src\AWS.OpenTelemetry.CloudWatch.Plugin\bin\Release" `
+              -Filter "$env:ASSEMBLY_NAME.dll" `
+              -File `
+              -Recurse
+          )
+
+          if ($assemblies.Count -ne 4) {
+            throw "Expected 4 plugin assemblies to be signed, found $($assemblies.Count)."
+          }
+
+          foreach ($assembly in $assemblies) {
+            $signature = Get-AuthenticodeSignature -FilePath $assembly.FullName
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid Authenticode signature for $($assembly.FullName): $($signature.Status)"
+            }
+          }
+
+      - name: Pack plugin
+        shell: pwsh
+        run: |
+          $outputPath = ".\Deployment\cloudwatch-plugin-otel"
+          New-Item -Path $outputPath -ItemType Directory -Force | Out-Null
+
+          dotnet pack `
+            .\src\AWS.OpenTelemetry.CloudWatch.Plugin\AWS.OpenTelemetry.CloudWatch.Plugin.csproj `
+            --configuration Release `
+            --no-build `
+            --output $outputPath
+
+          $packages = @(Get-ChildItem -Path $outputPath -Filter "*.nupkg" -File)
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one NuGet package, found $($packages.Count)."
+          }
+
+          $expectedName = "$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          if ($packages[0].Name -ne $expectedName) {
+            throw "Expected package $expectedName, found $($packages[0].Name)."
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($packages[0].FullName)
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName })
+            foreach ($framework in @("net472", "net8.0", "net9.0", "net10.0")) {
+              $expectedAssembly = "lib/$framework/$env:ASSEMBLY_NAME.dll"
+              if ($expectedAssembly -notin $entries) {
+                throw "Package is missing $expectedAssembly."
+              }
+            }
+
+            $unexpectedAssemblies = @(
+              $entries | Where-Object {
+                $_ -like "lib/*.dll" -and
+                $_ -notlike "lib/*/$env:ASSEMBLY_NAME.dll"
+              }
+            )
+            if ($unexpectedAssemblies.Count -ne 0) {
+              throw "Package contains unexpected assemblies: $($unexpectedAssemblies -join ', ')"
+            }
+          }
+          finally {
+            $archive.Dispose()
+          }
+
+      - name: Create package checksum
+        shell: pwsh
+        run: |
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          $hash = (Get-FileHash -Path $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path -Path $packagePath -Leaf)" |
+            Out-File -FilePath "$packagePath.sha256" -Encoding ascii
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloudwatch-plugin-otel-${{ inputs.version }}
+          path: |
+            Deployment/cloudwatch-plugin-otel/*.nupkg
+            Deployment/cloudwatch-plugin-otel/*.sha256
+
+      - name: Assume NuGet role
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 # v5.0.0
+        with:
+          role-to-assume: ${{ secrets.NUGET_ACCESS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_SIGNING_KEY_REGION }}
+
+      - name: Publish package to NuGet.org
+        shell: pwsh
+        env:
+          NUGET_SECRETS_ID: ${{ secrets.NUGET_SECRETS_ID }}
+        run: |
+          $secret = aws secretsmanager get-secret-value `
+            --secret-id "$env:NUGET_SECRETS_ID" `
+            --region "$env:AWS_SIGNING_KEY_REGION" `
+            --output json | ConvertFrom-Json
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to retrieve the NuGet API key."
+          }
+
+          $nugetKey = ($secret.SecretString | ConvertFrom-Json).Key
+          if ([string]::IsNullOrWhiteSpace($nugetKey)) {
+            throw "The NuGet secret does not contain a Key value."
+          }
+          Write-Output "::add-mask::$nugetKey"
+
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          nuget push $packagePath `
+            -Source "https://api.nuget.org/v3/index.json" `
+            -ApiKey $nugetKey
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "NuGet publication failed."
+          }
+
+      - name: Create draft GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "cloudwatch-plugin-otel/v$env:VERSION_INPUT"
+          $packagePath = ".\Deployment\cloudwatch-plugin-otel\$env:PACKAGE_ID.$env:VERSION_INPUT.nupkg"
+          $checksumPath = "$packagePath.sha256"
+
+          @"
+          ## NuGet Package
+
+          - Package: $env:PACKAGE_ID
+          - Version: $env:VERSION_INPUT
+          - NuGet: https://www.nuget.org/packages/$env:PACKAGE_ID/$env:VERSION_INPUT
+          - Source commit: $env:GITHUB_SHA
+
+          See [CHANGELOG.md]($env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$env:GITHUB_SHA/src/AWS.OpenTelemetry.CloudWatch.Plugin/CHANGELOG.md) for release details.
+          "@ | Out-File -FilePath release-notes.md -Encoding utf8
+
+          gh release create $tag `
+            --target $env:GITHUB_SHA `
+            --title "AWS OpenTelemetry CloudWatch Plugin v$env:VERSION_INPUT" `
+            --notes-file release-notes.md `
+            --draft `
+            $packagePath `
+            $checksumPath
