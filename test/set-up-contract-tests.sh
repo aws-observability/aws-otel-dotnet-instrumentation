@@ -64,7 +64,7 @@ if [ "$cloudwatch_plugin_selected" = true ]; then
   dotnet pack "$aws_instrumentation_project" --configuration Release --output ./dist/nuget
 
   shopt -s nullglob
-  cloudwatch_plugin_packages=(./dist/nuget/AWS.OpenTelemetry.CloudWatch.Plugin.*.nupkg)
+  cloudwatch_plugin_packages=(./dist/nuget/AWS.OpenTelemetry.CloudWatchPluginOtel.*.nupkg)
   aws_instrumentation_packages=(./dist/nuget/OpenTelemetry.Instrumentation.AWS.*.nupkg)
   shopt -u nullglob
   if [ "${#cloudwatch_plugin_packages[@]}" -ne 1 ]; then
@@ -77,7 +77,7 @@ if [ "$cloudwatch_plugin_selected" = true ]; then
   fi
 
   cloudwatch_plugin_package="${cloudwatch_plugin_packages[0]##*/}"
-  cloudwatch_plugin_version="${cloudwatch_plugin_package#AWS.OpenTelemetry.CloudWatch.Plugin.}"
+  cloudwatch_plugin_version="${cloudwatch_plugin_package#AWS.OpenTelemetry.CloudWatchPluginOtel.}"
   cloudwatch_plugin_version="${cloudwatch_plugin_version%.nupkg}"
   aws_instrumentation_package="${aws_instrumentation_packages[0]##*/}"
   aws_instrumentation_version="${aws_instrumentation_package#OpenTelemetry.Instrumentation.AWS.}"

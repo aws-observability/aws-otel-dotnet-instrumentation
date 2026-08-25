@@ -1,5 +1,7 @@
-# Changelog - AWS.OpenTelemetry.CloudWatch.Plugin
+# Changelog - AWS.OpenTelemetry.CloudWatchPluginOtel
 
 ## Unreleased
 
-* Added the CloudWatch span metrics connector for OpenTelemetry .NET.
+## 0.1.0 - 2026-08-24
+
+* Added span metrics.
