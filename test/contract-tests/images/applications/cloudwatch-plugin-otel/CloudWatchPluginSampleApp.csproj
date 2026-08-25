@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="$(CloudWatchPluginVersion)" />
+    <PackageReference Include="AWS.OpenTelemetry.CloudWatchPluginOtel" Version="$(CloudWatchPluginVersion)" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.S3" Version="[4.0.0, 5.0.0)" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="[4.0.0, 5.0.0)" />
