@@ -72,6 +72,8 @@ internal sealed class ServiceEventsCloudWatchFileExporter : BaseExporter<LogReco
         // so the per-flush open cost is irrelevant.
         lock (this.writeLock)
         {
+            ServiceEventsCloudWatchMetricFileExporter.RotateIfOversized(this.fullPath);
+
             try
             {
                 File.AppendAllText(this.fullPath, sb.ToString());
