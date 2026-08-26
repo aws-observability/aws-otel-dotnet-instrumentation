@@ -2,6 +2,12 @@
 
 Amazon CloudWatch plugin for OpenTelemetry .NET.
 
+The NuGet package ID is `AWS.OpenTelemetry.CloudWatchPluginOtel`. The package
+contains `AWS.OpenTelemetry.CloudWatch.Plugin.dll` and exposes the
+`AWS.OpenTelemetry.CloudWatch.Plugin` namespace. Use the package ID for NuGet
+commands and package references, the assembly name for runtime plugin
+configuration, and the namespace in application code.
+
 > [!IMPORTANT]
 > `CloudWatchPlugin` must be the last plugin listed in
 > `OTEL_DOTNET_AUTO_PLUGINS`. A plugin listed after it can replace the required
@@ -9,10 +15,10 @@ Amazon CloudWatch plugin for OpenTelemetry .NET.
 
 ## OpenTelemetry .NET auto-instrumentation
 
-This package extends the upstream OpenTelemetry .NET Automatic Instrumentation
-distribution. It does not require the AWS Distro for OpenTelemetry.
+The `AWS.OpenTelemetry.CloudWatchPluginOtel` package extends the upstream
+OpenTelemetry .NET Automatic Instrumentation distribution.
 
-The `1.0.x` package line supports OpenTelemetry SDK versions greater than or
+Its `0.1.x` package line supports OpenTelemetry SDK versions greater than or
 equal to `1.15.3` and less than `2.0.0`.
 
 For automatic instrumentation, use a distribution that contains a supported
@@ -25,30 +31,22 @@ upstream OpenTelemetry .NET Automatic Instrumentation versions:
 | `1.16.0`                  | `1.16.0`          |
 | `1.16.0`                  | `1.17.0`          |
 
-Later automatic instrumentation versions that require the experimental public
-plugin API are not supported by this adapter.
-
-Install the package in the instrumented application:
+Install the NuGet package by its package ID:
 
 ```console
-dotnet add package AWS.OpenTelemetry.CloudWatch.Plugin
+dotnet add package AWS.OpenTelemetry.CloudWatchPluginOtel
 ```
 
-Then add the plugin's assembly-qualified type to the upstream OTel
-auto-instrumentation configuration:
+Configure auto-instrumentation with the plugin's CLR assembly-qualified type:
 
 ```sh
 export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
 ```
 
-Keep the application's existing upstream OTel auto-instrumentation settings,
-including `CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`,
-`CORECLR_PROFILER_PATH`, `DOTNET_ADDITIONAL_DEPS`, `DOTNET_SHARED_STORE`,
-`DOTNET_STARTUP_HOOKS`, and exporter configuration.
-
-For a deployment that cannot add a package reference, extract the
-framework-specific `AWS.OpenTelemetry.CloudWatch.Plugin.dll` from the NuGet
-package into the upstream distribution's managed assemblies directory under
+For a deployment that cannot add an `AWS.OpenTelemetry.CloudWatchPluginOtel`
+package reference, extract the framework-specific
+`AWS.OpenTelemetry.CloudWatch.Plugin.dll` from the NuGet package into the
+upstream distribution's managed assemblies directory under
 `OTEL_DOTNET_AUTO_HOME` (`net` for .NET or `netfx` for .NET Framework), then set
 `OTEL_DOTNET_AUTO_PLUGINS` as shown above.
 
@@ -60,9 +58,11 @@ a different sampling policy.
 
 ## Manual OpenTelemetry SDK registration
 
-The span metrics connector emits `traces.span.metrics.calls` and
-`traces.span.metrics.duration` from recorded spans. Wire it into the
-application's existing OpenTelemetry builders:
+After adding an `AWS.OpenTelemetry.CloudWatchPluginOtel` package reference,
+import its `AWS.OpenTelemetry.CloudWatch.Plugin` namespace. The span metrics
+connector emits `traces.span.metrics.calls` and `traces.span.metrics.duration`
+from recorded spans. Wire it into the application's existing OpenTelemetry
+builders:
 
 ```csharp
 using AWS.OpenTelemetry.CloudWatch.Plugin;
@@ -77,12 +77,9 @@ tracerBuilder
 meterBuilder.AddCloudWatchSpanMetrics();
 ```
 
-The tracer extension wraps the supplied sampler so the connector observes every
-span without changing which spans are exported. The meter extension subscribes
-the application's existing `MeterProvider`; it does not create another
-provider. Use the parameterless tracer extension to use the OpenTelemetry SDK
-default sampler. Register span metrics after all other sampler configuration;
-a later `SetSampler` call replaces the required always-record wrapper.
+To generate complete span metrics, the plugin records every span in-process.
+The configured sampler's export decisions are preserved, so spans it drops are
+not exported.
 
 Do not combine manual registration with the auto-instrumentation plugin.
 
