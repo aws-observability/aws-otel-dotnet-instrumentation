@@ -34,6 +34,20 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     /// <summary>Logger category name used for the general signal pipeline.</summary>
     internal const string GeneralLoggerCategory = "AWS.Distro.OpenTelemetry.ServiceEvents.General";
 
+    /// <summary>
+    /// Time the log export pipeline may spend draining during shutdown.
+    /// </summary>
+    /// <remarks>
+    /// Sized against the same window as <see cref="ShutdownBudget.Default" />: the collectors get that
+    /// budget, this drain follows them, and the two together have to fit inside the runtime's
+    /// process-exit allowance. This is what the SDK passes to the exporter's shutdown hook, which the
+    /// exporter then uses to bound each attempt, so the value has to be a realistic slice of the exit
+    /// window rather than the SDK's 30-second default. Overrunning the window is worse than dropping
+    /// the last batch: the process is terminated mid-flush, losing it regardless, having delayed the
+    /// host's shutdown to do so.
+    /// </remarks>
+    internal const int ShutdownExportTimeoutMs = 1000;
+
     private static readonly object InitLock = new();
 
     private static ServiceEventsInstrumentation? instance;
@@ -332,8 +346,22 @@ public sealed class ServiceEventsInstrumentation : IDisposable
                 // structured nested body + serviceevents/1.0 scope that the cross-SDK wire
                 // format requires. OTel .NET's string-only LogRecord.Body makes the stock
                 // exporter emit a stringified body + wrong scope. See ServiceEventsOtlpLogExporter.
+                //
+                // exporterTimeoutMilliseconds is set rather than left at the SDK's 30s default,
+                // because that default governs the shutdown drain and is an order of magnitude past
+                // the window ServiceEvents is allowed to spend exiting (see ShutdownBudget). The
+                // exporter clamps its own attempts to whatever the SDK grants it; this makes what the
+                // SDK grants match the intent.
+                //
+                // maxQueueSize and scheduledDelayMilliseconds are deliberately left at their defaults
+                // (2048 records, 5s). The queue is generous for this signal's volume, which the
+                // incident rate limiter already bounds, and it is the SDK's queue: it accounts for its
+                // own drops on its own diagnostic channel. The 5s delay adds latency between a
+                // collector's flush and the network write, which is acceptable for telemetry and not
+                // worth changing without evidence.
                 options.AddProcessor(new BatchLogRecordExportProcessor(
-                    new ServiceEventsOtlpLogExporter(endpoint, config.LogGroup, config.LogStream)));
+                    new ServiceEventsOtlpLogExporter(endpoint, config.LogGroup, config.LogStream),
+                    exporterTimeoutMilliseconds: ShutdownExportTimeoutMs));
             });
         });
     }
@@ -393,6 +421,13 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         // the deployment emitter. That overshoot is intentional — Clamp hands each wait the lesser of
         // its request and what remains, so the total stays inside the window while any single step
         // may still use most of it when the others finish early.
+        //
+        // The provider disposals at the end are bounded separately rather than by this budget. They
+        // are the network flush, and neither ILoggerFactory nor MeterProvider takes a timeout on
+        // Dispose — the SDK derives it from the processor's configured export timeout, which is why
+        // ShutdownExportTimeoutMs is passed where the batch processor is built. An earlier version of
+        // this comment claimed those steps received whatever remained of this budget; they never did,
+        // and until that timeout was set they inherited the SDK's 30s default.
         //
         // Every call below must therefore use the Dispose(budget) overload. The parameterless
         // IDisposable.Dispose() on these types starts a *fresh* budget, which is correct for

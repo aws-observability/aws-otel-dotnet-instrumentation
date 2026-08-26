@@ -57,6 +57,13 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     private readonly string? logStream;
 
     /// <summary>
+    /// Monotonic deadline for exports once shutdown has begun, or <c>long.MaxValue</c> while running
+    /// normally. Written by <see cref="OnShutdown" /> and read by <see cref="Export" />, possibly on
+    /// the batch processor's thread, so accessed through <see cref="Volatile" />.
+    /// </summary>
+    private long shutdownDeadlineTicks = long.MaxValue;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ServiceEventsOtlpLogExporter"/> class.
     /// </summary>
     /// <param name="endpoint">OTLP/HTTP logs endpoint.</param>
@@ -134,7 +141,19 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
                 request.Headers.TryAddWithoutValidation("x-aws-log-stream", this.logStream);
             }
 
-            using var response = HttpClient.Send(request);
+            // Bounded by whatever the shutdown budget has left, when shutting down. The client's own
+            // 10s timeout is fine while the process is running, but during teardown it is an order of
+            // magnitude beyond the window ServiceEvents is allowed, and overrunning that window gets
+            // the process terminated mid-flush — losing this batch and everything behind it.
+            var remaining = this.RemainingShutdownTime();
+            if (remaining == TimeSpan.Zero)
+            {
+                ServiceEventsEventSource.Log.ExportAbandonedOnShutdown(this.endpoint.ToString(), 0);
+                return ExportResult.Failure;
+            }
+
+            using var cts = remaining == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(remaining);
+            using var response = HttpClient.Send(request, cts?.Token ?? default);
             if (response.IsSuccessStatusCode)
             {
                 return ExportResult.Success;
@@ -228,6 +247,42 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
                 WriteString(empty, 1, string.Empty);
                 return empty.ToArray();
         }
+    }
+
+    /// <summary>
+    /// Record the deadline the SDK gives us for shutdown, so in-flight and queued exports stop
+    /// attempting once it passes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The SDK hands every exporter a shutdown timeout, and this one previously ignored it, leaving the
+    /// static 10-second client timeout as the only bound. Teardown runs sequentially — collectors
+    /// flush, then the providers drain over the network — and the whole sequence has to fit inside the
+    /// runtime's process-exit allowance. Overrunning it is worse than giving up: the process is
+    /// terminated mid-flush, so the batch is lost anyway, having delayed the host's shutdown to lose
+    /// it. Under a container orchestrator that can mean a grace period expiring and a rolling
+    /// deployment stalling.
+    /// </para>
+    /// <para>
+    /// A non-positive or infinite timeout leaves the deadline unset, preserving the SDK's contract for
+    /// "no limit" rather than reinterpreting it as "expire immediately".
+    /// </para>
+    /// </remarks>
+    /// <param name="timeoutMilliseconds">Milliseconds allowed, or <c>Timeout.Infinite</c>.</param>
+    /// <returns>
+    /// Always <c>true</c>. There is nothing here that can fail, and reporting failure would only make
+    /// the SDK record a shutdown problem the host can do nothing about.
+    /// </returns>
+    protected override bool OnShutdown(int timeoutMilliseconds)
+    {
+        if (timeoutMilliseconds != Timeout.Infinite && timeoutMilliseconds > 0)
+        {
+            Volatile.Write(
+                ref this.shutdownDeadlineTicks,
+                Environment.TickCount64 + timeoutMilliseconds);
+        }
+
+        return true;
     }
 
     /// <summary>Encode one <see cref="LogRecord"/> as an OTLP <c>LogRecord</c> protobuf message.</summary>
@@ -471,5 +526,22 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     {
         var bits = BitConverter.DoubleToInt64Bits(d);
         WriteFixed64(buf, field, (ulong)bits);
+    }
+
+    /// <summary>
+    /// Time left for an export attempt: <see cref="Timeout.InfiniteTimeSpan" /> while running normally,
+    /// otherwise what remains of the shutdown deadline, floored at zero.
+    /// </summary>
+    /// <returns>The remaining time, or <see cref="Timeout.InfiniteTimeSpan" />.</returns>
+    private TimeSpan RemainingShutdownTime()
+    {
+        var deadline = Volatile.Read(ref this.shutdownDeadlineTicks);
+        if (deadline == long.MaxValue)
+        {
+            return Timeout.InfiniteTimeSpan;
+        }
+
+        var left = deadline - Environment.TickCount64;
+        return left <= 0 ? TimeSpan.Zero : TimeSpan.FromMilliseconds(left);
     }
 }
