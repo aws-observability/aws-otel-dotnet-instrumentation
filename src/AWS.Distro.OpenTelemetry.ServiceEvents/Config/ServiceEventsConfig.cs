@@ -85,10 +85,9 @@ public sealed record ServiceEventsConfig
     private static readonly ConcurrentDictionary<string, Regex?> GlobCache = new();
 
     /// <summary>
-    /// Gets the explicit master kill switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>:
-    /// <c>true</c> forces ServiceEvents on, <c>false</c> forces it off, and <c>null</c> means the
-    /// variable was unset and the Application-Signals bundling rule decides. See
-    /// <see cref="DetermineEnabled" />.
+    /// Gets the opt-in switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>: <c>true</c> enables
+    /// ServiceEvents, <c>false</c> disables it, and <c>null</c> means the variable was unset, which
+    /// leaves it disabled. See <see cref="DetermineEnabled" />.
     /// </summary>
     /// <remarks>
     /// Nullable because the rule genuinely has three cases and a plain <c>bool</c> cannot express
@@ -324,13 +323,12 @@ public sealed record ServiceEventsConfig
     }
 
     /// <summary>
-    /// Decide whether ServiceEvents should run, applying the bundling
-    /// rule:
+    /// Decide whether ServiceEvents should run:
     /// <list type="bullet">
     /// <item><description>Lambda is always disabled (detected via <c>AWS_LAMBDA_FUNCTION_NAME</c>).</description></item>
-    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=true</c> wins.</description></item>
-    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=false</c> wins.</description></item>
-    /// <item><description>Unset → follow <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED</c>.</description></item>
+    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=true</c> enables it.</description></item>
+    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=false</c> disables it.</description></item>
+    /// <item><description>Unset → disabled: ServiceEvents is opt-in.</description></item>
     /// </list>
     /// </summary>
     /// <param name="config">The config to evaluate.</param>
@@ -350,7 +348,9 @@ public sealed record ServiceEventsConfig
             return explicitFlag;
         }
 
-        return config.ApplicationSignalsEnabled;
+        // Opt-in: Application Signals supplies endpoints (see ValidateEndpoints) but no longer
+        // decides whether ServiceEvents runs.
+        return false;
     }
 
     /// <summary>
@@ -538,8 +538,7 @@ public sealed record ServiceEventsConfig
             return false;
         }
 
-        // An unrecognised value is not a decision. Treated as unset so the bundling rule applies,
-        // rather than silently reading as false and disabling the feature on a typo.
+        // An unrecognised value is not a decision, so it reads as unset and therefore disabled.
         return null;
     }
 
