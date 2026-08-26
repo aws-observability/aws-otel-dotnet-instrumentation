@@ -104,6 +104,65 @@ public class IncidentRateLimiterTests
         limiter.CheckRateLimit().Should().BeFalse("the 4th call exceeds maxPerMinute=3");
     }
 
+    /// <summary>
+    /// A clock moving backwards must not reset the window, because that would admit a burst the cap was
+    /// configured to refuse.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The step has to cross a window boundary to mean anything: window index is
+    /// <c>clock / 60_000</c>, so a backwards step inside the same bucket changes no index and would
+    /// pass whatever the code did. Starting at exactly one window and stepping back into the previous
+    /// one is the smallest movement that lowers the index.
+    /// </para>
+    /// <para>
+    /// Mutation-verified: restoring the original <c>index != window.PeriodIndex</c> condition makes
+    /// this fail, because the lowered index then installs a fresh window and returns the cap to full.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void CheckRateLimit_WithClockSteppingBackwardsAcrossAWindow_DoesNotResetTheCap()
+    {
+        // One whole window in, so there is a previous bucket to fall back into.
+        this.now = 60_000;
+        var limiter = this.NewLimiter(maxPerMinute: 2);
+
+        limiter.CheckRateLimit().Should().BeTrue();
+        limiter.CheckRateLimit().Should().BeTrue();
+        limiter.CheckRateLimit().Should().BeFalse("the cap is spent");
+
+        // Index 1 -> index 0: a lower window, which must not be treated as a rollover.
+        this.now -= 5_000;
+
+        limiter.CheckRateLimit().Should().BeFalse(
+            "a clock moving backwards must not hand out a fresh window's worth of capacity");
+    }
+
+    /// <summary>
+    /// The per-error ceiling is likewise not reset by a clock moving backwards.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the global cap because they are separate counters on the window, and a reset
+    /// restores both. Suppressing this one wrongly is the more visible failure: the same error starts
+    /// producing snapshots again inside the minute it was meant to be deduplicated.
+    /// </remarks>
+    [Fact]
+    public void CheckDeduplication_WithClockSteppingBackwardsAcrossAWindow_DoesNotResetTheCeiling()
+    {
+        this.now = 60_000;
+        var limiter = this.NewLimiter(maxSameError: 1);
+        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
+
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.PerErrorLimit);
+
+        this.now -= 5_000;
+
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.PerErrorLimit,
+            "a clock moving backwards must not clear the per-error count");
+    }
+
     [Fact]
     public void CheckRateLimit_ResetsAfterWindowRollover()
     {

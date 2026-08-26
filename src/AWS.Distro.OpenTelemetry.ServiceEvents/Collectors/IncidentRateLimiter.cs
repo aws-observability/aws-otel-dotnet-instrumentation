@@ -46,7 +46,29 @@ internal sealed class IncidentRateLimiter
     /// <summary>Maximum distinct error hashes tracked per window (cardinality guard).</summary>
     private const int MaxErrorHashEntries = 1000;
 
-    /// <summary>Window length. Fixed, because the cap is defined as a per-minute rate.</summary>
+    /// <summary>
+    /// Window length. Fixed, because the cap is defined as a per-minute rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Windows are indexed off a <b>monotonic</b> clock, not wall-clock time, because the index
+    /// decides when counters reset. A wall clock can move backwards — an NTP correction is the common
+    /// case — which lowers the index, makes the window compare-and-swap install a fresh window, and
+    /// resets both the global and per-error counters mid-minute. The cap then admits a burst it was
+    /// configured to refuse. A forward jump has the same effect by skipping windows.
+    /// </para>
+    /// <para>
+    /// This is deliberately not what the sibling distros do; they bucket on wall-clock time and are
+    /// exposed to the same reset. It matches how the rest of this assembly already treats elapsed
+    /// time, though — see <c>ShutdownBudget</c>, which documents the same reasoning for the same
+    /// choice, and the endpoint collector's in-flight wait.
+    /// </para>
+    /// <para>
+    /// Only bucketing is affected. Timestamps that reach the wire stay on wall-clock time, because a
+    /// consumer needs to correlate them with events outside this process; a monotonic reading is
+    /// meaningless off the host.
+    /// </para>
+    /// </remarks>
     private const long WindowMs = 60_000L;
 
     private readonly Func<long> nowMs;
@@ -62,13 +84,16 @@ internal sealed class IncidentRateLimiter
     /// </summary>
     /// <param name="maxPerMinute">Max snapshots per minute (clamped to >= 1).</param>
     /// <param name="maxSameError">Max snapshots per error hash per minute (clamped to >= 1).</param>
-    /// <param name="nowMs">Millisecond clock; defaults to wall-clock epoch ms (matching Java's
-    /// <c>System.currentTimeMillis</c>). Injectable for tests.</param>
+    /// <param name="nowMs">
+    /// Millisecond clock used only to decide which window an incident falls in. Defaults to
+    /// <see cref="Environment.TickCount64" />; see the remarks on <see cref="WindowMs" /> for why it is
+    /// monotonic rather than wall-clock. Injectable for tests.
+    /// </param>
     public IncidentRateLimiter(int maxPerMinute, int maxSameError, Func<long>? nowMs = null)
     {
         this.maxPerMinute = Math.Max(1, maxPerMinute);
         this.maxSameError = Math.Max(1, maxSameError);
-        this.nowMs = nowMs ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        this.nowMs = nowMs ?? (() => Environment.TickCount64);
         this.currentWindow = new Window(this.CurrentPeriodIndex());
     }
 
@@ -194,12 +219,30 @@ internal sealed class IncidentRateLimiter
 
     private long CurrentPeriodIndex() => this.nowMs() / WindowMs;
 
-    /// <summary>Return the current window, atomically swapping to a fresh one if the period rolled over.</summary>
+    /// <summary>
+    /// Return the current window, atomically swapping to a fresh one once the period has rolled over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Advances <b>forward only</b>. A window is replaced when the computed index is greater than the
+    /// current one, never when it is merely different, so a clock reading that moves backwards keeps
+    /// the existing window and its counters rather than installing an empty one.
+    /// </para>
+    /// <para>
+    /// The default clock is monotonic, which makes a backwards reading unreachable in production, so
+    /// this is defence in depth rather than the primary guard. It is worth having because the failure
+    /// it prevents is silent and in the unsafe direction: resetting mid-window admits a burst the cap
+    /// was configured to refuse, and nothing downstream can tell that from a genuine rollover. Staying
+    /// in the current window instead keeps limiting until real time catches up, which errs toward
+    /// suppressing too much rather than too little.
+    /// </para>
+    /// </remarks>
+    /// <returns>The window incidents should currently be counted against.</returns>
     private Window GetWindow()
     {
         var index = this.CurrentPeriodIndex();
         var window = Volatile.Read(ref this.currentWindow);
-        if (window.PeriodIndex != index)
+        if (index > window.PeriodIndex)
         {
             var fresh = new Window(index);
             Interlocked.CompareExchange(ref this.currentWindow, fresh, window);
