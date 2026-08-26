@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 
@@ -76,8 +77,9 @@ internal sealed class ServiceEventsCloudWatchFileExporter : BaseExporter<LogReco
                 File.AppendAllText(this.fullPath, sb.ToString());
                 return ExportResult.Success;
             }
-            catch
+            catch (Exception ex)
             {
+                ServiceEventsEventSource.Log.FileWriteFailed(this.fullPath, ex);
                 return ExportResult.Failure;
             }
         }

@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -122,8 +123,9 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
                 File.AppendAllText(this.fullPath, request.ToJsonString(SerializerOptions) + "\n");
                 return ExportResult.Success;
             }
-            catch
+            catch (Exception ex)
             {
+                ServiceEventsEventSource.Log.FileWriteFailed(this.fullPath, ex);
                 return ExportResult.Failure;
             }
         }

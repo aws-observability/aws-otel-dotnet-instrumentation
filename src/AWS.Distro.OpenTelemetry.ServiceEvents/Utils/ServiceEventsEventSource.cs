@@ -57,16 +57,23 @@ internal sealed class ServiceEventsEventSource : EventSource
         }
     }
 
-    /// <summary>Report a failed export of ServiceEvents' own records.</summary>
+    /// <summary>
+    /// Report a failed export of ServiceEvents' own records.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="detail" /> is a stringified exception or a rejection description — an export can
+    /// fail without throwing, which is the case a misconfigured endpoint produces: the request
+    /// completes and returns a non-success status.
+    /// </remarks>
     /// <param name="endpoint">Target endpoint.</param>
-    /// <param name="exception">Stringified failure.</param>
+    /// <param name="detail">Stringified exception, or a description of the rejection.</param>
     [Event(
         1,
         Message = "ServiceEvents export to '{0}' failed; records for this batch are lost: {1}",
         Level = EventLevel.Error)]
-    public void ExportFailed(string endpoint, string exception)
+    public void ExportFailed(string endpoint, string detail)
     {
-        this.WriteEvent(1, endpoint, exception);
+        this.WriteEvent(1, endpoint, detail);
     }
 
     /// <summary>Report a failed write to the local output file.</summary>
@@ -164,6 +171,38 @@ internal sealed class ServiceEventsEventSource : EventSource
     public void OutputFileRotated(string path, long sizeBytes)
     {
         this.WriteEvent(6, path, sizeBytes);
+    }
+
+    /// <summary>Report a component swallowing a failure, having dropped the data it was handling.</summary>
+    /// <param name="component">Component and phase, e.g. <c>"EndpointActivityProcessor.OnEnd"</c>.</param>
+    /// <param name="exception">The failure.</param>
+    [NonEvent]
+    public void ComponentFailed(string component, Exception exception)
+    {
+        if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
+        {
+            this.ComponentFailed(component, exception.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Report a component swallowing a failure, having dropped the data it was handling.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <c>CollectFailed</c>, which loses a whole flush window. This loses one
+    /// request's or one emission's contribution. Fired from per-request paths, so it can be frequent
+    /// when something is systematically broken — which is the situation it exists to make visible, and
+    /// it costs nothing while no listener is attached.
+    /// </remarks>
+    /// <param name="component">Component and phase.</param>
+    /// <param name="exception">Stringified failure.</param>
+    [Event(
+        7,
+        Message = "ServiceEvents component '{0}' failed and dropped the data it was handling: {1}",
+        Level = EventLevel.Error)]
+    public void ComponentFailed(string component, string exception)
+    {
+        this.WriteEvent(7, component, exception);
     }
 
     /// <summary>Reasons an incident was not turned into a snapshot. Stable strings — listeners may match on them.</summary>

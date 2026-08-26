@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 
@@ -134,10 +135,21 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
             }
 
             using var response = HttpClient.Send(request);
-            return response.IsSuccessStatusCode ? ExportResult.Success : ExportResult.Failure;
+            if (response.IsSuccessStatusCode)
+            {
+                return ExportResult.Success;
+            }
+
+            // A rejection is not an exception, and is the shape a misconfigured endpoint produces.
+            // Reported through the same event so a listener does not have to know the difference.
+            ServiceEventsEventSource.Log.ExportFailed(
+                this.endpoint.ToString(),
+                $"HTTP {(int)response.StatusCode} {response.StatusCode}");
+            return ExportResult.Failure;
         }
-        catch
+        catch (Exception ex)
         {
+            ServiceEventsEventSource.Log.ExportFailed(this.endpoint.ToString(), ex);
             return ExportResult.Failure;
         }
     }

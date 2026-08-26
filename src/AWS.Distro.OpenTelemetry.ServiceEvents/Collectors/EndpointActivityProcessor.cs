@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
@@ -71,9 +72,10 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
                 CallPathCapture.Begin(activity);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Telemetry must never crash the host. Drop and continue.
+            ServiceEventsEventSource.Log.ComponentFailed("EndpointActivityProcessor.OnStart", ex);
         }
     }
 
@@ -130,9 +132,10 @@ internal sealed class EndpointActivityProcessor : BaseProcessor<Activity>
                 this.FeedIncidentTrigger(activity, route, method, statusCode, durationNs);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Telemetry must never crash the host. Drop and continue.
+            ServiceEventsEventSource.Log.ComponentFailed("EndpointActivityProcessor.OnEnd", ex);
         }
     }
 

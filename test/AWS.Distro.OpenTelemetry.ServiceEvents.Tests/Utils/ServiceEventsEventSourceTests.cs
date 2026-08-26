@@ -23,7 +23,14 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Utils;
 /// <c>EventId 0</c> event on its own internal error channel and the real event never arrives. That is
 /// exactly how such a defect would reach production unnoticed.
 /// </para>
+/// <para>
+/// Collected with the other diagnostics tests because an <see cref="EventSource" /> is <b>process
+/// global</b>: a listener attached by a concurrently running test sees these events too, and this
+/// class's own events are visible to it. Running them in parallel made both classes fail on each
+/// other's traffic.
+/// </para>
 /// </remarks>
+[Collection("ServiceEventsDiagnostics")]
 public class ServiceEventsEventSourceTests
 {
     /// <summary>Captures events from the ServiceEvents provider for the lifetime of the instance.</summary>
