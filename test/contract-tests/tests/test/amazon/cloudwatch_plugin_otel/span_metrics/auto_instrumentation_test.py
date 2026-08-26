@@ -33,8 +33,8 @@ class SpanMetricsAutoInstrumentationTest(SpanMetricsContractTestBase):
             "OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED": "false",
             "OTEL_DOTNET_AUTO_PLUGINS": (
                 "SampleApp.AwsSdkInstrumentationPlugin, CloudWatchPluginSampleApp:"
-                "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, "
-                "AWS.OpenTelemetry.CloudWatch.Plugin"
+                "AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin, "
+                "AWS.OpenTelemetry.CloudWatchPluginOtel"
             ),
             "OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES": (
                 "CloudWatchPluginSampleApp.Contract"
