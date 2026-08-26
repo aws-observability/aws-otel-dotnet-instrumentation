@@ -74,6 +74,10 @@ tracerBuilder
 meterBuilder.AddCloudWatchSpanMetrics();
 ```
 
+The meter provider's resource must include `service.name`. When configuring
+resources manually, configure it on `meterBuilder`; configuring
+`service.name` only on `tracerBuilder` does not add it to the emitted metrics.
+
 To generate complete span metrics, the plugin records every span in-process.
 The configured sampler's export decisions are preserved, so spans it drops are
 not exported.

@@ -79,7 +79,7 @@ public class EventSourceTests
 
         protected override void OnEventSourceCreated(EventSource eventSource)
         {
-            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatch-Plugin")
+            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatchPluginOtel")
             {
                 this.EnableEvents(eventSource, EventLevel.Error);
             }
