@@ -33,6 +33,12 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Utils;
 [Collection("ServiceEventsDiagnostics")]
 public class ServiceEventsEventSourceTests
 {
+    /// <summary>
+    /// Embedded in every payload this file emits, so its assertions can select its own events out of a
+    /// capture that is shared with the whole assembly.
+    /// </summary>
+    private const string Marker = "evtsrc-selftest";
+
     /// <summary>Captures events from the ServiceEvents provider for the lifetime of the instance.</summary>
     private sealed class Listener : EventListener
     {
@@ -96,14 +102,19 @@ public class ServiceEventsEventSourceTests
     {
         using var listener = new Listener();
 
-        ServiceEventsEventSource.Log.ExportFailed("http://localhost:4316/v1/logs", new InvalidOperationException("boom"));
-        ServiceEventsEventSource.Log.FileWriteFailed("/tmp/out.json", new IOException("disk full"));
-        ServiceEventsEventSource.Log.CollectFailed("IncidentSnapshot", new InvalidOperationException("collect boom"));
-        ServiceEventsEventSource.Log.IncidentDropped(ServiceEventsEventSource.DropReason.RateLimit, "GET /orders");
-        ServiceEventsEventSource.Log.ExportAbandonedOnShutdown("http://localhost:4316/v1/logs", 0);
-        ServiceEventsEventSource.Log.OutputFileRotated("/tmp/out.json", 1024L);
+        // Every payload carries Marker so this test can find its own events again. The provider is
+        // process global: the capture also holds events from tests running in parallel, and asserting
+        // over all of them would make this flaky rather than strict.
+        ServiceEventsEventSource.Log.ExportFailed(Marker + "/endpoint", new InvalidOperationException(Marker + " boom"));
+        ServiceEventsEventSource.Log.FileWriteFailed(Marker + "/out.json", new IOException(Marker + " disk full"));
+        ServiceEventsEventSource.Log.CollectFailed(Marker + "Collector", new InvalidOperationException(Marker + " collect boom"));
+        ServiceEventsEventSource.Log.IncidentDropped(ServiceEventsEventSource.DropReason.RateLimit, "GET " + Marker);
+        ServiceEventsEventSource.Log.ExportAbandonedOnShutdown(Marker + "/endpoint", 0);
+        ServiceEventsEventSource.Log.OutputFileRotated(Marker + "/out.json", 1024L);
 
-        var events = listener.Events;
+        var events = listener.Events
+            .Where(e => e.Payload!.OfType<string>().Any(p => p.Contains(Marker, StringComparison.Ordinal)))
+            .ToList();
 
         events.Select(e => e.EventId).Should().BeEquivalentTo(
             new[] { 1, 2, 3, 4, 5, 6 },
@@ -112,7 +123,7 @@ public class ServiceEventsEventSourceTests
         var export = events.Single(e => e.EventId == 1);
         export.Level.Should().Be(EventLevel.Error);
         export.Payload!.Should().HaveCount(2);
-        export.Payload![0].Should().Be("http://localhost:4316/v1/logs");
+        export.Payload![0].Should().Be(Marker + "/endpoint");
         (export.Payload![1] as string).Should().Contain("boom");
 
         var fileWrite = events.Single(e => e.EventId == 2);
@@ -121,12 +132,12 @@ public class ServiceEventsEventSourceTests
 
         var collect = events.Single(e => e.EventId == 3);
         collect.Level.Should().Be(EventLevel.Error);
-        collect.Payload![0].Should().Be("IncidentSnapshot");
+        collect.Payload![0].Should().Be(Marker + "Collector");
 
         var dropped = events.Single(e => e.EventId == 4);
         dropped.Level.Should().Be(EventLevel.Verbose, "suppression is normal and should not look like an error");
         dropped.Payload![0].Should().Be("rate_limit");
-        dropped.Payload![1].Should().Be("GET /orders");
+        dropped.Payload![1].Should().Be("GET " + Marker);
 
         var abandoned = events.Single(e => e.EventId == 5);
         abandoned.Level.Should().Be(EventLevel.Warning);

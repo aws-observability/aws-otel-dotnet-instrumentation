@@ -168,8 +168,13 @@ internal sealed class IncidentRateLimiter
     /// </para>
     /// </remarks>
     /// <param name="errorHash">Hash from <see cref="GenerateErrorHash" />.</param>
-    /// <returns><c>true</c> when this error is still under its per-minute ceiling.</returns>
-    public bool CheckDeduplication(string errorHash)
+    /// <returns>
+    /// Which outcome applied. A rejection distinguishes the per-error ceiling from the cardinality
+    /// guard, because they mean different things to an operator: the first is this error being noisy,
+    /// the second is the <i>service</i> producing more distinct errors than the window can track, and
+    /// the second is the one that suggests a raised limit will not help.
+    /// </returns>
+    public DedupOutcome CheckDeduplication(string errorHash)
         => this.GetWindow().TryRecordError(errorHash, this.maxSameError, MaxErrorHashEntries);
 
     /// <summary>Update the limits dynamically (from the WATCHER config channel).</summary>
@@ -239,14 +244,14 @@ internal sealed class IncidentRateLimiter
         /// <param name="errorHash">The dedup key.</param>
         /// <param name="maxSameError">Per-error ceiling for this window.</param>
         /// <param name="maxEntries">Cardinality guard on distinct hashes tracked.</param>
-        /// <returns><c>true</c> when the occurrence was recorded and the caller may emit.</returns>
-        public bool TryRecordError(string errorHash, int maxSameError, int maxEntries)
+        /// <returns>Which outcome applied; see <see cref="DedupOutcome" />.</returns>
+        public DedupOutcome TryRecordError(string errorHash, int maxSameError, int maxEntries)
         {
             // Lock-free fast-path rejection.
             if (this.errorCounts.TryGetValue(errorHash, out var existing) &&
                 Volatile.Read(ref existing[0]) >= maxSameError)
             {
-                return false;
+                return DedupOutcome.PerErrorLimit;
             }
 
             lock (this.dedupLock)
@@ -255,7 +260,7 @@ internal sealed class IncidentRateLimiter
                 {
                     if (this.errorCounts.Count >= maxEntries)
                     {
-                        return false;
+                        return DedupOutcome.CardinalityGuard;
                     }
 
                     existing = new int[1];
@@ -265,11 +270,11 @@ internal sealed class IncidentRateLimiter
                 if (existing[0] < maxSameError)
                 {
                     existing[0]++;
-                    return true;
+                    return DedupOutcome.Admitted;
                 }
             }
 
-            return false;
+            return DedupOutcome.PerErrorLimit;
         }
     }
 }

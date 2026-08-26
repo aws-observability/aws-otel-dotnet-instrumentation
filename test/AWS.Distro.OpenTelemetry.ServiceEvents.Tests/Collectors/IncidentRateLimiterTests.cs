@@ -80,7 +80,7 @@ public class IncidentRateLimiterTests
             for (var i = 0; i < 500; i++)
             {
                 // One hash, so every thread contends for the same per-error counter.
-                if (limiter.CheckDeduplication("same-hash"))
+                if (limiter.CheckDeduplication("same-hash") == DedupOutcome.Admitted)
                 {
                     Interlocked.Increment(ref admitted);
                 }
@@ -125,9 +125,10 @@ public class IncidentRateLimiterTests
         var limiter = this.NewLimiter(maxSameError: 2);
         var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeFalse("the 3rd identical error exceeds maxSameError=2");
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.PerErrorLimit, "the 3rd identical error exceeds maxSameError=2");
     }
 
     [Fact]
@@ -137,9 +138,10 @@ public class IncidentRateLimiterTests
         var a = IncidentRateLimiter.GenerateErrorHash("GET /a", "ArgumentException", originMethod: null);
         var b = IncidentRateLimiter.GenerateErrorHash("GET /b", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(a).Should().BeTrue();
-        limiter.CheckDeduplication(a).Should().BeFalse();
-        limiter.CheckDeduplication(b).Should().BeTrue("a different operation is a different hash");
+        limiter.CheckDeduplication(a).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(a).Should().Be(DedupOutcome.PerErrorLimit);
+        limiter.CheckDeduplication(b).Should().Be(
+            DedupOutcome.Admitted, "a different operation is a different hash");
     }
 
     [Fact]
@@ -148,12 +150,13 @@ public class IncidentRateLimiterTests
         var limiter = this.NewLimiter(maxSameError: 1);
         var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeFalse();
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.PerErrorLimit);
 
         this.now += 60_001;
 
-        limiter.CheckDeduplication(hash).Should().BeTrue("a new window resets per-error counts");
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.Admitted, "a new window resets per-error counts");
     }
 
     [Fact]
