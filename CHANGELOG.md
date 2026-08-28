@@ -14,10 +14,11 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
   service investigation experience. Targets modern .NET (net8.0/net9.0/net10.0); does not
-  initialize on .NET Framework apps. Enabled automatically wherever AWS Application Signals
-  is enabled, and never in AWS Lambda. Set `OTEL_AWS_SERVICE_EVENTS_ENABLED=false` to opt
-  out, or `=true` to enable it without Application Signals (which additionally requires
-  `OTEL_AWS_OTLP_LOGS_ENDPOINT` and `OTEL_AWS_OTLP_METRICS_ENDPOINT`). Per-function
+  initialize on .NET Framework apps. Disabled by default and never enabled in AWS Lambda:
+  set `OTEL_AWS_SERVICE_EVENTS_ENABLED=true` to turn it on. Enabling it alongside AWS
+  Application Signals needs nothing further, since Application Signals supplies the
+  endpoints; enabling it without Application Signals additionally requires
+  `OTEL_AWS_OTLP_LOGS_ENDPOINT` and `OTEL_AWS_OTLP_METRICS_ENDPOINT`. Per-function
   instrumentation stays off until `OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE` names at least
   one package
   ([#443](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/443),
