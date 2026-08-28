@@ -178,7 +178,7 @@ public class DynamicInstrumentationManagerTests : IDisposable
 
         manager.Registry.Should().NotBeNull();
         manager.Registry!.Count.Should().Be(1);
-        manager.Registry.Get("MyApp.OrderService.Process").Should().NotBeNull();
+        manager.Registry.Get("MyApp.OrderService.Process:PROBE").Should().NotBeNull();
 
         manager.Shutdown();
     }
@@ -245,7 +245,7 @@ public class DynamicInstrumentationManagerTests : IDisposable
         // Second call with only method A — B should be removed
         manager.OnConfigurationsChanged(new List<InstrumentationConfiguration> { configs[0] });
         manager.Registry.Count.Should().Be(1);
-        manager.Registry.Get("MyApp.Svc.B").Should().BeNull();
+        manager.Registry.Get("MyApp.Svc.B:PROBE").Should().BeNull();
 
         manager.Shutdown();
     }
@@ -315,7 +315,7 @@ public class DynamicInstrumentationManagerTests : IDisposable
     [Fact]
     public void ShutdownThenReinitialize_ReRegistersConfigs()
     {
-        // Regression for C3: the applied-instrumentations set must be cleared on
+        // Regression guard: the applied-instrumentations set must be cleared on
         // Cleanup, otherwise after a restart OnConfigurationsChanged would register the
         // config into the fresh registry but skip re-applying it (stale "already applied"
         // key), leaving registry and applied-set diverged.
@@ -347,7 +347,7 @@ public class DynamicInstrumentationManagerTests : IDisposable
         // Re-delivering the same config must register it again (not silently skipped)
         manager.OnConfigurationsChanged(configs);
         manager.Registry.Count.Should().Be(1);
-        manager.Registry.Get("MyApp.OrderService.Process").Should().NotBeNull();
+        manager.Registry.Get("MyApp.OrderService.Process:PROBE").Should().NotBeNull();
 
         manager.Shutdown();
     }

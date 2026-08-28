@@ -9,8 +9,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 /// </summary>
 /// <remarks>
 /// <para>
-/// When the debugger client receives a config update from the WATCHER pipeline
-/// (<c>APMPulseDynamicInstrumentation</c>), it invokes
+/// When the debugger client receives a config update from the WATCHER pipeline, it invokes
 /// <see cref="OnWatcherUpdate" />, which in turn applies the changes to
 /// the registered collectors.
 /// </para>

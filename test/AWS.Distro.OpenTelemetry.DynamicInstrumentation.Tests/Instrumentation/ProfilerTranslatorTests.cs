@@ -107,7 +107,7 @@ public class ProfilerTranslatorTests
     public void ApplyInstrumentation_Applied_SurfacesSupportedArities()
     {
         // The out overload reports the woven arities so the Manager can index them for arity-aware
-        // capture resolution (#3). Only profiler-supported arities appear (15 dropped, 2 kept).
+        // capture resolution. Only profiler-supported arities appear (15 dropped, 2 kept).
         var translator = new ProfilerTranslator((_, _, _) => { }, Resolver("MyApp", 2, 15));
 
         var result = translator.ApplyInstrumentation(CreateConfig(), out var arities);

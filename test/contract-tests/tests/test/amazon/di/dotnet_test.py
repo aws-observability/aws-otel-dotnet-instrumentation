@@ -96,7 +96,13 @@ class DotnetDynamicInstrumentationTest(DIContractTestBase):
         snapshot = self.wait_for_snapshots(min_count=1)[0]
 
         log_record = snapshot["_log_record"]
+
+        # LENGTH FIRST, THEN NON-ZERO. An unset proto3 `bytes` field decodes to b"", and b"" != b"\x00"*16,
+        # so a non-zero check alone passes when the trace context is missing altogether -- which is the very
+        # regression this test names. Measured: LogRecord().trace_id is b"" with len 0.
+        self.assertEqual(len(log_record.trace_id), 16, "snapshot must carry a trace id, not an absent field")
         self.assertNotEqual(log_record.trace_id, b"\x00" * 16, "snapshot must carry the captured trace id")
+        self.assertEqual(len(log_record.span_id), 8, "snapshot must carry a span id, not an absent field")
         self.assertNotEqual(log_record.span_id, b"\x00" * 8, "snapshot must carry the captured span id")
 
     def test_probe_reports_ready_then_active(self) -> None:
@@ -313,10 +319,14 @@ class DotnetDynamicInstrumentationMaxHitsTest(DIContractTestBase):
         time.sleep(EXPORT_SETTLE_SECONDS)
         snapshots = self.snapshots_for_method(self.get_snapshots(), "LimitedFunction")
 
-        self.assertLessEqual(
+        # EXACT, not an upper bound. Every other assertion in this class is one-sided (>= 1, <= MAX_HITS,
+        # after == before), so a limiter that clamped the budget to 1 would satisfy all of them. The count is
+        # deterministic here: MAX_HITS (3) is below the 5-per-second capture rate limit, so MaxHits is what
+        # binds, and the invocations are over budget by 2.
+        self.assertEqual(
             len(snapshots),
             self.MAX_HITS,
-            f"MaxHits={self.MAX_HITS} must bound captures, got {len(snapshots)}",
+            f"MaxHits={self.MAX_HITS} must be the effective budget, got {len(snapshots)}",
         )
 
     def test_capture_stops_growing_once_the_budget_is_spent(self) -> None:

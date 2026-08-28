@@ -57,7 +57,7 @@ public class InstrumentationConfigurationTests
         config.IsMethodLevel.Should().BeTrue();
         config.IsLineLevel.Should().BeFalse();
         config.MethodKey.Should().Be("MyApp.Services.OrderService.ProcessOrder");
-        config.InstrumentationKey.Should().Be("MyApp.Services.OrderService.ProcessOrder");
+        config.InstrumentationKey.Should().Be("MyApp.Services.OrderService.ProcessOrder:PROBE");
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class InstrumentationConfigurationTests
         config.LineNumber.Should().Be(42);
         config.IsLineLevel.Should().BeTrue();
         config.IsMethodLevel.Should().BeFalse();
-        config.InstrumentationKey.Should().Be("MyApp.Calculator.Add:42");
+        config.InstrumentationKey.Should().Be("MyApp.Calculator.Add:42:BREAKPOINT");
     }
 
     [Fact]

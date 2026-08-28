@@ -198,6 +198,15 @@ class DIContractTestBase(ContractTestBase):
             .with_kwargs(network=NETWORK_NAME, networking_config=di_api_networking_config)
             .with_name(_MOCK_DI_API_NAME)
         )
+
+        # CLEANUP BEFORE START, not after. The parent's addCleanup(self.tear_down) is only registered by
+        # super().setUp() further down, so a failure in start() or wait_for_logs below would leave this
+        # container running -- and because it takes a FIXED name, every later test then dies on a 409 name
+        # conflict rather than on whatever actually went wrong here.
+        #
+        # Guarded, because on the SUCCESS path tear_down stops the container too and cleanups run LIFO: this
+        # one fires second, against a container that is already gone.
+        self.addCleanup(self._stop_mock_di_api_quietly)
         self.mock_di_api.start()
         wait_for_logs(self.mock_di_api, "Ready", timeout=30)
 
@@ -206,6 +215,13 @@ class DIContractTestBase(ContractTestBase):
             self.seed_configurations(configurations)
 
         super().setUp()
+
+    def _stop_mock_di_api_quietly(self) -> None:
+        """Stop the mock DI API, tolerating it having been stopped already."""
+        try:
+            self.mock_di_api.stop()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     def tear_down(self) -> None:
         try:
