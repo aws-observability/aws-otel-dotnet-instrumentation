@@ -45,7 +45,7 @@ app.MapGet("/probe-target/long-string", () =>
     Results.Ok(new { length = ProbeTargets.ProcessLongString(new string('x', 500)) }));
 
 app.MapGet("/probe-target/large-collection", () =>
-    Results.Ok(new { count = ProbeTargets.ProcessLargeCollection(Enumerable.Range(0, 50).ToList()) }));
+    Results.Ok(new { count = ProbeTargets.ProcessLargeCollection(Enumerable.Range(0, 50).ToList(), "contract") }));
 
 // Each call gets a distinct argument so the MaxHits tests can tell snapshots apart and prove which calls
 // were captured, rather than only counting them.

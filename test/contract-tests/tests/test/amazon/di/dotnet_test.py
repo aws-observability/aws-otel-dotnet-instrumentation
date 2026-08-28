@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 from amazon.di.di_contract_test_base import (
     DIContractTestBase,
+    EXPORT_SETTLE_SECONDS,
     POLL_INTERVAL_SECONDS_VALUE,
     PROBE_TARGET_CLASS,
     PROBE_TARGET_CODE_UNIT,
@@ -307,9 +308,9 @@ class DotnetDynamicInstrumentationMaxHitsTest(DIContractTestBase):
         self._invoke(times=self.MAX_HITS + 2)
         self.wait_for_snapshots(min_count=1)
 
-        # Settle past the collector's drain interval so late snapshots are counted rather than missed, which
-        # would make an upper-bound assertion pass for the wrong reason.
-        time.sleep(5)
+        # Settle past the export batch interval so late snapshots are counted rather than missed, which would
+        # make an upper-bound assertion pass for the wrong reason.
+        time.sleep(EXPORT_SETTLE_SECONDS)
         snapshots = self.snapshots_for_method(self.get_snapshots(), "LimitedFunction")
 
         self.assertLessEqual(
@@ -323,15 +324,26 @@ class DotnetDynamicInstrumentationMaxHitsTest(DIContractTestBase):
         that merely admits fewer than requested on the first burst."""
         self._invoke(times=self.MAX_HITS)
         self.wait_for_snapshots(min_count=1)
-        time.sleep(5)
+        time.sleep(EXPORT_SETTLE_SECONDS)
         before = len(self.snapshots_for_method(self.get_snapshots(), "LimitedFunction"))
 
         self._invoke(times=3)
-        time.sleep(5)
+        time.sleep(EXPORT_SETTLE_SECONDS)
         after = len(self.snapshots_for_method(self.get_snapshots(), "LimitedFunction"))
 
         self.assertEqual(after, before, "no further captures may appear after the budget is spent")
         self.assertLessEqual(after, self.MAX_HITS)
+
+    def test_exhausting_the_budget_reports_disabled(self) -> None:
+        """The status side of MaxHits: the operator must be told the probe stopped, not left guessing.
+
+        StatusReporter runs on a hardcoded 60s timer (ReportIntervalMs, not configurable), and DISABLED is
+        reported once, so this waits past one full report cycle rather than the default snapshot timeout.
+        """
+        self._invoke(times=self.MAX_HITS + 2)
+        self.wait_for_snapshots(min_count=1)
+
+        self.wait_for_status(self.LOCATION_HASH, "DISABLED", timeout=90.0)
 
     def test_bounded_snapshot_still_carries_the_full_capture(self) -> None:
         """A bounded probe must not degrade what it captures -- only how often."""
@@ -369,10 +381,12 @@ class DotnetDynamicInstrumentationCaptureLimitsTest(DIContractTestBase):
                 capture_return_value=True,
                 max_string_length=9999,
             ),
+            # Arity 2, unlike ProcessLongString above: same-arity targets on one class are indistinguishable
+            # at capture time, and this pair used to resolve to a single config.
             self.method_breakpoint(
                 method_name="ProcessLargeCollection",
                 location_hash=self.COLLECTION_LOCATION_HASH,
-                capture_arguments=["items"],
+                capture_arguments=["items", "label"],
                 capture_return_value=True,
                 max_collection_width=9999,
             ),
@@ -398,7 +412,8 @@ class DotnetDynamicInstrumentationCaptureLimitsTest(DIContractTestBase):
         snapshots = self.snapshots_for_method(self.wait_for_snapshots(min_count=1), "ProcessLargeCollection")
         self.assertTrue(snapshots, "expected a snapshot for ProcessLargeCollection")
 
-        captured = snapshots[0]["captures"]["entry"]["arguments"]["items"]
+        arguments = snapshots[0]["captures"]["entry"]["arguments"]
+        captured = arguments["items"]
 
         self.assertEqual(
             len(captured["elements"]),
@@ -408,6 +423,53 @@ class DotnetDynamicInstrumentationCaptureLimitsTest(DIContractTestBase):
         # The ORIGINAL size, not the captured count. Reporting the capped count would tell an operator the
         # collection really had 20 elements, which is a wrong answer rather than a partial one.
         self.assertEqual(captured["size"], self.ORIGINAL_COLLECTION_SIZE)
+        # Proves the snapshot is this method's rather than the arity-1 probe's, which is what used to resolve.
+        self.assertEqual(arguments["label"]["value"], "contract")
+
+
+class DotnetDynamicInstrumentationBelowMaxCaptureLimitTest(DIContractTestBase):
+    """A per-configuration limit BELOW the enforced maximum must be honoured, not widened to the maximum.
+
+    The class above only proves an over-large request is clamped DOWN, which a hardcoded 255 would also
+    satisfy. Unit tests pin ClampMaxStringLength's arithmetic, but only the contract layer runs the whole
+    poll -> apply -> capture chain, where a per-config limit dropped on the way to the capture path would show
+    up as a capture of 255 rather than the 10 that was asked for.
+
+    Its own container so ProcessLongString is the only configured target and no other config shares its arity.
+    """
+
+    REQUESTED_MAX_STRING_LENGTH: int = 10
+
+    LOCATION_HASH: str = "contract-limits-below-max"
+
+    def get_di_configurations(self) -> List[Dict[str, Any]]:
+        return [
+            self.method_breakpoint(
+                method_name="ProcessLongString",
+                location_hash=self.LOCATION_HASH,
+                capture_arguments=["text"],
+                capture_return_value=True,
+                max_string_length=self.REQUESTED_MAX_STRING_LENGTH,
+            )
+        ]
+
+    def test_a_below_maximum_string_limit_is_honoured_exactly(self) -> None:
+        self.do_send_request("probe-target/long-string", "GET", 200)
+        snapshots = self.snapshots_for_method(self.wait_for_snapshots(min_count=1), "ProcessLongString")
+        self.assertTrue(snapshots, "expected a snapshot for ProcessLongString")
+
+        captured = snapshots[0]["captures"]["entry"]["arguments"]["text"]
+
+        self.assertEqual(
+            len(captured["value"]),
+            self.REQUESTED_MAX_STRING_LENGTH,
+            f"a requested MaxStringLength of {self.REQUESTED_MAX_STRING_LENGTH} must be honoured as-is, not "
+            f"widened to the enforced maximum",
+        )
+        self.assertTrue(captured.get("truncated"), "a truncated string must be marked truncated")
+        # No "size" assertion: ValueSerializer.SerializeString sets Truncated but never OriginalSize, so unlike
+        # a capped collection a truncated string carries no original length. Python's suite does assert one.
+        self.assertNotIn("size", captured)
 
 
 class DotnetDynamicInstrumentationProbeAndBreakpointTest(DIContractTestBase):
@@ -465,8 +527,8 @@ class DotnetDynamicInstrumentationProbeAndBreakpointTest(DIContractTestBase):
         self._invoke()
         snapshots = self.wait_for_snapshots(min_count=2)
 
-        probe = self.snapshots_for_location(snapshots, self.PROBE_HASH)[0]
-        breakpoint_snapshot = self.snapshots_for_location(snapshots, self.BREAKPOINT_HASH)[0]
+        probe = self.one_snapshot_for_location(snapshots, self.PROBE_HASH)
+        breakpoint_snapshot = self.one_snapshot_for_location(snapshots, self.BREAKPOINT_HASH)
 
         self.assertEqual(self.snapshot_attribute(probe, "aws.di.instrumentation_type"), "PROBE")
         self.assertEqual(
@@ -479,7 +541,7 @@ class DotnetDynamicInstrumentationProbeAndBreakpointTest(DIContractTestBase):
         snapshots = self.wait_for_snapshots(min_count=2)
 
         for location_hash in (self.PROBE_HASH, self.BREAKPOINT_HASH):
-            snapshot = self.snapshots_for_location(snapshots, location_hash)[0]
+            snapshot = self.one_snapshot_for_location(snapshots, location_hash)
             with self.subTest(location_hash=location_hash):
                 self.assertEqual(snapshot["captures"]["entry"]["arguments"]["name"]["value"], "both")
                 self.assertEqual(

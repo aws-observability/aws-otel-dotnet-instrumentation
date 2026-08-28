@@ -104,12 +104,13 @@ fi
 # Create mock-di-api image — stands in for the local CloudWatch Agent that serves Dynamic Instrumentation
 # probe configurations and receives status reports. Built by name rather than by the applications/* loop
 # below, because it is a test double like mock-collector, not an instrumented application.
-cd ../mock-di-api
-docker build . -t aws-application-signals-mock-di-api
-if [ $? = 1 ]; then
+# `|| { ... }` rather than a trailing `if [ $? = 1 ]`: under `set -e` that test never runs, and it would
+# miss docker's non-1 failure codes anyway.
+cd ../mock-di-api || { echo "contract-tests/images/mock-di-api not found"; exit 1; }
+docker build . -t aws-application-signals-mock-di-api || {
   echo "Docker build for mock DI api failed"
   exit 1
-fi
+}
 
 # Create application images
 cd ../../..

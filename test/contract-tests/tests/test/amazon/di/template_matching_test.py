@@ -51,7 +51,7 @@ class TemplateComparatorTest(TestCase):
         self.assertIn("missing key", str(caught.exception))
 
     def test_unexpected_key_fails(self) -> None:
-        """The case Java's and JS's subset comparators let through."""
+        """The case a subset comparator lets through: a field the emitter grew that no template mentions."""
         snapshot = self._snapshot()
         snapshot["captures"]["exit"] = {"return_value": {"value": "35"}}
         with self.assertRaises(AssertionError) as caught:

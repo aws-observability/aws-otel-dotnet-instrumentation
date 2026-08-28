@@ -113,6 +113,25 @@ def _as_cursor(synced_at: Any) -> int:
         return -1
 
 
+def _configurations_error(value: Any) -> Optional[str]:
+    """Returns why `value` is unusable as a configuration list, or None when it is fine.
+
+    SHARED BY BOTH SEEDING PATHS ON PURPOSE. `configurations_for` iterates the stored list and calls
+    `.get(...)` on each element, so a wrong-shaped seed does not fail where it was made -- it fails later,
+    inside an AGENT-FACING poll, as a bare 500 with no body. Seeding `{"Configurations": "oops"}` used to
+    answer `200 {"Accepted": 4}` (the string's length), then every subsequent `/list-instrumentation-
+    configurations` raised AttributeError until a reset; `{"Configurations": null}` stored None and raised
+    TypeError the same way. Both are TEST bugs, and this file's stated design is that a test bug must say so
+    at the point of the mistake.
+    """
+    if not isinstance(value, list):
+        return f"Configurations must be a list, got {type(value).__name__}"
+    for index, element in enumerate(value):
+        if not isinstance(element, dict):
+            return f"Configurations[{index}] must be an object, got {type(element).__name__}"
+    return None
+
+
 class MockDiApiHandler(BaseHTTPRequestHandler):
     """Serves the agent-facing configuration API plus a /_test control API."""
 
@@ -141,6 +160,10 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
             self._handle_report(body)
         elif self.path.startswith("/_test/configurations"):
             configurations = body.get("Configurations", []) if isinstance(body, dict) else []
+            error = _configurations_error(configurations)
+            if error is not None:
+                self._send_json({"Message": error}, status=400)
+                return
             generation = _STATE.set_configurations(configurations)
             self._send_json({"Accepted": len(configurations), "Generation": generation})
         elif self.path.startswith("/_test/reset"):
@@ -174,7 +197,11 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
         # Mirrors the real API's caching contract: Changed=false means "your cache is still valid", and the
         # agent then keeps what it has. Exercising this path matters — an always-Changed=true mock would hide
         # a client that mishandles the unchanged case.
-        changed = synced_at is None or _as_cursor(synced_at) < generation
+        #
+        # `!=`, not `<`: generations count from 1 per mock PROCESS, so a cursor above the current generation is
+        # one the agent retained across a mock restart. Under `<` it reads as unchanged and new configurations
+        # stay hidden for the life of that agent.
+        changed = synced_at is None or _as_cursor(synced_at) != generation
 
         self._send_json(
             {
@@ -227,16 +254,20 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
         nothing, and the symptom was an unexplained "no snapshots" — with no error anywhere. A curl-based
         check passes right through this, because curl sends Content-Length.
         """
+        # Any body-parse failure below leaves unread bytes in the socket. With HTTP/1.1 keep-alive the next
+        # request on that connection would then start parsing mid-body, so close instead of cascading.
         if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
             chunks: List[bytes] = []
             while True:
                 size_line = self.rfile.readline().strip()
                 if not size_line:
+                    self.close_connection = True
                     break
                 try:
                     # A chunk header may carry `;ext=...` extensions after the size.
                     size = int(size_line.split(b";")[0], 16)
                 except ValueError:
+                    self.close_connection = True
                     break
                 if size == 0:
                     # Terminal chunk: consume optional trailers up to the blank line so the connection stays
@@ -250,7 +281,13 @@ class MockDiApiHandler(BaseHTTPRequestHandler):
                 self.rfile.read(2)  # the CRLF that terminates each chunk
             return b"".join(chunks)
 
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            # Bare `int(...)` here raised inside do_POST, which BaseHTTPRequestHandler turns into a bodyless
+            # 500 — the same failure mode `_as_cursor` exists to prevent.
+            self.close_connection = True
+            return b""
         return self.rfile.read(length) if length > 0 else b""
 
     def _send_json(self, payload: Dict[str, Any], status: int = 200) -> None:
@@ -278,7 +315,24 @@ def _seed_from_environment() -> None:
     except ValueError:
         print(f"DI_CONFIGS is not valid JSON, ignoring: {raw[:200]}", flush=True)
         return
-    configurations = parsed if isinstance(parsed, list) else parsed.get("Configurations", [])
+
+    # VALID JSON OF THE WRONG TYPE MUST NOT KILL THE PROCESS. `"probe"` and `123` both parse, and the bare
+    # `parsed.get(...)` below raised AttributeError before `print("Ready")` — so the container died and the
+    # harness's wait_for_logs("Ready") timed out opaquely in setUp, instead of printing the "ignoring" line
+    # the invalid-JSON path already gets. Shape is checked with the same validator as /_test/configurations.
+    if isinstance(parsed, list):
+        configurations: Any = parsed
+    elif isinstance(parsed, dict):
+        configurations = parsed.get("Configurations", [])
+    else:
+        print(f"DI_CONFIGS must be a list or object, ignoring: {raw[:200]}", flush=True)
+        return
+
+    error = _configurations_error(configurations)
+    if error is not None:
+        print(f"DI_CONFIGS ignored -- {error}", flush=True)
+        return
+
     _STATE.set_configurations(configurations)
     print(f"Seeded {len(configurations)} configuration(s) from DI_CONFIGS", flush=True)
 

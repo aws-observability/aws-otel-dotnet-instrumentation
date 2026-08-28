@@ -26,8 +26,16 @@ cursor, so the unchanged path is genuinely exercised rather than papered over wi
 | --- | --- |
 | `POST /_test/configurations` | Seed the configurations to serve: `{"Configurations": [ ... ]}`. |
 | `GET /_test/status-reports` | Every status event the agent has reported, for assertions. |
-| `POST /_test/reset` | Drop configurations and recorded statuses. |
+| `GET /_test/poll-counts` | How many times the agent has polled, per `InstrumentationType`, plus a `TotalPolls`. |
+| `POST /_test/reset` | Drop configurations, recorded statuses, and poll counts. |
 | `GET /_test/health` | Readiness probe. |
+
+`poll-counts` is what makes the absence tests mean anything: "no snapshots arrived" is equally true of a
+disabled agent and of one that was merely too slow to poll, so the disabled test asserts the agent never
+polled at all, and the enabled tests assert the counter moves.
+
+A malformed `/_test/*` body is a bug in the *test*, so those endpoints answer `400` rather than seeding
+nothing and surfacing later as an unexplained "no snapshots". The agent-facing endpoints stay lenient.
 
 Configurations may also be seeded at startup with the `DI_CONFIGS` environment variable (a JSON array), so a
 test can be driven entirely through container env vars.

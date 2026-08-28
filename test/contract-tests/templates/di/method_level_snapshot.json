@@ -1,5 +1,5 @@
 {
-  "$comment": "Golden template for a METHOD-LEVEL BREAKPOINT snapshot (.NET) - ProbeTargets.LimitedFunction. The body is identical to a PROBE's (entry arguments + return), which is the point: the only observable difference between the two method-level types is aws.di.instrumentation_type, and BREAKPOINT is the type for which MaxHits is honoured. Line 0 because the location is the method, not a line. Java's equivalent is templates/di/method_level_snapshot.json.",
+  "$comment": "Golden template for a METHOD-LEVEL BREAKPOINT snapshot (.NET) - ProbeTargets.LimitedFunction. The body is identical to a PROBE's (entry arguments + return), which is the point: the only observable difference between the two method-level types is aws.di.instrumentation_type, and BREAKPOINT is the type for which MaxHits is honoured. Line 0 because the location is the method, not a line.",
   "body": {
     "captures": {
       "entry": {

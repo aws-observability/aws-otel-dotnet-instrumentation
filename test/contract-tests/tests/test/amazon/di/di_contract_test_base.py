@@ -55,6 +55,15 @@ _SNAPSHOT_ENDPOINT: str = "http://collector:4316/v1/logs"
 POLL_INTERVAL_SECONDS_VALUE: int = 10
 _POLL_INTERVAL_SECONDS: str = str(POLL_INTERVAL_SECONDS_VALUE)
 
+# Snapshot export batching. The SDK's BatchExportLogRecordProcessorOptions parses OTEL_BLRP_SCHEDULE_DELAY and
+# defaults to 5000ms, so a test settling for 5s had zero margin: one batch tick landing mid-burst split the
+# export and a straggler arrived after the count was sampled. Lowered here and every settle derives from it.
+BATCH_SCHEDULE_DELAY_MS: int = 1000
+_BATCH_SCHEDULE_DELAY_SECONDS: float = BATCH_SCHEDULE_DELAY_MS / 1000.0
+
+# Two batch cycles plus a buffer: enough that a tick cannot straddle the window being measured.
+EXPORT_SETTLE_SECONDS: float = (_BATCH_SCHEDULE_DELAY_SECONDS * 2) + 2.0
+
 _SNAPSHOT_EVENT_NAME: str = "aws.dynamic_instrumentation.snapshot"
 _SNAPSHOT_SCOPE_NAME: str = "aws.dynamic_instrumentation"
 
@@ -66,9 +75,7 @@ PROBE_TARGET_CODE_UNIT: str = "DynamicInstrumentation.NetCore"
 PROBE_TARGET_CLASS: str = "ProbeTargets"
 
 # Golden snapshot templates, resolved relative to the directory pytest runs from (test/). Deliberately
-# OUTSIDE contract-tests/tests so they are not swallowed into the contract_tests wheel -- the same placement
-# Java (appsignals-tests/di-contract-tests/templates/di) and JS (contract-tests/templates/di) use, so the
-# three SDKs' expected shapes sit in comparable files.
+# OUTSIDE contract-tests/tests so they are not swallowed into the contract_tests wheel.
 TEMPLATES_DIR: str = os.path.join(os.getcwd(), "contract-tests", "templates", "di")
 
 # Wildcard: the key must be PRESENT, its value is not asserted. Used for ids, timings and thread names.
@@ -79,7 +86,7 @@ def load_di_template(name: str) -> Dict[str, Any]:
     """Read a golden template by base name, e.g. "probe_snapshot"."""
     path: str = os.path.join(TEMPLATES_DIR, f"{name}.json")
     if not os.path.isfile(path):
-        raise AssertionError(f"golden template not found: {path}")
+        raise AssertionError(f"golden template not found: {path} (run pytest from the test/ directory)")
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -87,10 +94,10 @@ def load_di_template(name: str) -> Dict[str, Any]:
 def compare_against_template(actual: Any, expected: Any, path: str = "") -> None:
     """Compare a snapshot fragment against a template fragment. Raises AssertionError on the first mismatch.
 
-    BIDIRECTIONAL, AND THAT IS THE POINT. Java's and JS's comparators iterate only the template's keys, so a
-    snapshot that grows an EXTRA or RENAMED field passes -- which is precisely how a shape drifts without any
-    test noticing. Here the key sets must match exactly in both directions, so adding a field to the emitter
-    is a deliberate act that requires updating the template.
+    BIDIRECTIONAL, AND THAT IS THE POINT. A comparator that walks only the template's keys lets a snapshot
+    that grows an EXTRA or RENAMED field pass -- which is precisely how a shape drifts without any test
+    noticing. Here the key sets must match exactly in both directions, so adding a field to the emitter is a
+    deliberate act that requires updating the template.
 
     A module-level function rather than a TestCase method so it can be exercised directly, with no containers.
     """
@@ -175,6 +182,7 @@ class DIContractTestBase(ContractTestBase):
             "OTEL_AWS_OTLP_LOGS_ENDPOINT": _SNAPSHOT_ENDPOINT,
             "OTEL_AWS_DYNAMIC_INSTRUMENTATION_PROBE_POLL_INTERVAL": _POLL_INTERVAL_SECONDS,
             "OTEL_AWS_DYNAMIC_INSTRUMENTATION_BREAKPOINT_POLL_INTERVAL": _POLL_INTERVAL_SECONDS,
+            "OTEL_BLRP_SCHEDULE_DELAY": str(BATCH_SCHEDULE_DELAY_MS),
         }
 
     def setUp(self) -> None:
@@ -321,8 +329,7 @@ class DIContractTestBase(ContractTestBase):
 
         WHY A TEMPLATE RATHER THAN MORE assertEquals. The snapshot shape is a contract with the backend's
         ingest, and until now it existed only as scattered assertions across individual tests -- nothing a
-        reviewer could read as "the shape", and nothing comparable against the other SDKs. Java keeps its
-        expected shapes in templates/di/*.json; this is the same idea in .NET's terms.
+        reviewer could read as "the shape".
         """
         template: Dict[str, Any] = load_di_template(template_name)
 
@@ -470,3 +477,20 @@ class DIContractTestBase(ContractTestBase):
             if attribute is not None and _coerce_attribute_value(attribute) == location_hash:
                 matched.append(snapshot)
         return matched
+
+    def one_snapshot_for_location(self, snapshots: List[Dict[str, Any]], location_hash: str) -> Dict[str, Any]:
+        """The first snapshot for a LocationHash, asserting one exists.
+
+        A total count satisfies wait_for_snapshots even when every snapshot carries the SAME hash, so indexing
+        [0] on the empty per-hash list would raise a bare IndexError instead of naming the collapse.
+        """
+        matched = self.snapshots_for_location(snapshots, location_hash)
+        seen = sorted(
+            {
+                str(_coerce_attribute_value(snapshot["_attributes"]["aws.di.location_hash"]))
+                for snapshot in snapshots
+                if "aws.di.location_hash" in snapshot["_attributes"]
+            }
+        )
+        self.assertTrue(matched, f"no snapshot carried location hash {location_hash}; saw {seen}")
+        return matched[0]

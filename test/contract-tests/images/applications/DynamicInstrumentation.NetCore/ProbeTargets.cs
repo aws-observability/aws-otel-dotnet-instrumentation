@@ -73,11 +73,14 @@ public static class ProbeTargets
     }
 
     /// <summary>A collection wider than the enforced capture maximum, so element capping is observable.</summary>
+    /// <remarks>Two parameters so the arity differs from ProcessLongString; DI disambiguates co-located
+    /// targets by parameter count, and two arity-1 methods here resolve to one config.</remarks>
     /// <param name="items">Items whose captured form must be capped at MaxCollectionWidth.</param>
+    /// <param name="label">Captured alongside, so the extra parameter is asserted rather than dead weight.</param>
     /// <returns>The untruncated count.</returns>
-    public static int ProcessLargeCollection(List<int> items)
+    public static int ProcessLargeCollection(List<int> items, string label)
     {
-        return items.Count;
+        return label.Length > 0 ? items.Count : 0;
     }
 
     /// <summary>Target for a BREAKPOINT with MaxHits: called more often than the limit allows.</summary>

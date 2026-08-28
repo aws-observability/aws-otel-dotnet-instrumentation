@@ -1,5 +1,5 @@
 {
-  "$comment": "Golden template for a function-level PROBE snapshot (.NET) - ProbeTargets.ComputeOrderTotal. Mirrors the Java template layout (appsignals-tests/di-contract-tests/templates/di), split into body + attributes because .NET exports snapshots as OTLP LogRecords: the JSON body carries only captures/stack and everything Java puts at the body's top level (service, locationHash, instrumentation, thread, timestamp) travels as aws.di.* attributes instead. '*' matches any present value; a key absent from the actual snapshot, or present but not listed here, FAILS.",
+  "$comment": "Golden template for a function-level PROBE snapshot (.NET) - ProbeTargets.ComputeOrderTotal. Split into body + attributes because .NET exports snapshots as OTLP LogRecords: the JSON body carries only captures/stack, and the fields the other SDKs place at the body's top level (service, locationHash, instrumentation, thread, timestamp) travel as aws.di.* attributes instead. '*' matches any present value; a key absent from the actual snapshot, or present but not listed here, FAILS.",
   "body": {
     "captures": {
       "entry": {
