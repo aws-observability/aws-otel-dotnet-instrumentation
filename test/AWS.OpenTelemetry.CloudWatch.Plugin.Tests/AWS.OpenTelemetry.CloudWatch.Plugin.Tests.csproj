@@ -45,7 +45,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(CloudWatchPluginPackageVersion)' != ''">
-    <PackageReference Include="AWS.OpenTelemetry.CloudWatch.Plugin" Version="$(CloudWatchPluginPackageVersion)" />
+    <PackageReference Include="AWS.OpenTelemetry.CloudWatchPluginOtel" Version="$(CloudWatchPluginPackageVersion)" />
   </ItemGroup>
 
 </Project>

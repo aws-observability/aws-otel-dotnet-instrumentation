@@ -1,7 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using AWS.Distro.OpenTelemetry.ServiceEvents;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using FluentAssertions;
 using OpenTelemetry.Instrumentation.AspNetCore;
@@ -31,6 +33,8 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class ServiceEventsGateTest
 {
+    private const string TestSourceName = "ServiceEvents.Tests.GateExceptionCapture";
+
     [Fact]
     public void DisabledServiceEvents_LeavesSingletonUninitialized()
     {
@@ -54,7 +58,11 @@ public class ServiceEventsGateTest
         new Plugin().ConfigureTracesOptions(options);
 
         options.RecordException.Should().BeFalse(
-            "a customer with ServiceEvents disabled must see unchanged server-span content");
+            "ServiceEvents never enables RecordException on any path — it would attach exception " +
+            "messages and stack traces to spans the customer exports. This guards that decision " +
+            "against being reverted, rather than distinguishing the enabled path from the disabled " +
+            "one: the enabled path does not set it either, and takes the exception through " +
+            "EnrichWithException into ServiceEvents' own private channel instead");
     }
 
     /// <summary>
@@ -102,6 +110,186 @@ public class ServiceEventsGateTest
         {
             System.Environment.SetEnvironmentVariable(Plugin.ApplicationSignalsEnabledConfig, original);
         }
+    }
+
+    [Fact]
+    public void DisabledServiceEvents_DoesNotInstallExceptionCapture()
+    {
+        CreateDisabledInstrumentation();
+
+        var options = new AspNetCoreTraceInstrumentationOptions();
+        new Plugin().ConfigureTracesOptions(options);
+
+        options.EnrichWithException.Should().BeNull(
+            "the capture allocates per failed request for a consumer that is not running, which is " +
+            "the same reason CallPathCapture is gated on an incident trigger existing");
+    }
+
+    /// <summary>
+    /// The enabled path installs the private exception channel. Both halves matter: the delegate has
+    /// to be there at all, and invoking it must leave the customer's span untouched — that second
+    /// property is the entire reason this exists instead of <c>RecordException</c>.
+    /// </summary>
+    [Fact]
+    public void EnabledServiceEvents_InstallsExceptionCaptureWithoutTouchingTheSpan()
+    {
+        var outputFile = Path.Combine(Path.GetTempPath(), $"se-gate-capture-{Guid.NewGuid():N}.ndjson");
+        var restore = SetEnvironment(new()
+        {
+            [Plugin.ApplicationSignalsEnabledConfig] = "false",
+            ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
+            ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,
+            ["RESOURCE_DETECTORS_ENABLED"] = "false",
+        });
+
+        try
+        {
+            ServiceEventsInstrumentation.ResetForTests();
+            var instrumentation = ServiceEventsInstrumentation.GetOrCreate(ServiceEventsConfig.FromEnvironment());
+            instrumentation.Initialize();
+            instrumentation.IsInitialized.Should().BeTrue(
+                "this test is about the enabled path, so a bailed-out Initialize would make it vacuous");
+
+            var options = new AspNetCoreTraceInstrumentationOptions();
+            options.EnrichWithException.Should().BeNull("sanity check: nothing is installed yet");
+
+            new Plugin().ConfigureTracesOptions(options);
+
+            options.EnrichWithException.Should().NotBeNull(
+                "IncidentSnapshot needs the exception message and stack, and no span tag carries " +
+                "them; EnrichWithException is the only hook that hands over the live Exception");
+
+            using var source = new ActivitySource(TestSourceName);
+            using var listener = ListenTo(TestSourceName);
+            using var activity = source.StartActivity("ingress", ActivityKind.Server)!;
+
+            options.EnrichWithException!(activity, Catch(() => throw new InvalidOperationException("boom")));
+
+            var (type, message, stack) = ExceptionCapture.TryRead(activity);
+            type.Should().Be("System.InvalidOperationException");
+            message.Should().Be("boom");
+            stack.Should().NotBeNullOrEmpty("the incident's call_path is derived from the stack");
+
+            activity.Events.Should().BeEmpty(
+                "no exception event may be added — that is exactly what RecordException would have " +
+                "done, and avoiding it is why this channel exists");
+        }
+        finally
+        {
+            ServiceEventsInstrumentation.ResetForTests();
+            restore();
+            if (File.Exists(outputFile))
+            {
+                File.Delete(outputFile);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>options</c> is the customer's object and they may already have set their own enrichment.
+    /// The plugin chains rather than assigns, so this asserts their callback still runs alongside
+    /// ours. Assigning would silently delete it, with nothing to notice at runtime.
+    /// </summary>
+    [Fact]
+    public void EnabledServiceEvents_ChainsAnExistingCustomerEnrichment()
+    {
+        var outputFile = Path.Combine(Path.GetTempPath(), $"se-gate-chain-{Guid.NewGuid():N}.ndjson");
+        var restore = SetEnvironment(new()
+        {
+            [Plugin.ApplicationSignalsEnabledConfig] = "false",
+            ["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "true",
+            ["OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE"] = outputFile,
+            ["RESOURCE_DETECTORS_ENABLED"] = "false",
+        });
+
+        try
+        {
+            ServiceEventsInstrumentation.ResetForTests();
+            var instrumentation = ServiceEventsInstrumentation.GetOrCreate(ServiceEventsConfig.FromEnvironment());
+            instrumentation.Initialize();
+            instrumentation.IsInitialized.Should().BeTrue();
+
+            var customerCalls = 0;
+            Exception? customerSaw = null;
+            var options = new AspNetCoreTraceInstrumentationOptions
+            {
+                EnrichWithException = (_, ex) =>
+                {
+                    customerCalls++;
+                    customerSaw = ex;
+                },
+            };
+
+            new Plugin().ConfigureTracesOptions(options);
+
+            using var source = new ActivitySource(TestSourceName);
+            using var listener = ListenTo(TestSourceName);
+            using var activity = source.StartActivity("ingress", ActivityKind.Server)!;
+            var thrown = Catch(() => throw new InvalidOperationException("boom"));
+
+            options.EnrichWithException!(activity, thrown);
+
+            customerCalls.Should().Be(1, "the customer's own enrichment must still be invoked exactly once");
+            customerSaw.Should().BeSameAs(thrown, "and it must receive the real exception, unaltered");
+
+            ExceptionCapture.TryRead(activity).Type.Should().Be(
+                "System.InvalidOperationException",
+                "chaining must not come at the cost of our own capture");
+        }
+        finally
+        {
+            ServiceEventsInstrumentation.ResetForTests();
+            restore();
+            if (File.Exists(outputFile))
+            {
+                File.Delete(outputFile);
+            }
+        }
+    }
+
+    /// <summary>A listener that samples everything, so StartActivity returns a real Activity.</summary>
+    private static ActivityListener ListenTo(string sourceName)
+    {
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == sourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+        return listener;
+    }
+
+    /// <summary>Throw and catch so the exception carries a real stack trace.</summary>
+    private static Exception Catch(Action throwing)
+    {
+        try
+        {
+            throwing();
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+
+        throw new InvalidOperationException("the action was expected to throw");
+    }
+
+    private static Action SetEnvironment(Dictionary<string, string?> values)
+    {
+        var previous = new Dictionary<string, string?>();
+        foreach (var (key, value) in values)
+        {
+            previous[key] = System.Environment.GetEnvironmentVariable(key);
+            System.Environment.SetEnvironmentVariable(key, value);
+        }
+
+        return () =>
+        {
+            foreach (var (key, value) in previous)
+            {
+                System.Environment.SetEnvironmentVariable(key, value);
+            }
+        };
     }
 
     /// <summary>

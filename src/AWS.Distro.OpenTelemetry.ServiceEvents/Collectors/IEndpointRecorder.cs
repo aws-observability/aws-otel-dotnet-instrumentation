@@ -13,6 +13,7 @@ internal interface IEndpointRecorder
     /// <summary>Record one completed HTTP request.</summary>
     void RecordRequest(string route, string method, int statusCode, long durationNs, string? errorType = null, string? functionName = null);
 
-    /// <summary>Attach an incident exemplar to an operation's window (called when M4 produces a snapshot).</summary>
+    /// <summary>Attach an incident exemplar to an operation's window (called when the incident-snapshot
+    /// collector produces a snapshot).</summary>
     void RecordIncidentExemplar(string operation, string snapshotId, string triggerType, string severity, long timestamp);
 }

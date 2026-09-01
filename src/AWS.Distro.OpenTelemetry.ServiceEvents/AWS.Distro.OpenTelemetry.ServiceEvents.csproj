@@ -38,13 +38,6 @@
 
     <!-- ASP.NET Core instrumentation hooks -->
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
-    <!-- Upstream OTel semantic-convention attribute keys, so the resource keys this project reads
-         and emits are not hand-typed. Same version the AutoInstrumentation project already uses;
-         1.0.0-rc9.9 is the only version ever published, so it cannot drift.
-         The members are `const`, which the compiler inlines, so this reference adds no runtime
-         dependency and ships no additional assembly. -->
-    <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
-
     <!-- Logging abstractions, version-pinned per target framework to match the AWS distro's pattern. -->
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />

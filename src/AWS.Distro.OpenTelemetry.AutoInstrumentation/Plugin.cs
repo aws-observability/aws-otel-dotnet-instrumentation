@@ -498,6 +498,33 @@ public class Plugin
         // ServiceEvents gets the type from the `error.type` tag instead, which the ASP.NET Core
         // instrumentation sets on the error path regardless of this option, and which is a type name
         // rather than a message. See EndpointActivityProcessor.ReadExceptionDetails.
+        //
+        // IncidentSnapshot additionally needs the message and stack trace, which no span tag carries.
+        // Those are captured through EnrichWithException, which hands us the live Exception without
+        // touching the span, and stashed privately on the Activity for ServiceEvents' own collectors
+        // to read. Gated on ServiceEvents actually running, for the same reason CallPathCapture is
+        // gated on an incident trigger existing: otherwise this allocates per failed request for a
+        // consumer that is not there.
+        if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+        {
+            // Chain rather than assign. This is the customer's options object and they may have set
+            // their own enrichment; overwriting it would silently delete their callback.
+            var customerEnrich = options.EnrichWithException;
+            options.EnrichWithException = (activity, exception) =>
+            {
+                try
+                {
+                    ServiceEventsInstrumentation.Current?.CaptureException(activity, exception);
+                }
+                catch (Exception captureEx)
+                {
+                    // Telemetry must never interfere with the customer's request pipeline.
+                    Logger.LogWarning(captureEx, "ServiceEvents exception capture failed.");
+                }
+
+                customerEnrich?.Invoke(activity, exception);
+            };
+        }
     }
 #endif
 
@@ -701,9 +728,8 @@ public class Plugin
     }
 
     // ServiceEvents is hosted by this plugin (rather than a separate plugin/DLL) so it ships and
-    // loads with the existing distribution — customers get the feature on upgrade with no
-    // OTEL_DOTNET_AUTO_PLUGINS change. Enablement follows Application Signals unless
-    // OTEL_AWS_SERVICE_EVENTS_ENABLED is set explicitly, and is always off in Lambda; that rule
+    // loads with the existing distribution, with no OTEL_DOTNET_AUTO_PLUGINS change. Enablement
+    // requires OTEL_AWS_SERVICE_EVENTS_ENABLED=true, and is always off in Lambda; that rule
     // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
     // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
     // shipped in the .NET Framework build.

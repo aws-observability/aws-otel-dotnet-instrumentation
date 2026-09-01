@@ -69,8 +69,8 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     {
         ArgumentException.ThrowIfNullOrEmpty(endpoint);
         this.endpoint = new Uri(endpoint);
-        this.logGroup = logGroup;
-        this.logStream = logStream;
+        this.logGroup = SanitizeHeaderValue(logGroup);
+        this.logStream = SanitizeHeaderValue(logStream);
     }
 
     /// <inheritdoc />
@@ -360,6 +360,45 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
         }
 
         return b.ToArray();
+    }
+
+    /// <summary>
+    /// Strip anything from a header value that could terminate the header line.
+    /// </summary>
+    /// <remarks>
+    /// These values are attached with <c>TryAddWithoutValidation</c>, which by design skips the
+    /// format checks — including the one for CR/LF. They originate in configuration
+    /// (<c>LOG_GROUP</c>, and <c>LOG_STREAM</c> which defaults to the service name, itself
+    /// resolvable from <c>OTEL_RESOURCE_ATTRIBUTES</c>), so a value carrying a newline could append
+    /// headers we never intended to send. Setting an environment variable already implies control of
+    /// the process, so this is not a privilege boundary — but a header value that can rewrite the
+    /// request is worth closing off where it enters, once, rather than reasoning about it at every
+    /// send.
+    /// </remarks>
+    /// <param name="value">Raw configured value.</param>
+    /// <returns>The value with CR, LF and NUL removed; null stays null.</returns>
+    private static string? SanitizeHeaderValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        if (value.IndexOf('\r') < 0 && value.IndexOf('\n') < 0 && value.IndexOf('\0') < 0)
+        {
+            return value;
+        }
+
+        var clean = new StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c is not ('\r' or '\n' or '\0'))
+            {
+                clean.Append(c);
+            }
+        }
+
+        return clean.ToString();
     }
 
     // ---- Minimal protobuf wire writer -------------------------------------------------------

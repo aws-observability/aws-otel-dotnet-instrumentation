@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 
@@ -84,10 +85,9 @@ public sealed record ServiceEventsConfig
     private static readonly ConcurrentDictionary<string, Regex?> GlobCache = new();
 
     /// <summary>
-    /// Gets the explicit master kill switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>:
-    /// <c>true</c> forces ServiceEvents on, <c>false</c> forces it off, and <c>null</c> means the
-    /// variable was unset and the Application-Signals bundling rule decides. See
-    /// <see cref="DetermineEnabled" />.
+    /// Gets the opt-in switch from <c>OTEL_AWS_SERVICE_EVENTS_ENABLED</c>: <c>true</c> enables
+    /// ServiceEvents, <c>false</c> disables it, and <c>null</c> means the variable was unset, which
+    /// leaves it disabled. See <see cref="DetermineEnabled" />.
     /// </summary>
     /// <remarks>
     /// Nullable because the rule genuinely has three cases and a plain <c>bool</c> cannot express
@@ -263,16 +263,12 @@ public sealed record ServiceEventsConfig
     /// supplied.</summary>
     public string DeploymentTimestamp { get; init; } = string.Empty;
 
-    /// <summary>Gets resource attributes from OTel detectors (cloud/host/container/k8s).</summary>
-    public ResourceAttributes ResourceAttributes { get; init; } = new();
-
     /// <summary>
     /// Build a <see cref="ServiceEventsConfig" /> from environment variables, applying
     /// the defaults from this class for missing values.
     /// </summary>
-    /// <param name="resourceAttributes">Optional resource attributes from OTel detectors.</param>
     /// <returns>A populated config.</returns>
-    public static ServiceEventsConfig FromEnvironment(ResourceAttributes? resourceAttributes = null)
+    public static ServiceEventsConfig FromEnvironment()
     {
         var defaults = new ServiceEventsConfig();
 
@@ -323,19 +319,16 @@ public sealed record ServiceEventsConfig
             DeploymentId = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_ID", defaults.DeploymentId),
             DeploymentUrl = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_URL", defaults.DeploymentUrl),
             DeploymentTimestamp = GetString("OTEL_AWS_SERVICE_EVENTS_DEPLOYMENT_TIMESTAMP", defaults.DeploymentTimestamp),
-
-            ResourceAttributes = resourceAttributes ?? new ResourceAttributes(),
         };
     }
 
     /// <summary>
-    /// Decide whether ServiceEvents should run, applying the bundling
-    /// rule:
+    /// Decide whether ServiceEvents should run:
     /// <list type="bullet">
     /// <item><description>Lambda is always disabled (detected via <c>AWS_LAMBDA_FUNCTION_NAME</c>).</description></item>
-    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=true</c> wins.</description></item>
-    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=false</c> wins.</description></item>
-    /// <item><description>Unset → follow <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED</c>.</description></item>
+    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=true</c> enables it.</description></item>
+    /// <item><description>Explicit <c>OTEL_AWS_SERVICE_EVENTS_ENABLED=false</c> disables it.</description></item>
+    /// <item><description>Unset → disabled: ServiceEvents is opt-in.</description></item>
     /// </list>
     /// </summary>
     /// <param name="config">The config to evaluate.</param>
@@ -355,7 +348,9 @@ public sealed record ServiceEventsConfig
             return explicitFlag;
         }
 
-        return config.ApplicationSignalsEnabled;
+        // Opt-in: Application Signals supplies endpoints (see ValidateEndpoints) but no longer
+        // decides whether ServiceEvents runs.
+        return false;
     }
 
     /// <summary>
@@ -411,6 +406,14 @@ public sealed record ServiceEventsConfig
     /// </summary>
     /// <param name="operation">Operation string, e.g. <c>"GET /users/{id}"</c>.</param>
     /// <returns>The threshold in milliseconds.</returns>
+    /// <remarks>
+    /// Re-parses <see cref="LatencyThresholds" /> on each call. Deliberate: the expensive part was
+    /// compiling a regex per pattern per call, and <see cref="GlobMatches" /> now caches those, so
+    /// what remains is splitting a short configured string. Memoizing the parse on the instance would
+    /// mean caching derived state on a record, where a <c>with</c> expression copies the cache while
+    /// replacing the source list — a stale-cache trap worse than the work it saves. If this ever
+    /// shows up in a profile, the fix belongs in the caller, which can parse once at construction.
+    /// </remarks>
     public double GetLatencyThresholdMs(string operation)
     {
         foreach (var (pattern, thresholdMs) in this.GetLatencyThresholdPatterns())
@@ -432,7 +435,7 @@ public sealed record ServiceEventsConfig
     /// <returns><c>true</c> if the endpoint should be tracked.</returns>
     public bool ShouldTrackEndpoint(string route, string method)
     {
-        var endpointStr = $"{method.ToUpperInvariant()} {route}";
+        var endpointStr = HttpOperationResolver.ResolveOperation(method, route);
 
         if (this.EndpointIncludePatterns.Count > 0)
         {
@@ -535,8 +538,7 @@ public sealed record ServiceEventsConfig
             return false;
         }
 
-        // An unrecognised value is not a decision. Treated as unset so the bundling rule applies,
-        // rather than silently reading as false and disabling the feature on a typo.
+        // An unrecognised value is not a decision, so it reads as unset and therefore disabled.
         return null;
     }
 
