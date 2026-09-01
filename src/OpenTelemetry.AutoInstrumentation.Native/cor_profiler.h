@@ -247,7 +247,7 @@ public:
     void AddDerivedInstrumentations(WCHAR* id, CallTargetDefinition* items, int size);
     // Phase-2 line-probe PoC (AWS Distro DI). Additive export — mirrors AddInstrumentations.
     void AddLineProbes(WCHAR* id, LineProbeDefinition* items, int size);
-    void RemoveLineProbe(int probeId); // N2 removal
+    void RemoveLineProbe(int probeId); // per-probe removal
     void InitializeTraceMethods(WCHAR* id,
                                 WCHAR* integration_assembly_name_ptr,
                                 WCHAR* integration_type_name_ptr,

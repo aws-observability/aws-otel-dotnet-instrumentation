@@ -5,7 +5,6 @@ using System.Text.Json;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
@@ -18,6 +17,7 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
 {
     private const string EventName = "aws.dynamic_instrumentation.snapshot";
     private const string ScopeName = "aws.dynamic_instrumentation";
+    private const string ScopeVersion = "1.0";
 
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;
@@ -35,8 +35,15 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
     /// </summary>
     /// <param name="logsEndpoint">The OTLP logs endpoint; no exporter is added when null/empty.</param>
     /// <param name="registry">The registry used to enrich snapshots with config metadata.</param>
+    /// <param name="diagnosticsLogger">
+    /// Sink for the exporter's own failures. NOT the logger snapshots travel on — that one is the isolated
+    /// factory built below, and logging export failures onto it would feed the failing export itself.
+    /// </param>
     /// <returns>A configured emitter.</returns>
-    public static DISnapshotOtlpEmitter Create(string? logsEndpoint, InstrumentationRegistry? registry)
+    public static DISnapshotOtlpEmitter Create(
+        string? logsEndpoint,
+        InstrumentationRegistry? registry,
+        ILogger? diagnosticsLogger = null)
     {
         var factory = LoggerFactory.Create(builder =>
         {
@@ -45,9 +52,9 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 options.IncludeFormattedMessage = false;
                 options.IncludeScopes = false;
 
-                // BEFORE AddOtlpExporter, and the order is load-bearing: processors run in registration
-                // order, and the exporter is itself the last processor in that chain. Registered after it,
-                // this would stamp records the exporter had already serialized.
+                // BEFORE the exporter, and the order is load-bearing: processors run in registration order,
+                // and the exporter is itself the last processor in that chain. Registered after it, this
+                // would stamp records the exporter had already serialized.
                 options.AddProcessor(new SnapshotTraceContextProcessor());
 
                 // No endpoint => no exporter => snapshots are dropped (not buffered). NOT reachable from
@@ -57,35 +64,15 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
                 // inside the Uri constructor.
                 if (!string.IsNullOrEmpty(logsEndpoint))
                 {
-                    options.AddOtlpExporter(otlp =>
-                    {
-                        otlp.Endpoint = new Uri(logsEndpoint);
-
-                        // PINNED, and deliberately NOT read from OTEL_EXPORTER_OTLP_PROTOCOL or
-                        // OTEL_EXPORTER_OTLP_LOGS_PROTOCOL.
-                        //
-                        // The other DI SDKs pin the transport by CHOOSING THE HTTP EXPORTER TYPE, so none of
-                        // them exposes a protocol knob for snapshots: Java builds
-                        // OtlpHttpLogRecordExporter.builder().setEndpoint(...) in
-                        // DynamicInstrumentationManager, Python imports OTLPLogExporter from
-                        // opentelemetry.exporter.otlp.proto.http._log_exporter in _snapshot_otlp_emitter.py,
-                        // and JS imports it from @opentelemetry/exporter-logs-otlp-http. Reading the variable
-                        // here would make .NET the only SDK where a generic distro-wide setting — set for
-                        // traces and metrics — silently redirects snapshots onto a transport the snapshot
-                        // consumer does not accept.
-                        //
-                        // Setting it explicitly is required regardless, because unlike those three we get the
-                        // protocol from an options object rather than from the exporter type, and the SDK's own
-                        // default is OTLP/gRPC. Measured with no protocol set, exporting to
-                        // http://127.0.0.1:PORT/v1/logs put "PRI * HTTP/2.0" (the HTTP/2 preface for gRPC) on
-                        // the wire against the HTTP endpoint the docs tell operators to configure, and every
-                        // snapshot was silently lost.
-                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
-
-                        // Bound each export so a wedged endpoint can't block the drain thread and grow the
-                        // queue unboundedly. 10s matches the OTLP/HTTP spec default.
-                        otlp.TimeoutMilliseconds = 10_000;
-                    });
+                    // DiOtlpLogExporter rather than AddOtlpExporter: the stock exporter can only ship the
+                    // capture tree as one JSON string, because OTel .NET's LogRecord.Body is string-only.
+                    //
+                    // This also makes the transport OTLP/HTTP-protobuf BY CONSTRUCTION rather than by setting
+                    // OtlpExporterOptions.Protocol, so OTEL_EXPORTER_OTLP_PROTOCOL can no longer redirect
+                    // snapshots onto gRPC. Java, Python and JS pin it the same way — by choosing the HTTP
+                    // exporter type — and expose no protocol knob for snapshots either.
+                    options.AddProcessor(new global::OpenTelemetry.BatchLogRecordExportProcessor(
+                        new DiOtlpLogExporter(logsEndpoint, ScopeName, ScopeVersion, diagnosticsLogger)));
                 }
             });
         });
@@ -100,12 +87,16 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
 
         var level = capture.Type == CaptureType.METHOD ? "method" : "line";
 
+        var logState = new SnapshotLogState(capture, config, level, FormatBody(capture));
+
+        // The formatter returns the already-serialized tree rather than rebuilding it, so the body is
+        // serialized exactly once per snapshot however the SDK is configured.
         this.logger.Log(
             LogLevel.Information,
             new EventId(0, EventName),
-            new SnapshotLogState(capture, config, level),
+            logState,
             null,
-            (state, _) => FormatBody(state));
+            static (state, _) => state.BodyJson);
     }
 
     public void Dispose()
@@ -113,9 +104,8 @@ internal sealed class DISnapshotOtlpEmitter : IDISnapshotEmitter, IDisposable
         this.loggerFactory.Dispose();
     }
 
-    private static string FormatBody(SnapshotLogState state)
+    private static string FormatBody(PendingCapture capture)
     {
-        var capture = state.Capture;
         var body = new Dictionary<string, object?>();
 
         // Captures section.

@@ -55,7 +55,7 @@ public class PdbReaderTests
     [Fact]
     public void Resolve_RequestedLocal_ResolvesToTheSlotThatIsAlreadyAssignedAtThatOffset()
     {
-        // R-A REGRESSION LOCK — the trap that caught the R9 spike. A sequence point's offset is the
+        // R-A REGRESSION LOCK — the trap that caught the removal-under-load spike. A sequence point's offset is the
         // START of its statement, so injecting at the line that ASSIGNS a local reads the slot before
         // the assignment has run and silently yields 0. The reader must place the probe at the NEXT
         // statement boundary instead.

@@ -48,7 +48,7 @@ EXTERN_C VOID STDAPICALLTYPE AddLineProbes(WCHAR* id, trace::LineProbeDefinition
     return trace::profiler->AddLineProbes(id, items, size);
 }
 
-// N2 removal (AWS Distro DI). Additive export — remove one line probe by probeId and re-ReJIT.
+// per-probe removal (AWS Distro DI). Additive export — remove one line probe by probeId and re-ReJIT.
 EXTERN_C VOID STDAPICALLTYPE RemoveLineProbe(int probeId)
 {
     return trace::profiler->RemoveLineProbe(probeId);

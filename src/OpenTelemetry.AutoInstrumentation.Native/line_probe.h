@@ -43,7 +43,7 @@ enum LineProbeEmissionMode : INT32
     // call with NO gate: `ldc.i4 probeId; ldc.i4 <boxValue>; box System.Int32; call Capture`. Used as
     // the contrast case — it allocates on EVERY execution. Proves the gate is what avoids the alloc.
     LINE_EMIT_UNGATED_BOX = 2,
-    // G1 GATE (branch + EH relocation): read a SYNC local off a normal stack slot and box it, to
+    // BRANCH + EH RELOCATION GATE: read a SYNC local off a normal stack slot and box it, to
     // capture a real value (e.g. the loop variable) at an interior statement boundary in a method with
     // real control flow. Reuses the existing `boxValue` field as the LOCAL SLOT INDEX (no ABI change).
     //   `ldc.i4 <probeId>; ldloc <boxValue-as-slot>; box System.Int32; call CaptureLocal(int32,object)`
@@ -238,7 +238,7 @@ protected:
 class LineProbeRejitHandlerModuleMethod : public RejitHandlerModuleMethod
 {
 private:
-    // N2 FIX (multi-probe-per-method): a method handler now holds a VECTOR of line-probe requests, not
+    // MULTI-PROBE-PER-METHOD: a method handler now holds a VECTOR of line-probe requests, not
     // a single one. Several probes can target different interior offsets of the SAME method; the fork
     // previously kept only the first (singular unique_ptr) and silently dropped the rest — proven by
     // poc/N2MultiProbeE2E. The whole set is woven in one ILRewriter pass (one Import/Export per ReJIT).
@@ -264,7 +264,7 @@ public:
     // method). Deduplicates by (il_offset, probe_id) so repeat polls of the same config don't stack.
     void AddLineProbeRequest(const LineProbeRequest& request);
 
-    // N2 REMOVAL: drop one probe by probeId. Returns the number of probes REMOVED (0 or 1), not the
+    // PER-PROBE REMOVAL: drop one probe by probeId. Returns the number of probes REMOVED (0 or 1), not the
     // number remaining, so the caller does not have to compare a separate RequestCount taken outside the
     // lock — that comparison was itself a race. The caller re-ReJITs the method: ReJIT recompiles from the
     // ORIGINAL body (verified — see poc/N2MultiProbeE2E), so the re-weave applies exactly the survivor set.

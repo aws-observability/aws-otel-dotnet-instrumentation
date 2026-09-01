@@ -13,7 +13,7 @@
 namespace trace
 {
 
-// N2 FIX helpers. ProcessTypeDefForRejit is shared template code instantiated for BOTH
+// MULTI-PROBE helpers. ProcessTypeDefForRejit is shared template code instantiated for BOTH
 // IntegrationDefinition (CallTarget, one integration per method — unaffected) and LineProbeRequest
 // (line probes, multi-per-method). Overload resolution routes the append: the generic template is a
 // no-op (CallTarget never appends), the LineProbeRequest overload appends to the existing handler.
@@ -31,7 +31,7 @@ static void AppendRequestToExistingMethod(RejitHandlerModule* moduleHandler, mdM
     {
         auto lineHandler = static_cast<LineProbeRejitHandlerModuleMethod*>(existing);
         lineHandler->AddLineProbeRequest(request);
-        Logger::Info("N2: appended line probe (offset=", request.il_offset, " probeId=", request.probe_id,
+        Logger::Info("appended line probe (offset=", request.il_offset, " probeId=", request.probe_id,
                      ") to existing method handler for methodDef=", TokenStr(&methodDef));
     }
 }
@@ -156,7 +156,7 @@ void RejitPreprocessor<RejitRequestDefinition>::ProcessTypeDefForRejit(const Rej
             [=, request = definition, functionInfo = functionInfo](const mdMethodDef method, RejitHandlerModule* module)
         { return CreateMethod(method, module, functionInfo, request); };
 
-        // N2 FIX: if the method handler already exists, a 2nd+ probe for the SAME method must be APPENDED
+        // MULTI-PROBE: if the method handler already exists, a 2nd+ probe for the SAME method must be APPENDED
         // to it, not dropped. CreateMethodIfNotExists returns false when the handler already exists; in
         // that case we fetch it and add the probe. Only LineProbeRequest handlers support multi-probe
         // (the CallTarget path is one-integration-per-method and unaffected — this branch is compiled

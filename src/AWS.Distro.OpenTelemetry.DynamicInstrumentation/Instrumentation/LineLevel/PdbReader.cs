@@ -26,7 +26,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLe
 //  R-A (offset -> statement+1). A sequence point's IL offset is the START of its statement, i.e.
 //      BEFORE that statement's assignment has executed. To read the local assigned by statement k you
 //      must inject at the start of statement k+1. Injecting at statement k's own start reads a slot
-//      that is allocated but NOT YET ASSIGNED and silently yields 0/null. Proven live: the first R9
+//      that is allocated but NOT YET ASSIGNED and silently yields 0/null. Proven live: the first removal-under-load
 //      run captured a boxed 0 for every probe with no error anywhere.
 //
 //  R-B (instruction boundary + not a branch target). See IlBoundaryScanner. A branch-target offset

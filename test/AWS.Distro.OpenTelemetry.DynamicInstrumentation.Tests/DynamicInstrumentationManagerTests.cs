@@ -843,7 +843,7 @@ public class DynamicInstrumentationManagerTests : IDisposable
     [Fact]
     public void ShutdownThenReinitialize_ReRegistersConfigs()
     {
-        // Regression for C3: the applied-instrumentations set must be cleared on
+        // Regression guard: the applied-instrumentations set must be cleared on
         // Cleanup, otherwise after a restart OnConfigurationsChanged would register the
         // config into the fresh registry but skip re-applying it (stale "already applied"
         // key), leaving registry and applied-set diverged.

@@ -51,6 +51,7 @@ public class DISnapshotOtlpCreateWiringTests
                 var buffer = new byte[8192];
                 var read = connection.GetStream().Read(buffer, 0, buffer.Length);
                 received.AddRange(buffer.Take(read));
+                RespondOk(connection);
             }
             catch (SocketException)
             {
@@ -152,6 +153,7 @@ public class DISnapshotOtlpCreateWiringTests
                 var buffer = new byte[64];
                 var read = connection.GetStream().Read(buffer, 0, buffer.Length);
                 received = Encoding.ASCII.GetString(buffer, 0, read);
+                RespondOk(connection);
             }
             catch (SocketException)
             {
@@ -193,6 +195,15 @@ public class DISnapshotOtlpCreateWiringTests
         }
 
         return received;
+    }
+
+    // Answer the POST instead of dropping the connection: these tests only care about the bytes that went out,
+    // and an unanswered request makes the exporter burn its retries and its HTTP timeout on every one of them.
+    private static void RespondOk(TcpClient connection)
+    {
+        var response = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        connection.GetStream().Write(response, 0, response.Length);
+        connection.GetStream().Flush();
     }
 
     private static int IndexOfSequence(List<byte> haystack, byte[] needle)

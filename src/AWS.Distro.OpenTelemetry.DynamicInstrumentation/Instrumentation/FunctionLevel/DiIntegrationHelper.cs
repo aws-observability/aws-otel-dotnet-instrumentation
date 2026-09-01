@@ -311,7 +311,7 @@ internal static class DiIntegrationHelper
         DIDataStore.Enqueue(capture);
     }
 
-    // Resolves the config for a woven call. The callback carries no method identity (#3), so we
+    // Resolves the config for a woven call. The callback carries no method identity, so we
     // disambiguate co-located methods by arity (the parameter count, = args.Length). Falls back to a
     // type-only match when the arity index has no entry yet — e.g. a capture that fires before the
     // Apply-time IndexArities call, or a registry populated without applying (unit tests).

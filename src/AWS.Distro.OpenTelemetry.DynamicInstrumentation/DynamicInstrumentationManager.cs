@@ -8,6 +8,7 @@ using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLe
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.LineLevel;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Model;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Output;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation;
@@ -25,7 +26,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
     // Serializes OnConfigurationsChanged: the poller calls it from both poll threads. Lock order is always initLock -> configChangeLock.
     private readonly object configChangeLock = new();
 
-    // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
+    // Configs already handed to the profiler; applied once each. Cleared on Cleanup. Guarded by configChangeLock.
     // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity.
     //
     // WHY THE HASH AND NOT JUST THE KEY. An in-place edit of a probe (different captured arguments or locals, a
@@ -89,7 +90,12 @@ public sealed class DynamicInstrumentationManager : IDisposable
 
     /// <summary>Initializes the manager and starts configuration polling. Idempotent.</summary>
     /// <param name="config">The resolved configuration.</param>
-    public void Initialize(DynamicInstrumentationConfig config) => this.Initialize(config, null, null);
+    /// <param name="diagnosticsLogger">
+    /// Sink for DI's own failures (currently snapshot export). Supplied by the host plugin, which owns the
+    /// distro's console logger; silent when null.
+    /// </param>
+    public void Initialize(DynamicInstrumentationConfig config, ILogger? diagnosticsLogger = null) =>
+        this.Initialize(config, null, null, diagnosticsLogger);
 
     /// <summary>Stops polling and releases resources. Idempotent.</summary>
     public void Shutdown()
@@ -128,6 +134,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
     /// <param name="lineProbeTranslatorOverride">
     /// Replaces the line-level translator. Null builds the production one.
     /// </param>
+    /// <param name="diagnosticsLogger">Sink for DI's own failures; silent when null.</param>
     // A TEST SEAM, and it exists because branch coverage proved a real blind spot rather than because it
     // seemed tidy. Both translators end in a P/Invoke to the native profiler, which is absent from a test
     // process — so ApplyInstrumentation and ApplyLineProbe ALWAYS fail there, and every path downstream of a
@@ -143,7 +150,8 @@ public sealed class DynamicInstrumentationManager : IDisposable
     internal void Initialize(
         DynamicInstrumentationConfig config,
         ProfilerTranslator? profilerTranslatorOverride,
-        LineProbeTranslator? lineProbeTranslatorOverride)
+        LineProbeTranslator? lineProbeTranslatorOverride,
+        ILogger? diagnosticsLogger = null)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -184,7 +192,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                 // reports READY/ERROR via statusReporter, and woven captures begin enqueuing immediately, so
                 // the collector must already be draining. The emitter routes snapshots to the configured OTLP
                 // logs endpoint and is enriched from the registry.
-                this.snapshotEmitter = DISnapshotOtlpEmitter.Create(config.LogsEndpoint, this.registry);
+                this.snapshotEmitter = DISnapshotOtlpEmitter.Create(config.LogsEndpoint, this.registry, diagnosticsLogger);
                 this.snapshotCollector = new DISnapshotCollector(this.snapshotEmitter, this.cts.Token);
                 this.snapshotCollector.Start();
 
@@ -408,7 +416,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                     this.statusReporter?.MarkApplied(config);
 
                     // Index the woven arities so the capture hot path resolves this call by (type, arity),
-                    // disambiguating co-located methods that differ in parameter count (#3). A same-arity
+                    // disambiguating co-located methods that differ in parameter count. A same-arity
                     // collision (two configured methods on one type with the same parameter count) can't be
                     // told apart by args.Length, so captures may be misattributed — report OVERLOADED_METHODS
                     // on EVERY config in the ambiguous bucket (both the incoming one and its already-applied
@@ -590,7 +598,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
         this.client = null;
         this.httpClient = null;
 
-        // Reset the capture engine; clear appliedInstrumentations with the registry so they don't diverge on restart (C3).
+        // Reset the capture engine; clear appliedInstrumentations with the registry so they don't diverge on restart.
         // configChangeLock guards against interleaving with an in-flight callback (order: initLock -> configChangeLock).
         this.registry = null;
         this.profilerTranslator = null;

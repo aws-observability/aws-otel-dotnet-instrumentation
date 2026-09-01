@@ -57,7 +57,7 @@ public:
     bool RequestRejitForInlinersInModule(ModuleID moduleId);
     virtual MethodRewriter* GetMethodRewriter() = 0;
 
-    // N2 REMOVAL: RTTI-free downcast hook. Base returns nullptr; the line-probe handler overrides to
+    // PER-PROBE REMOVAL: RTTI-free downcast hook. Base returns nullptr; the line-probe handler overrides to
     // return itself. Lets the removal scan tell line handlers from CallTarget handlers without
     // dynamic_cast (profiler native is frequently built -fno-rtti). Forward-declared return type.
     virtual class LineProbeRejitHandlerModuleMethod* AsLineProbeHandler() { return nullptr; }
@@ -114,7 +114,7 @@ public:
     bool ContainsMethod(mdMethodDef methodDef);
     bool TryGetMethod(mdMethodDef methodDef, /* OUT */ RejitHandlerModuleMethod** methodHandler);
 
-    // N2 REMOVAL: scan this module's line-probe method handlers for probeId; if found, drop it and
+    // PER-PROBE REMOVAL: scan this module's line-probe method handlers for probeId; if found, drop it and
     // OUT the methodDef so the caller can re-ReJIT. Returns true if removed. Line-path only.
     bool RemoveLineProbeByProbeId(int probeId, /* OUT */ mdMethodDef* methodDef);
 
@@ -152,7 +152,7 @@ public:
     void RemoveModule(ModuleID moduleId);
     bool HasModuleAndMethod(ModuleID moduleId, mdMethodDef methodDef);
 
-    // N2 REMOVAL: find the (module, method) whose LINE-PROBE handler carries probeId, drop that probe,
+    // PER-PROBE REMOVAL: find the (module, method) whose LINE-PROBE handler carries probeId, drop that probe,
     // and re-ReJIT the method (ReJIT recompiles from ORIGINAL, so the survivor set is re-woven). Returns
     // true if the probe was found and a re-ReJIT was requested. Additive; used only by the line path.
     bool RemoveLineProbeAndReRejit(int probeId, const std::vector<ModuleID>& candidateModules);

@@ -39,9 +39,7 @@ internal sealed class LineProbeTranslator : IDisposable
     /// </summary>
     // Each captured local adds a `call` (and, for a value type, a `box`) to the customer's line. On a line
     // inside a hot loop that cost is paid on every iteration, so an operator pasting a long name list would
-    // silently slow their own service. 5 matches the practical ceiling of what fits in a readable snapshot;
-    // Datadog's comparable limit is per-object field count (20), not per-line locals, so there is no vendor
-    // number to mirror here.
+    // silently slow their own service. 5 is the practical ceiling of what fits in a readable snapshot.
     internal const int MaxLocalsPerLine = 5;
 
     /// <summary>

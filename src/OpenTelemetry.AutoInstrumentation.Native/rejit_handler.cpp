@@ -3,7 +3,7 @@
 
 #include "rejit_handler.h"
 
-#include "line_probe.h" // N2 removal: LineProbeRejitHandlerModuleMethod
+#include "line_probe.h" // per-probe removal: LineProbeRejitHandlerModuleMethod
 #include "logger.h"
 #include "stats.h"
 
@@ -397,7 +397,7 @@ bool RejitHandler::RemoveLineProbeAndReRejit(int probeId, const std::vector<Modu
         return false;
     }
 
-    // REVERT-THEN-REJIT (Datadog's documented strategy): RequestReJIT on an ALREADY-rejitted method
+    // REVERT-THEN-REJIT: RequestReJIT on an ALREADY-rejitted method
     // FAILS — the CLR won't move a method to a NEW rejit version without a revert first. AND both calls
     // must run on the WORK-OFFLOADER thread: calling them inline from the P/Invoke caller thread throws
     // CORPROF_E_UNSUPPORTED_CALL_SEQUENCE (0x80131363). So we OFFLOAD the whole revert→rejit sequence,

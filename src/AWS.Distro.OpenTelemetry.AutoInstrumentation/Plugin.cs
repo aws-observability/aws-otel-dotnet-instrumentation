@@ -691,7 +691,8 @@ public class Plugin
                 return;
             }
 
-            DynamicInstrumentationManager.Instance.Initialize(config);
+            // Pass the distro's logger so a failing snapshot export is visible; DI has no logger of its own.
+            DynamicInstrumentationManager.Instance.Initialize(config, Logger);
         }
         catch (Exception ex)
         {

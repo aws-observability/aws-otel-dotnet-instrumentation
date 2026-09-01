@@ -11,7 +11,7 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Tests.Instrumentation.
 // These cross the managed/native boundary as bare integers with no type checking on either side. If the
 // two enums drift, the rewriter emits a DIFFERENT IL sequence than intended and the failure is silent:
 // the wrong callback is called, or a value arrives unboxed. No compiler and no marshaler can catch it,
-// and a fire-count test cannot either — the R9 spike had four probes firing the expected 200 times each
+// and a fire-count test cannot either — the removal-under-load spike had four probes firing the expected 200 times each
 // while all silently using probe[0]'s callback. Hence an explicit value lock.
 //
 // Source of truth (line_probe.h, verified in the fork):

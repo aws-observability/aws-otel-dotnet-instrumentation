@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "cor_profiler.h"
-#include <algorithm> // N2 removal: std::remove_if
+#include <algorithm> // per-probe removal: std::remove_if
 
 #include "corhlpr.h"
 #include <corprof.h>
@@ -1280,7 +1280,7 @@ void CorProfiler::AddLineProbes(WCHAR* id, LineProbeDefinition* items, int size)
     Logger::Info("AddLineProbes: Total line probes in profiler: ", line_probe_requests_.size());
 }
 
-// N2 REMOVAL: remove one line probe by probeId and re-ReJIT its method (survivor set re-woven, or
+// PER-PROBE REMOVAL: remove one line probe by probeId and re-ReJIT its method (survivor set re-woven, or
 // pristine body restored if it was the last). Additive export; mirrors AddLineProbes' shim discipline.
 void CorProfiler::RemoveLineProbe(int probeId)
 {

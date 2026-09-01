@@ -7,7 +7,7 @@
 
 #include "line_probe.h"
 
-#include <algorithm> // std::remove_if (N2 removal)
+#include <algorithm> // std::remove_if (per-probe removal)
 #include <map>       // std::map (per-method box-token memoization). Compiles without it here only through
                      // a transitive include; naming it keeps the MSVC and libstdc++ legs honest.
 #include "clr_helpers.h"
@@ -492,7 +492,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     const bool isUngatedBox = (request->emission_mode == LINE_EMIT_UNGATED_BOX) && !isAsyncHoistedCapture;
     const bool isBoxGate    = isGatedBox || isUngatedBox;
 
-    // G1: sync local capture — `ldc.i4 probeId; ldloc <slot>; box; call CaptureLocal(int32,object)`.
+    // SYNC LOCAL CAPTURE — `ldc.i4 probeId; ldloc <slot>; box; call CaptureLocal(int32,object)`.
     //
     // MUTUALLY EXCLUSIVE WITH THE ASYNC PATH BY CONSTRUCTION. The emission chain below tests isLocalCapture
     // BEFORE isAsyncHoistedCapture, so a request carrying BOTH a LOCAL_CAPTURE mode and a hoisted token would
@@ -617,7 +617,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     hr = rewriter.GetInstrFromOffset(request->il_offset, &targetInstr);
     if (FAILED(hr) || targetInstr == nullptr)
     {
-        // N2: skip THIS probe (bad offset), keep weaving the rest — a per-probe fail-safe rather than
+        // PER-PROBE FAIL-SOFT: skip THIS probe (bad offset), keep weaving the rest — a per-probe fail-safe rather than
         // aborting the whole method. Others already emitted into this rewriter remain.
         Logger::Warn("*** LineProbe_Rewrite(): il_offset ", request->il_offset,
                      " is not an instruction boundary. Skipping this probe. HR=", HResultStr(hr));
@@ -625,12 +625,12 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
         continue;
     }
 
-    // G1 SAFETY GATE: refuse to inject at an EH-clause STRUCTURAL boundary. InsertBefore(targetInstr)
+    // EH SAFETY GATE: refuse to inject at an EH-clause STRUCTURAL boundary. InsertBefore(targetInstr)
     // prepends the probe IL to targetInstr, so if targetInstr is the FIRST instruction of a try, a
     // handler, or a filter, the injected sequence would fall OUTSIDE the clause it belongs to (an EH
     // region must begin exactly at its first instruction — the injected code would either land in the
-    // wrong protected region or violate the "empty eval stack at region entry" rule). Datadog's line
-    // debugger imposes the same constraint. We compare INSTRUCTION POINTERS: `targetInstr` was resolved
+    // wrong protected region or violate the "empty eval stack at region entry" rule).
+    // We compare INSTRUCTION POINTERS: `targetInstr` was resolved
     // from the same offset->instr map (m_pOffsetToInstr) that ImportEH used to set the clause-begin
     // pointers, so a pointer match means the requested offset is exactly that clause boundary. (Note:
     // ILInstr::m_offset is only assigned during Export, so an offset compare here would be wrong.)
@@ -696,7 +696,7 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     }
     else if (isLocalCapture)
     {
-        // G1 GATE sync local capture: read a normal stack local and box it, so we capture a REAL value
+        // SYNC LOCAL CAPTURE: read a normal stack local and box it, so we capture a REAL value
         // (e.g. the loop variable) at an interior statement boundary in a method with real control flow.
         //   ldc.i4 <probeId>        ; arg0 = probeId
         //   ldloc  <slot>           ; the local to capture (slot index carried in box_value)
@@ -716,8 +716,8 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     }
     else if (isAsyncHoistedCapture)
     {
-        // ASYNC / ITERATOR emission (mirrors Datadog's AsyncLineDebuggerInvoker reading hoisted locals off
-        // the state machine). At a mid-MoveNext offset:
+        // ASYNC / ITERATOR emission (hoisted locals are read off the state machine). At a mid-MoveNext
+        // offset:
         //   ldc.i4 <probeId>          ; arg0 = probeId
         //   ldarg.0                   ; `this` == the state-machine instance
         //   ldfld  <hoistedFieldTok>  ; read the hoisted local (this.<total>5__2)
@@ -754,11 +754,11 @@ HRESULT LineProbeMethodRewriter::Rewrite(RejitHandlerModule* moduleHandler, Reji
     Logger::Info("*** LineProbe_Rewrite(): wove probeId=", request->probe_id, " at ilOffset=",
                  request->il_offset, " (", wovenCount, "/", requests.size(), ") in ", caller->type.name, ".",
                  caller->name, "()");
-    } // end per-probe loop (N2 FIX)
+    } // end per-probe loop
 
     if (wovenCount == 0)
     {
-        // N2 REMOVAL: reaching here with an EMPTY request set (vs all-offsets-skipped) is the
+        // PER-PROBE REMOVAL: reaching here with an EMPTY request set (vs all-offsets-skipped) is the
         // remove-to-zero case. ReJIT recompiled from the ORIGINAL body and we injected nothing, so
         // Export()ing now writes back the pristine method — a clean physical un-instrument. (If instead
         // requests was non-empty but every offset was skipped, Export of the untouched-original is
