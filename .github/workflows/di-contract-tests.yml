@@ -1,23 +1,14 @@
 name: Dynamic Instrumentation Contract Tests
 
-# Focused contract-test signal for Dynamic Instrumentation. The full contract suite also runs in
-# pr-build.yml's `contract-test` job (pytest over the whole contract-tests dir); this workflow runs only the
-# di suite and is scoped to DI-related paths for a faster, targeted signal.
+# Focused DI signal: runs only the di suite, path-scoped for speed. Merge gating still comes from
+# pr-build.yml's `contract-test` job, which runs the whole contract-tests dir with no path filter.
 #
-# Follows the serviceevents-contract-tests.yml pattern and EXTENDS its path list: this one also fires on the
-# shared pieces a DI run depends on — set-up-contract-tests.sh, build-and-install-distro.sh and the
-# amazon/base test harness. Without those, a change to the harness or the image build can break the DI suite
-# while this workflow stays silent and only the full job catches it.
-
-# The path list is duplicated across the two triggers because GitHub does not expand YAML anchors in
-# workflow files. Keep the two copies in step.
+# Follows serviceevents-contract-tests.yml but EXTENDS its path list, because a DI run also depends on the
+# AutoInstrumentation plugin that hosts DI (Plugin.cs calls InitializeDynamicInstrumentation and
+# OnTracerProviderInitialized; its csproj copies the DI DLL into the distribution) and on the two shell
+# scripts this job runs. Without those, a harness or image-build change breaks DI while this stays silent.
 #
-# WHAT BELONGS IN IT: everything this suite's result actually depends on. The DI project is the obvious one,
-# but the AutoInstrumentation plugin HOSTS DI (Plugin.cs calls InitializeDynamicInstrumentation and
-# OnTracerProviderInitialized, and its csproj is what copies the DI DLL into the distribution), and the two
-# shell scripts below are what this job runs to build and install that distribution -- a change to any of
-# them can break DI while leaving this workflow unfired. Anything more distant is covered by pr-build.yml's
-# `contract-test` job, which has no path filter at all.
+# The path list is duplicated across both triggers because GitHub does not expand YAML anchors here.
 on:
   pull_request:
     paths:

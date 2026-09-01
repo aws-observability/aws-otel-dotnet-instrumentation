@@ -95,11 +95,10 @@ pip3 install sqlalchemy psycopg2-binary
 
 # Create mock-collector image
 cd contract-tests/images/mock-collector
-docker build . -t aws-application-signals-mock-collector
-if [ $? = 1 ]; then
+docker build . -t aws-application-signals-mock-collector || {
   echo "Docker build for mock collector failed"
   exit 1
-fi
+}
 
 # Create mock-di-api image — stands in for the local CloudWatch Agent that serves Dynamic Instrumentation
 # probe configurations and receives status reports. Built by name rather than by the applications/* loop
@@ -141,13 +140,15 @@ do
       --build-arg "OTEL_AUTO_INSTRUMENTATION_VERSION=${otel_auto_instrumentation_version}" \
       --build-arg "OTEL_INSTRUMENTATION_VERSION=${otel_instrumentation_version}" \
       -t "aws-application-signals-tests-${application}-app" \
-      -f "${dir}/Dockerfile"
+      -f "${dir}/Dockerfile" || {
+      echo "Docker build for ${application} application failed"
+      exit 1
+    }
   else
-    docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile"
-  fi
-  if [ $? = 1 ]; then
-    echo "Docker build for ${application} application failed"
-    exit 1
+    docker build . -t "aws-application-signals-tests-${application}-app" -f "${dir}/Dockerfile" || {
+      echo "Docker build for ${application} application failed"
+      exit 1
+    }
   fi
   applications_built=$((applications_built + 1))
 done
