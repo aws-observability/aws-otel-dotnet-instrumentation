@@ -52,6 +52,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      # DynamicInstrumentation references OpenTelemetry.AutoInstrumentation.dll from the unpacked
+      # OpenTelemetry distribution, so build.cmd must download/unpack it before restore/build/pack.
+      - name: Build distribution
+        run: .\build.cmd
+
       - name: Install dependencies
         run: dotnet restore .\src\AWS.Distro.OpenTelemetry.AutoInstrumentation /p:_IsPacking=true
 
