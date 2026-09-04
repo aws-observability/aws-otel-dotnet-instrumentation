@@ -570,10 +570,6 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     }
 
     /// <summary>
-    /// Time left for an export attempt: <see cref="Timeout.InfiniteTimeSpan" /> while running normally,
-    /// otherwise what remains of the shutdown deadline, floored at zero.
-    /// </summary>
-    /// <summary>
     /// Move the shutdown deadline earlier, never later.
     /// </summary>
     /// <remarks>
@@ -600,6 +596,10 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
         }
     }
 
+    /// <summary>
+    /// Time left for an export attempt: <see cref="Timeout.InfiniteTimeSpan" /> while running normally,
+    /// otherwise what remains of the shutdown deadline, floored at zero.
+    /// </summary>
     /// <returns>The remaining time, or <see cref="Timeout.InfiniteTimeSpan" />.</returns>
     private TimeSpan RemainingShutdownTime()
     {
