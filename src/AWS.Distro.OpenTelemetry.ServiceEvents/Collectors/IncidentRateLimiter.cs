@@ -44,7 +44,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 internal sealed class IncidentRateLimiter
 {
     /// <summary>Maximum distinct error hashes tracked per window (cardinality guard).</summary>
-    private const int MaxErrorHashEntries = 1000;
+    internal const int MaxErrorHashEntries = 1000;
 
     /// <summary>
     /// Window length. Fixed, because the cap is defined as a per-minute rate.

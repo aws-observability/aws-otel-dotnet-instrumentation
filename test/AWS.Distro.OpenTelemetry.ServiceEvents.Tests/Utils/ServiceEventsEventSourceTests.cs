@@ -111,13 +111,14 @@ public class ServiceEventsEventSourceTests
         ServiceEventsEventSource.Log.IncidentDropped(ServiceEventsEventSource.DropReason.RateLimit, "GET " + Marker);
         ServiceEventsEventSource.Log.ExportAbandonedOnShutdown(Marker + "/endpoint", 0);
         ServiceEventsEventSource.Log.OutputFileRotated(Marker + "/out.json", 1024L);
+        ServiceEventsEventSource.Log.ComponentFailed(Marker + "Component", new InvalidOperationException(Marker + " component boom"));
 
         var events = listener.Events
             .Where(e => e.Payload!.OfType<string>().Any(p => p.Contains(Marker, StringComparison.Ordinal)))
             .ToList();
 
         events.Select(e => e.EventId).Should().BeEquivalentTo(
-            new[] { 1, 2, 3, 4, 5, 6 },
+            new[] { 1, 2, 3, 4, 5, 6, 7 },
             "every declared event should have been delivered exactly once");
 
         var export = events.Single(e => e.EventId == 1);

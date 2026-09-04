@@ -38,15 +38,34 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     /// Time the log export pipeline may spend draining during shutdown.
     /// </summary>
     /// <remarks>
-    /// Sized against the same window as <see cref="ShutdownBudget.Default" />: the collectors get that
-    /// budget, this drain follows them, and the two together have to fit inside the runtime's
-    /// process-exit allowance. This is what the SDK passes to the exporter's shutdown hook, which the
-    /// exporter then uses to bound each attempt, so the value has to be a realistic slice of the exit
-    /// window rather than the SDK's 30-second default. Overrunning the window is worse than dropping
-    /// the last batch: the process is terminated mid-flush, losing it regardless, having delayed the
-    /// host's shutdown to do so.
+    /// <para>
+    /// The drain follows the collectors' <see cref="ShutdownBudget.Default" />, and the two together have
+    /// to fit inside the runtime's process-exit allowance. Overrunning it is worse than dropping the last
+    /// batch: the process is terminated mid-flush, losing it regardless, having delayed the host to do so.
+    /// </para>
+    /// <para>
+    /// Chosen against two measured bounds rather than picked to look tidy. Below, a healthy flush must
+    /// finish: an export to a live endpoint costs single-digit milliseconds warm, but the first one pays
+    /// connection setup, and on a loaded host that reaches about a second — a 1000 ms budget was observed
+    /// abandoning successful loopback exports in CI, which is telemetry lost for no benefit. Above, only
+    /// values under 5000 buy anything at all: <c>LoggerProviderSdk.Dispose</c> hardcodes
+    /// <c>Processor?.Shutdown(5000)</c>, so that is what teardown costs without a budget of our own, and
+    /// anything at or beyond it is decoration.
+    /// </para>
+    /// <para>
+    /// 3000 sits clear of both: roughly three times the observed cost of a healthy flush, and still a
+    /// meaningful reduction of the worst case the SDK would otherwise allow. The earlier 1000 was
+    /// reasoned from the exit window alone without measuring what a successful export costs, which put it
+    /// inside the range where healthy and pathological flushes overlap — the one place the value must not
+    /// be.
+    /// </para>
+    /// <para>
+    /// This is passed to <see cref="ServiceEventsOtlpLogExporter.BeginShutdown" /> from
+    /// <c>DisposeProviders</c>, not to the batch processor. It is deliberately not the processor's
+    /// <c>exporterTimeoutMilliseconds</c>, which OTel .NET 1.16.0 accepts and never reads.
+    /// </para>
     /// </remarks>
-    internal const int ShutdownExportTimeoutMs = 1000;
+    internal const int ShutdownExportTimeoutMs = 3000;
 
     private static readonly object InitLock = new();
 
@@ -59,6 +78,10 @@ public sealed class ServiceEventsInstrumentation : IDisposable
 
     private ILoggerFactory? generalLoggerFactory;
     private MeterProvider? meterProvider;
+
+    // Retained solely so DisposeProviders can arm its shutdown deadline before the SDK drains the
+    // batch queue. Null on the file-output path, which builds no OTLP exporter.
+    private ServiceEventsOtlpLogExporter? logExporter;
     private Meter? meter;
     private ServiceEventsOtlpEmitter? emitter;
     private DeploymentEventEmitter? deploymentEventEmitter;
@@ -320,9 +343,27 @@ public sealed class ServiceEventsInstrumentation : IDisposable
             .Build();
     }
 
-    private static ILoggerFactory BuildLoggerFactory(ServiceEventsConfig config, Dictionary<string, object> resourceAttrs)
+    /// <summary>
+    /// Build the logger factory for the general signal pipeline.
+    /// </summary>
+    /// <param name="config">Resolved configuration.</param>
+    /// <param name="resourceAttrs">Resource attributes to stamp on every record.</param>
+    /// <param name="logExporter">
+    /// Receives the OTLP exporter instance when one is built, or <c>null</c> on the file-output path.
+    /// Surfaced because <see cref="DisposeProviders" /> has to arm its shutdown deadline before the
+    /// SDK's drain starts; see <see cref="ServiceEventsOtlpLogExporter.BeginShutdown" />.
+    /// </param>
+    /// <returns>The configured factory.</returns>
+    private static ILoggerFactory BuildLoggerFactory(
+        ServiceEventsConfig config,
+        Dictionary<string, object> resourceAttrs,
+        out ServiceEventsOtlpLogExporter? logExporter)
     {
-        return LoggerFactory.Create(builder =>
+        // Assigned from inside the configure callback below, which LoggerFactory.Create runs
+        // synchronously, so it is populated before this method returns.
+        ServiceEventsOtlpLogExporter? captured = null;
+
+        var factory = LoggerFactory.Create(builder =>
         {
             builder.AddOpenTelemetry(options =>
             {
@@ -347,11 +388,19 @@ public sealed class ServiceEventsInstrumentation : IDisposable
                 // format requires. OTel .NET's string-only LogRecord.Body makes the stock
                 // exporter emit a stringified body + wrong scope. See ServiceEventsOtlpLogExporter.
                 //
-                // exporterTimeoutMilliseconds is set rather than left at the SDK's 30s default,
-                // because that default governs the shutdown drain and is an order of magnitude past
-                // the window ServiceEvents is allowed to spend exiting (see ShutdownBudget). The
-                // exporter clamps its own attempts to whatever the SDK grants it; this makes what the
-                // SDK grants match the intent.
+                // exporterTimeoutMilliseconds is deliberately NOT set. In OTel .NET 1.16.0 it has no
+                // effect: BatchExportProcessor stores it, hands it to the worker and exposes it as a
+                // property, and nothing reads it — the export is a bare Exporter.Export(batch) with no
+                // timeout and no cancellation token. An earlier version of this code passed
+                // ShutdownExportTimeoutMs here and claimed it bounded the shutdown drain; measured
+                // against an endpoint that accepts and never answers, teardown took the same ~5s at
+                // every value including 1. What actually governs the drain is a hardcoded constant in
+                // LoggerProviderSdk.Dispose, which calls Processor?.Shutdown(5000).
+                //
+                // The drain is bounded instead by arming the exporter's deadline from our own teardown,
+                // before the SDK's drain begins — see DisposeProviders and
+                // ServiceEventsOtlpLogExporter.BeginShutdown. That is why the exporter instance is
+                // surfaced through the out parameter rather than constructed and forgotten here.
                 //
                 // maxQueueSize and scheduledDelayMilliseconds are deliberately left at their defaults
                 // (2048 records, 5s). The queue is generous for this signal's volume, which the
@@ -359,11 +408,13 @@ public sealed class ServiceEventsInstrumentation : IDisposable
                 // own drops on its own diagnostic channel. The 5s delay adds latency between a
                 // collector's flush and the network write, which is acceptable for telemetry and not
                 // worth changing without evidence.
-                options.AddProcessor(new BatchLogRecordExportProcessor(
-                    new ServiceEventsOtlpLogExporter(endpoint, config.LogGroup, config.LogStream),
-                    exporterTimeoutMilliseconds: ShutdownExportTimeoutMs));
+                captured = new ServiceEventsOtlpLogExporter(endpoint, config.LogGroup, config.LogStream);
+                options.AddProcessor(new BatchLogRecordExportProcessor(captured));
             });
         });
+
+        logExporter = captured;
+        return factory;
     }
 
     private static MeterProvider BuildMeterProvider(ServiceEventsConfig config, Dictionary<string, object> resourceAttrs)
@@ -422,12 +473,24 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         // its request and what remains, so the total stays inside the window while any single step
         // may still use most of it when the others finish early.
         //
-        // The provider disposals at the end are bounded separately rather than by this budget. They
-        // are the network flush, and neither ILoggerFactory nor MeterProvider takes a timeout on
-        // Dispose — the SDK derives it from the processor's configured export timeout, which is why
-        // ShutdownExportTimeoutMs is passed where the batch processor is built. An earlier version of
-        // this comment claimed those steps received whatever remained of this budget; they never did,
-        // and until that timeout was set they inherited the SDK's 30s default.
+        // The provider disposals at the end are NOT bounded by this budget, and cannot be: neither
+        // ILoggerFactory nor MeterProvider takes a timeout on Dispose. What they use instead is a
+        // hardcoded SDK constant — LoggerProviderSdk.Dispose calls Processor?.Shutdown(5000) and
+        // MeterProviderSdk.Dispose calls Reader?.Shutdown(5000) — which no configuration influences.
+        // Two earlier versions of this comment were wrong about this: the first claimed the disposals
+        // received whatever remained of this budget, the second claimed the SDK derived their timeout
+        // from the batch processor's configured export timeout. Neither is true.
+        //
+        // So the log drain is bounded the only way available: by arming the exporter's own deadline
+        // immediately before the logger factory is disposed, which is the last moment we control before
+        // the SDK's drain starts. See ServiceEventsOtlpLogExporter.BeginShutdown for why the exporter's
+        // OnShutdown hook cannot do this (the SDK calls it after the drain, not before).
+        //
+        // The metric drain is knowingly left unbounded. meterProvider?.Dispose() reaches
+        // Reader.Shutdown(5000) with the stock OTLP exporter at its own 10s default, so its worst case
+        // is the 5s the SDK allows. Arming it as tightly as the log path would also clip the ordinary
+        // 60s-interval exports, since the same exporter serves both, and that trade is not obviously
+        // right — the exposure is a slower exit, not lost data the log path would have saved.
         //
         // Every call below must therefore use the Dispose(budget) overload. The parameterless
         // IDisposable.Dispose() on these types starts a *fresh* budget, which is correct for
@@ -443,40 +506,52 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         {
             this.incidentSnapshotCollector?.Dispose(budget);
         }
-        catch
-        { /* swallow */
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.ComponentFailed(nameof(IncidentSnapshotCollector) + ".Dispose", ex);
         }
 
         try
         {
             this.endpointCollector?.Dispose(budget);
         }
-        catch
-        { /* swallow */
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.ComponentFailed(nameof(EndpointMetricCollector) + ".Dispose", ex);
         }
 
         try
         {
             this.deploymentEventEmitter?.Dispose(budget);
         }
-        catch
-        { /* swallow */
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.ComponentFailed(nameof(DeploymentEventEmitter) + ".Dispose", ex);
         }
+
+        // Arm the drain's deadline here, not inside the exporter's shutdown hook. This is the last point
+        // we control before the SDK starts draining the batch queue, and that hook runs after the drain
+        // rather than before it. The budget is its own slice rather than whatever remains above: the
+        // collector budget and this one are sequential parts of the exit window, so handing the drain the
+        // collectors' leftovers would usually give it nothing.
+        this.logExporter?.BeginShutdown(TimeSpan.FromMilliseconds(ShutdownExportTimeoutMs));
 
         try
         {
             this.generalLoggerFactory?.Dispose();
         }
-        catch
-        { /* swallow */
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.ComponentFailed("GeneralLoggerFactory.Dispose", ex);
         }
 
         try
         {
             this.meterProvider?.Dispose();
         }
-        catch
-        { /* swallow */
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.ComponentFailed("MeterProvider.Dispose", ex);
         }
 
         this.endpointCollector = null;
@@ -485,6 +560,7 @@ public sealed class ServiceEventsInstrumentation : IDisposable
         this.deploymentEventEmitter = null;
         this.generalLoggerFactory = null;
         this.meterProvider = null;
+        this.logExporter = null;
         this.meter?.Dispose();
         this.meter = null;
         this.emitter = null;
@@ -522,7 +598,8 @@ public sealed class ServiceEventsInstrumentation : IDisposable
     {
         var resourceAttrs = this.BuildResourceAttributes();
 
-        this.generalLoggerFactory = BuildLoggerFactory(this.config, resourceAttrs);
+        this.generalLoggerFactory = BuildLoggerFactory(this.config, resourceAttrs, out var builtLogExporter);
+        this.logExporter = builtLogExporter;
         this.meterProvider = BuildMeterProvider(this.config, resourceAttrs);
         this.meter = new Meter(ServiceEventsOtlpEmitter.InstrumentationScopeName, ServiceEventsOtlpEmitter.InstrumentationScopeVersion);
 
