@@ -55,8 +55,18 @@ public sealed class InstrumentationConfiguration
     /// <summary>Gets the type-and-method key for this target.</summary>
     public string MethodKey => $"{this.TypeName}.{this.MethodName}";
 
-    /// <summary>Gets the unique key for this instrumentation, including line for line-level.</summary>
-    public string InstrumentationKey => this.IsLineLevel ? $"{this.MethodKey}:{this.LineNumber}" : this.MethodKey;
+    /// <summary>Gets the unique key for this instrumentation, including line for line-level and the type.</summary>
+    // THE TYPE IS PART OF THE KEY. A PROBE and a method-level BREAKPOINT on one method are two independent
+    // configurations with their own LocationHash, status and MaxHits budget, but both carry LineNumber 0 — so
+    // a key of MethodKey alone made them collide, and the registry's AddOrUpdate silently discarded whichever
+    // registered first. The operator got one snapshot stream for two configurations, with no error anywhere.
+    //
+    // Two configurations of the SAME type on one method still collide. The backend has not been observed
+    // issuing that, and LocationHash-keying (which would separate them) would also make an in-place edit look
+    // like remove+add, changing retire/status semantics — so this stays the narrow fix.
+    public string InstrumentationKey => this.IsLineLevel
+        ? $"{this.MethodKey}:{this.LineNumber}:{this.Type}"
+        : $"{this.MethodKey}:{this.Type}";
 
     /// <summary>Parses a configuration from an API JSON element.</summary>
     /// <param name="element">The JSON element for a single configuration.</param>

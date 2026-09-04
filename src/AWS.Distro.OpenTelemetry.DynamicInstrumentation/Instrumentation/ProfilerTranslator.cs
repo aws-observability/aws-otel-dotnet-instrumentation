@@ -39,7 +39,7 @@ internal sealed class ProfilerTranslator
 
     /// <summary>
     /// Applies instrumentation and reports the profiler-supported arities that were woven, so the caller
-    /// can index them for arity-aware capture resolution (#3). <paramref name="appliedArities"/> is
+    /// can index them for arity-aware capture resolution. <paramref name="appliedArities"/> is
     /// non-empty only when the result is <see cref="InstrumentationApplyResult.Applied"/>.
     /// </summary>
     /// <param name="config">The configuration to apply.</param>
