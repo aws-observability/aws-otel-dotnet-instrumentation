@@ -15,8 +15,22 @@ namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation;
 internal sealed class ProfilerTranslator
 {
     private const int MaxSupportedParams = 9;
-    private const string IntegrationAssembly = "AWS.Distro.OpenTelemetry.DynamicInstrumentation";
-    private const string IntegrationTypePrefix = "AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel.DiIntegration";
+
+    /// <summary>Assembly and type-name stem the native profiler is told to weave calls to.</summary>
+    // DERIVED FROM THE REAL SYMBOLS, not typed out, because these two strings cross into the native
+    // profiler and nothing on either side checks them. Renaming the assembly, moving the namespace, or
+    // renaming DiIntegrationN would leave a hardcoded literal COMPILING happily and then binding to
+    // nothing at runtime: the profiler weaves a call to a type that does not exist, and the failure is a
+    // MethodAccessException or a silently-never-fires probe rather than a build error. typeof/nameof make
+    // the compiler the thing that notices.
+    //
+    // The trailing arity digit is stripped off nameof(DiIntegration0). There are exactly ten of these types
+    // (0..9) because MaxSupportedParams is 9, so the suffix is always ONE character.
+    private static readonly string IntegrationAssembly =
+        typeof(FunctionLevel.DiIntegration0).Assembly.GetName().Name!;
+
+    private static readonly string IntegrationTypePrefix =
+        $"{typeof(FunctionLevel.DiIntegration0).Namespace}.{nameof(FunctionLevel.DiIntegration0)[..^1]}";
 
     private readonly Action<string, NativeCallTargetDefinition[], int>? addInstrumentationsOverride;
     private readonly Func<InstrumentationConfiguration, MethodResolution?> resolveMethod;
@@ -39,7 +53,7 @@ internal sealed class ProfilerTranslator
 
     /// <summary>
     /// Applies instrumentation and reports the profiler-supported arities that were woven, so the caller
-    /// can index them for arity-aware capture resolution (#3). <paramref name="appliedArities"/> is
+    /// can index them for arity-aware capture resolution. <paramref name="appliedArities"/> is
     /// non-empty only when the result is <see cref="InstrumentationApplyResult.Applied"/>.
     /// </summary>
     /// <param name="config">The configuration to apply.</param>
@@ -50,9 +64,12 @@ internal sealed class ProfilerTranslator
     {
         appliedArities = Array.Empty<int>();
 
+        // Line-level is a different weave entirely (interior IL offset, not a method boundary) and is owned
+        // by LineProbeTranslator. Reaching here with a line-level config means the manager routed it wrong,
+        // so Skipped is the right answer rather than an attempt to weave a boundary for it.
         if (!config.IsMethodLevel)
         {
-            return InstrumentationApplyResult.Skipped; // Line-level requires C++ extension (Phase 2)
+            return InstrumentationApplyResult.Skipped;
         }
 
         if (IsUnsupportedTarget(config))

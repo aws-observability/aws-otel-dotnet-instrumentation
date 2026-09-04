@@ -1,0 +1,137 @@
+UPSTREAM BASE — vendored native profiler source
+================================================
+
+This directory is a VENDORED COPY of the native CLR profiler from
+open-telemetry/opentelemetry-dotnet-instrumentation, plus a local delta that adds
+mid-method (line-level) IL injection. It is Apache-2.0 on both sides.
+
+Upstream repository : https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation
+Upstream tag        : v1.16.0
+Upstream commit     : b61301e099ad662679ccd8dd3f89b212190c1800
+Upstream subtree    : src/OpenTelemetry.AutoInstrumentation.Native
+Vendored on         : 2026-08-03
+Delta re-measured   : 2026-08-20 (against a sparse checkout of the pinned commit)
+Files vendored      : 544 (103 own source files + 441 files under lib/, already
+                      vendored BY UPSTREAM: lib/coreclr 7.8 MB, lib/spdlog 1.1 MB)
+Files here          : 548 = the 544 above + line_probe.{h,cpp} + this file
+                      + IMPLEMENTATION-STATUS.md
+
+Verified 2026-08-20 by fetching b61301e into a scratch clone and comparing every path both
+ways: ZERO upstream files missing from this copy, and the only paths present here and not
+upstream are the four listed above. That check is the one that catches a partial vendoring,
+which otherwise surfaces only at dlopen (see "THE FAILURE MODE" below).
+
+WHY THIS FILE EXISTS
+--------------------
+Without a recorded base commit, the first rebase onto a newer upstream has nothing to
+diff against. That is not a cosmetic problem: an incomplete merge here produces a
+binary that COMPILES CLEAN AND FAILS ONLY AT dlopen (see "THE FAILURE MODE" below).
+The base commit is what makes `git diff <base>..<new-tag> -- <subtree>` a reliable
+answer to "what did upstream change under me."
+
+THE LOCAL DELTA (line-level line probes)
+----------------------------------------
+RE-MEASURED 2026-08-20 against b61301e with the command below, not estimated and not adjusted by
+hand. Nine modified files (+289, -1) and two new source files (1104 lines):
+
+  NEW    line_probe.h                                  303 lines
+  NEW    line_probe.cpp                                801 lines
+  MOD    cor_profiler.cpp                             +112
+  MOD    rejit_handler.cpp                             +84
+  MOD    rejit_preprocessor.cpp                        +34 -1
+  MOD    interop.cpp                                  +18    (AddLineProbes / RemoveLineProbe /
+                                                              GetLineProbeWeaveResults exports)
+  MOD    CMakeLists.txt                               +16    (source list + pthread, see below)
+  MOD    rejit_handler.h                              +11
+  MOD    cor_profiler.h                                +9
+  MOD    OpenTelemetry.AutoInstrumentation.Native.def   +3    (exported symbols)
+  MOD    OpenTelemetry.AutoInstrumentation.Native.vcxproj +2  (Windows source list)
+
+File counts at the same measurement: upstream 544, ours 548 (the four extra are line_probe.{h,cpp}
+plus this file and IMPLEMENTATION-STATUS.md; `build/` is gitignored and excluded).
+
+Reproduce (this is how the numbers above were obtained):
+
+  git init /tmp/up && cd /tmp/up
+  git remote add origin https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation
+  git config core.sparseCheckout true
+  git sparse-checkout set --no-cone "src/OpenTelemetry.AutoInstrumentation.Native"
+  git fetch --depth 1 origin b61301e099ad662679ccd8dd3f89b212190c1800
+  git checkout FETCH_HEAD
+  diff -ru /tmp/up/src/OpenTelemetry.AutoInstrumentation.Native <this directory>
+
+The figures before this measurement (+275/-1, new files 231/641) were themselves measured, on
+2026-08-20, and went stale within the day when the per-probe weave log landed (line_probe.{h,cpp},
+cor_profiler.cpp, interop.cpp, the .def). The ones before THOSE (+297/-1, new files 193/464) were
+taken at vendoring time on 2026-08-03 and had drifted in BOTH directions: the new files grew as non-int local capture,
+async hoisted-field reads and multi-local capture landed, while the modified-file total came
+DOWN as review moved logic out of upstream's files into line_probe.cpp. Re-measure with the
+command above rather than adjusting by hand — a stale number here is worse than no number,
+because the only reason this file exists is to be trustworthy at rebase time.
+
+PTHREAD LINK — A DELTA UPSTREAM DOES NOT HAVE
+---------------------------------------------
+CMakeLists.txt additionally gains `find_package(Threads REQUIRED)` and `Threads::Threads` on the
+ISLINUX link line. This is OURS, not upstream's, and it is required by the old-glibc build:
+
+  glibc >= 2.34 folded libpthread INTO libc, so on a modern build host pthread_create resolves
+  from libc.so.6 and no DT_NEEDED entry is emitted. Upstream builds their released binaries that
+  way, and `readelf -d` on their shipped .so confirms it lists only libm/libc/ld-linux — no
+  libpthread. On glibc 2.23 libpthread is still separate, so the same source produces a library
+  that BUILDS AND LINKS CLEAN, loads fine on a modern distro, and fails at dlopen on an old one:
+
+      undefined symbol: pthread_create
+
+  Measured, not assumed: `ldd -r` reported pthread_create as the ONLY unresolved symbol.
+
+  Consequence for rebasing: do NOT drop this hunk when re-applying the delta. Upstream has no
+  reason to add it, so it will not appear in their tree, and losing it re-introduces a defect that
+  only the dlopen gate on an old-glibc image can see.
+
+The delta is purely ADDITIVE (one deleted line total) and touches none of the
+CallTarget function-level path. That is what bounds rebase drift.
+
+Exports added by the delta, absent from the stock upstream binary:
+  AddLineProbes
+  RemoveLineProbe
+
+NOTHING IS FETCHED AT BUILD TIME
+--------------------------------
+Verified, not assumed: `CMakeLists.txt` contains no add_subdirectory, find_package,
+FetchContent, or ExternalProject, and no own source file includes a path escaping this
+directory. The only `#include "../..."` occurrences are inside lib/coreclr headers that
+none of our translation units reach (eventtracebase.h, formattype.h, stgpool.h).
+
+THE FAILURE MODE TO KNOW ABOUT — READ BEFORE REBASING
+-----------------------------------------------------
+An incomplete vendored tree BUILDS SUCCESSFULLY and fails only when the CLR tries to
+load the profiler. A missing source file yields a shared library with an undefined
+symbol; `ldd` still reports it as loadable. Only a real dlopen + dlsym catches it.
+Two consequences:
+
+  1. A green build is NOT evidence that the binary loads. Every RID must pass a
+     dlopen+dlsym gate (LoadLibrary+GetProcAddress on Windows) that asserts the SYMBOL
+     resolves, not merely that the library opens.
+  2. After any rebase, re-check the source lists. Upstream adding a .cpp means adding
+     it in TWO places, which are maintained independently:
+       - CMakeLists.txt  (non-Windows)
+       - OpenTelemetry.AutoInstrumentation.Native.vcxproj  (Windows; lists sources
+         explicitly, so an omission here is a LINK error on Windows only)
+
+VERSION PIN
+-----------
+The native profiler locates its managed half by strong name, built from
+OTEL_AUTO_VERSION_MAJOR (version.h → ASSEMBLY_VERSION → otel_profiler_constants.h).
+It must be built with UPSTREAM's major version, not this distro's. See
+build/Build.NativeProfiler.cs for the pin and the assertion that enforces it.
+
+REBASE CHECKLIST
+----------------
+  1. git diff b61301e099ad662679ccd8dd3f89b212190c1800..<new-tag> \
+       -- src/OpenTelemetry.AutoInstrumentation.Native
+  2. Re-apply the 11-file delta above; confirm the two exports survive in
+     interop.cpp and the .def.
+  3. Confirm every .cpp on disk appears in BOTH CMakeLists.txt and the .vcxproj.
+  4. Build all 5 shipped RIDs (glibc x64/arm64, musl x64/arm64, windows).
+  5. dlopen + dlsym gate per RID, on a MINIMUM-glibc image.
+  6. Update the commit, tag, and date at the top of this file.

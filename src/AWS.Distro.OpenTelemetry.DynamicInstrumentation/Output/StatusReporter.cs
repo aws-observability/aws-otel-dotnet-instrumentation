@@ -34,6 +34,18 @@ internal sealed class StatusReporter : IDisposable
     private readonly CancellationToken ct;
     private readonly object gate = new();
 
+    // Ran at the top of every reporting period, before any status is built.
+    //
+    // EXISTS FOR OUT-OF-BAND FAILURES — ones nobody asked about, that arrive between config polls. The line
+    // probe's weave verdict is the case: the native rewriter decides it on a ReJIT thread whenever the target
+    // method first runs, and the configuration poller latches on an unchanged fingerprint, so it may never
+    // call back again. Without a periodic hook, a probe reported READY that the rewriter declined would stay
+    // READY forever in an app whose probe set has settled.
+    //
+    // A DELEGATE, not a dependency on the line-probe stack: this class knows about configs and HTTP, and
+    // pulling the native profiler into it would make the whole status path untestable without a profiler.
+    private readonly Action? beforeReport;
+
     // Status-dedup keyed by LocationHash (config identity), NOT InstrumentationKey (type+method): matches
     // the Java/JS reference SDKs so an in-place config change (new LocationHash) or a remove-then-re-add
     // re-reports READY/DISABLED. Cleared per-config on removal via Forget.
@@ -62,11 +74,16 @@ internal sealed class StatusReporter : IDisposable
     private long droppedStatuses;
     private int disposed;
 
-    public StatusReporter(DynamicInstrumentationClient client, InstrumentationRegistry registry, CancellationToken ct)
+    public StatusReporter(
+        DynamicInstrumentationClient client,
+        InstrumentationRegistry registry,
+        CancellationToken ct,
+        Action? beforeReport = null)
     {
         this.client = client;
         this.registry = registry;
         this.ct = ct;
+        this.beforeReport = beforeReport;
     }
 
     /// <summary>Gets the number of statuses dropped because the hand-off queue was full or closed.</summary>
@@ -280,11 +297,37 @@ internal sealed class StatusReporter : IDisposable
         }
     }
 
-    private void ReportStatuses()
+    /// <summary>
+    /// One reporting period: runs the pre-report hook, then emits DISABLED/ACTIVE for the registry.
+    /// </summary>
+    // Internal rather than private only so the hook contract above is testable; the timer is the sole
+    // production caller.
+    internal void ReportStatuses()
     {
         if (this.ct.IsCancellationRequested)
         {
             return;
+        }
+
+        // OUTSIDE THE GATE, AND FIRST IN THE PERIOD. Outside because the hook reports through ReportError,
+        // which takes the gate itself — running it inside would rely on Monitor's re-entrancy for correctness,
+        // which is the kind of thing that stops being true the moment someone adds a second lock.
+        //
+        // First because a config can legitimately produce BOTH an ERROR and an ACTIVE in one period: a
+        // multi-local line probe whose locals wove partially is genuinely capturing (ACTIVE) while one of its
+        // probes was refused (ERROR). Emitting the ACTIVE first would read, in order, as a probe that failed
+        // AFTER working — the opposite of what happened.
+        if (this.beforeReport != null)
+        {
+            try
+            {
+                this.beforeReport();
+            }
+            catch
+            {
+                // A hook that throws must not take the reporting period down with it: DISABLED and ACTIVE for
+                // every other config still need to go out. Consistent with Send's best-effort stance.
+            }
         }
 
         // Build the batch under the gate (protects the dedup sets + GetAll enumeration against the poller

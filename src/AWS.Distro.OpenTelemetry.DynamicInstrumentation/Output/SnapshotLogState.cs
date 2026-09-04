@@ -14,11 +14,16 @@ internal sealed class SnapshotLogState : IReadOnlyList<KeyValuePair<string, obje
 {
     private readonly List<KeyValuePair<string, object?>> attributes;
 
-    public SnapshotLogState(PendingCapture capture, InstrumentationConfiguration? config, string level)
+    public SnapshotLogState(PendingCapture capture, InstrumentationConfiguration? config, string level, string bodyJson)
     {
         this.Capture = capture;
+        this.BodyJson = bodyJson;
         this.attributes = new List<KeyValuePair<string, object?>>
         {
+            // The serialized capture tree, which DiOtlpLogExporter reconstructs into a real OTLP kvlist body
+            // and then drops. OTel .NET's LogRecord.Body is string-only, so an attribute is the only carrier.
+            new("body", bodyJson),
+
             new("event.name", "aws.dynamic_instrumentation.snapshot"),
             new("aws.di.snapshot_id", Guid.NewGuid().ToString()),
             new("aws.di.location_hash", capture.LocationHash),
@@ -55,6 +60,9 @@ internal sealed class SnapshotLogState : IReadOnlyList<KeyValuePair<string, obje
     }
 
     public PendingCapture Capture { get; }
+
+    /// <summary>Gets the serialized capture tree, also carried as the <c>body</c> attribute.</summary>
+    public string BodyJson { get; }
 
     public int Count => this.attributes.Count;
 

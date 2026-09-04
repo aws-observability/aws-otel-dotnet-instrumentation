@@ -475,3 +475,11 @@ lychee/out.md
 .terraform*
 terraform.tfstate
 terraform.tfstate.backup
+
+# Claude Code local agent/skill definitions
+.claude/
+
+# cmake output for the vendored native profiler. Spelled as a full path ON PURPOSE: a bare `build/` would
+# also ignore /build, the tracked Nuke build project. Holds CMakeCache.txt (which embeds absolute paths from
+# whichever machine configured it), object files, and fetched deps — ~34 MB that must never be committed.
+src/OpenTelemetry.AutoInstrumentation.Native/build/

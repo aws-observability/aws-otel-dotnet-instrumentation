@@ -24,7 +24,76 @@ permissions:
   contents: read
 
 jobs:
+  # Builds the VENDORED native profiler (src/OpenTelemetry.AutoInstrumentation.Native), which adds the
+  # AddLineProbes/RemoveLineProbe exports that line-level instrumentation needs and that the stock upstream
+  # binary does not have.
+  #
+  # WHY A SEPARATE JOB IN A CONTAINER, RATHER THAN A STEP IN `build`. The minimum glibc a binary can run on
+  # is fixed by the glibc of the machine that COMPILED it, not by any flag. ubuntu-latest would produce a
+  # binary requiring a glibc newer than many customers have. Building in ubuntu:16.04 (glibc 2.23) yields a
+  # GLIBC_2.18 floor — measured, and equal to upstream's own linux-x64 floor. This mirrors upstream's
+  # build-ubuntu1604-native-container.yml, which exists for exactly this reason.
+  #
+  # x64 ONLY for now. The dockerfile installs an x86_64 CMake, so it cannot build arm64 as written; the
+  # other four RIDs still ship the stock upstream native binary and therefore do not support line-level.
+  build-native-x64:
+    name: Build native profiler (linux-glibc-x64)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Build native profiler in old-glibc container
+        run: |
+          set -e
+          docker build -t adot-native-1604 -f ./docker/ubuntu1604-native.dockerfile ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project -w /project \
+            adot-native-1604 /bin/bash -c '
+              set -e
+              mkdir -p src/OpenTelemetry.AutoInstrumentation.Native/build
+              cd src/OpenTelemetry.AutoInstrumentation.Native/build
+              cmake ../ -DCMAKE_BUILD_TYPE=Release -DOTEL_AUTO_VERSION=1.16.0 \
+                -DOTEL_AUTO_VERSION_MAJOR=1 -DOTEL_AUTO_VERSION_MINOR=16 -DOTEL_AUTO_VERSION_PATCH=0
+              cmake --build . --config Release --parallel'
+
+      # Asserts the library LOADS and every required export resolves. Not redundant with the build
+      # succeeding: a source file missing from CMakeLists.txt still links, and `ldd` still calls the result
+      # loadable — only an eager load rejects it. Verified by mutation.
+      #
+      # Runs on the RUNNER (modern glibc), which proves the library is well-formed and complete. It does
+      # NOT prove the floor — see the next step for that.
+      - name: Assert the native profiler loads and exports resolve
+        run: bash build.sh AssertNativeProfilerLoads --skip Clean Restore
+
+      # The floor test the step above cannot be. A binary built against a newer glibc than a customer's
+      # loads fine here and fails there, so the only meaningful check is a load on the OLDEST supported
+      # glibc. That is what caught the missing pthread link: the library loaded on the runner and failed
+      # to dlopen on glibc 2.23 with "undefined symbol: pthread_create".
+      - name: Assert the native profiler loads on the MINIMUM glibc
+        run: |
+          set -e
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project -w /project \
+            adot-native-1604 /bin/bash -c '
+              set -e
+              LIB=src/OpenTelemetry.AutoInstrumentation.Native/build/bin/OpenTelemetry.AutoInstrumentation.Native.so
+              echo "container glibc: $(ldd --version | head -1)"
+              echo "library floor:   $(strings -a "$LIB" | grep -oE "GLIBC_2\.[0-9]+" | sort -uV | tail -1)"
+              readelf -d "$LIB" | grep NEEDED
+              gcc -o /tmp/gate build/native-gate/dlopen_gate.c -ldl
+              /tmp/gate "$LIB"'
+
+      - name: Upload native profiler
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: native-profiler-linux-glibc-x64
+          path: |
+            src/OpenTelemetry.AutoInstrumentation.Native/build/bin/OpenTelemetry.AutoInstrumentation.Native.so
+            src/OpenTelemetry.AutoInstrumentation.Native/build/bin/OpenTelemetry.AutoInstrumentation.Native.so.debug
+
   build:
+    needs: build-native-x64
     runs-on: ${{ matrix.os }}
     environment: ${{ inputs.environment }}
     strategy:
@@ -46,9 +115,26 @@ jobs:
             9.0.x
             10.0.x
 
+      # Only linux-glibc-x64 has a vendored native profiler today, so only that job downloads one. The
+      # Windows leg of this matrix ships upstream's binary and therefore does not support line-level.
+      #
+      # Placement matters: this MUST land before build.sh, because ReplaceNativeProfilerInDistribution runs
+      # inside the Workflow chain and keys off the presence of this file. Downloading it afterwards would
+      # leave the swap skipped and ship the stock profiler — silently, since a missing export is a normal
+      # runtime condition for the managed side.
+      - name: Download native profiler
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
+        with:
+          name: native-profiler-linux-glibc-x64
+          path: src/OpenTelemetry.AutoInstrumentation.Native/build/bin
+
+      # --build-native-profiler declares that this job's output MUST support line-level, so a missing
+      # native artifact fails the build instead of silently packing the stock upstream profiler (whose
+      # absent AddLineProbes export is a normal runtime condition the managed side tolerates).
       - name: Build on Linux
         if: runner.os == 'Linux'
-        run: bash build.sh
+        run: bash build.sh --build-native-profiler
 
       - name: Build on Windows
         if: runner.os == 'Windows'

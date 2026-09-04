@@ -41,12 +41,20 @@ internal sealed class SnapshotTraceContextProcessor : BaseProcessor<LogRecord>
         }
 
         // Both or neither — a TraceId without a SpanId is not a usable correlation target.
+        //
+        // PARSE BOTH BEFORE ASSIGNING EITHER. Assigning inside the try left the record HALF-APPLIED when the
+        // second parse threw: a well-formed trace id with a malformed span id stamped TraceId, then threw on
+        // SpanId, and the catch swallowed it — shipping a snapshot that names a trace but no span, and without
+        // the Recorded flag. That is a worse outcome than no context at all, because it looks correlatable.
         if (traceId != null && spanId != null)
         {
             try
             {
-                data.TraceId = ActivityTraceId.CreateFromString(traceId.AsSpan());
-                data.SpanId = ActivitySpanId.CreateFromString(spanId.AsSpan());
+                var parsedTraceId = ActivityTraceId.CreateFromString(traceId.AsSpan());
+                var parsedSpanId = ActivitySpanId.CreateFromString(spanId.AsSpan());
+
+                data.TraceId = parsedTraceId;
+                data.SpanId = parsedSpanId;
 
                 // A snapshot only exists because a probe fired, so it is sampled-in.
                 data.TraceFlags = ActivityTraceFlags.Recorded;

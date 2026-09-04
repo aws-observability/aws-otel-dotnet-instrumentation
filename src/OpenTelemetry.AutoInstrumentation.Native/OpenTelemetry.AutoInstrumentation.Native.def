@@ -1,0 +1,23 @@
+﻿LIBRARY "OpenTelemetry.AutoInstrumentation.Native.dll"
+
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE
+    GetAssemblyAndSymbolsBytes
+    IsProfilerAttached
+    AddInstrumentations
+    AddDerivedInstrumentations
+    AddLineProbes
+    RemoveLineProbe
+    GetLineProbeWeaveResults
+    SetSqlClientNetFxILRewriteEnabled
+    InitializeTraceMethods
+    ConfigureContinuousProfiler
+    ContinuousProfilerReadThreadSamples
+    ContinuousProfilerReadAllocationSamples
+    SelectiveSamplerReadThreadSamples
+    ContinuousProfilerSetNativeContext
+    ContinuousProfilerNotifySpanStopped
+    SelectiveSamplingStart
+    SelectiveSamplingStop
+    GetNetFrameworkRedirectionVersion

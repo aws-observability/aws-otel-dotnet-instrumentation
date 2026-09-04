@@ -1,0 +1,287 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{91B6272F-5780-4C94-8071-DBBA7B4F67F3}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>ClrProfiler</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <CORECLR_PATH>lib\coreclr</CORECLR_PATH>
+    <ProjectName>OpenTelemetry.AutoInstrumentation.Native</ProjectName>
+    <LIB_PATH>lib\</LIB_PATH>
+    <LIB_INCLUDES>$(CORECLR_PATH)\src\pal\prebuilt\inc;$(CORECLR_PATH)\src\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);$(LIB_PATH)spdlog\include</LIB_INCLUDES>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <LinkControlFlowGuard>true</LinkControlFlowGuard>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <LinkControlFlowGuard>true</LinkControlFlowGuard>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>bin\$(Configuration)\$(Platform)\static\</OutDir>
+    <IntDir>obj\$(Configuration)\$(Platform)\static\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>bin\$(Configuration)\x86\static\</OutDir>
+    <IntDir>obj\$(Configuration)\x86\static\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>bin\$(Configuration)\$(Platform)\static\</OutDir>
+    <IntDir>obj\$(Configuration)\$(Platform)\static\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>bin\$(Configuration)\x86\static\</OutDir>
+    <IntDir>obj\$(Configuration)\x86\static\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <OmitFramePointers>false</OmitFramePointers>
+      <ConformanceMode>true</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PreprocessorDefinitions>BIT64;HOST_64BIT;AMD64;_UNICODE;UNICODE;OTEL_AUTO_VERSION_MAJOR=$(OTEL_AUTO_VERSION_MAJOR);OTEL_AUTO_VERSION_MINOR=$(OTEL_AUTO_VERSION_MINOR);OTEL_AUTO_VERSION_PATCH=$(OTEL_AUTO_VERSION_PATCH);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(LIB_INCLUDES);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Link>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;X86;HOST_X86;OTEL_AUTO_VERSION_MAJOR=$(OTEL_AUTO_VERSION_MAJOR);OTEL_AUTO_VERSION_MINOR=$(OTEL_AUTO_VERSION_MINOR);OTEL_AUTO_VERSION_PATCH=$(OTEL_AUTO_VERSION_PATCH);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(LIB_INCLUDES);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Link>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <ConformanceMode>true</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PreprocessorDefinitions>_TARGET_64BIT;BIT64;HOST_64BIT;AMD64;_UNICODE;UNICODE;OTEL_AUTO_VERSION_MAJOR=$(OTEL_AUTO_VERSION_MAJOR);OTEL_AUTO_VERSION_MINOR=$(OTEL_AUTO_VERSION_MINOR);OTEL_AUTO_VERSION_PATCH=$(OTEL_AUTO_VERSION_PATCH);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(LIB_INCLUDES);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Link>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <CETCompat>true</CETCompat>
+      <DynamicBase>true</DynamicBase>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <ConformanceMode>true</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;X86;HOST_X86;OTEL_AUTO_VERSION_MAJOR=$(OTEL_AUTO_VERSION_MAJOR);OTEL_AUTO_VERSION_MINOR=$(OTEL_AUTO_VERSION_MINOR);OTEL_AUTO_VERSION_PATCH=$(OTEL_AUTO_VERSION_PATCH);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(LIB_INCLUDES);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Link>
+      <AdditionalLibraryDirectories>$(LIB_INCLUDES);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <CETCompat>true</CETCompat>
+      <DynamicBase>true</DynamicBase>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="assembly_redirection.h" />
+    <ClInclude Include="assembly_redirection_net.h" />
+    <ClInclude Include="assembly_redirection_netfx.h" />
+    <ClInclude Include="calltarget_tokens.h" />
+    <ClInclude Include="class_factory.h" />
+    <ClInclude Include="clr_runtime_capture.h" />
+    <ClInclude Include="com_ptr.h" />
+    <ClInclude Include="configuration.h" />
+    <ClInclude Include="continuous_profiler_clr_helpers.h" />
+    <ClInclude Include="continuous_profiler.h" />
+    <ClInclude Include="cor_profiler.h" />
+    <ClInclude Include="cor_profiler_base.h" />
+    <ClInclude Include="deployment_detection.h" />
+    <ClInclude Include="environment_variables.h" />
+    <ClInclude Include="environment_variables_parser.h" />
+    <ClInclude Include="environment_variables_util.h" />
+    <ClInclude Include="file_utils.h" />
+    <ClInclude Include="il_rewriter.h" />
+    <ClInclude Include="il_rewriter_wrapper.h" />
+    <ClInclude Include="integration.h" />
+    <ClInclude Include="clr_helpers.h" />
+    <ClInclude Include="line_probe.h" />
+    <ClInclude Include="logger.h" />
+    <ClInclude Include="logger_impl.h" />
+    <ClInclude Include="macros.h" />
+    <ClInclude Include="managed_profiler_location_helper.h" />
+    <ClInclude Include="member_resolver.h" />
+    <ClInclude Include="metadata_builder.h" />
+    <ClInclude Include="method_rewriter.h" />
+    <ClInclude Include="miniutf.hpp" />
+    <ClInclude Include="miniutfdata.h" />
+    <ClInclude Include="module_metadata.h" />
+    <ClInclude Include="native_symbol_resolver.h" />
+    <ClInclude Include="native_symbol_resolver_impl.h" />
+    <ClInclude Include="netfx_runtime_capture.h" />
+    <ClInclude Include="otel_profiler_constants.h" />
+    <ClInclude Include="pal.h" />
+    <ClInclude Include="profiler_api.h" />
+    <ClInclude Include="regex_utils.h" />
+    <ClInclude Include="rejit_handler.h" />
+    <ClInclude Include="rejit_preprocessor.h" />
+    <ClInclude Include="rejit_work_offloader.h" />
+    <ClInclude Include="runtime_capture.h" />
+    <ClInclude Include="safe_native_walk_service.h" />
+    <ClInclude Include="signature_builder.h" />
+    <ClInclude Include="stack_capturer.h" />
+    <ClInclude Include="stack_capture_types.h" />
+    <ClInclude Include="stack_walker.h" />
+    <ClInclude Include="stack_walker_impl.h" />
+    <ClInclude Include="stack_walk_guard.h" />
+    <ClInclude Include="startup_hook.h" />
+    <ClInclude Include="stats.h" />
+    <ClInclude Include="string_utils.h" />
+    <ClInclude Include="stub_generator.h" />
+    <ClInclude Include="suspension_guards.h" />
+    <ClInclude Include="thread_suspend.h" />
+    <ClInclude Include="tracer_tokens.h" />
+    <ClInclude Include="util.h" />
+    <ClInclude Include="version.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="calltarget_tokens.cpp" />
+    <ClCompile Include="class_factory.cpp" />
+    <ClCompile Include="clr_helpers.cpp" />
+    <ClCompile Include="clr_runtime_capture.cpp" />
+    <ClCompile Include="configuration.cpp" />
+    <ClCompile Include="continuous_profiler_clr_helpers.cpp" />
+    <ClCompile Include="continuous_profiler.cpp" />
+    <ClCompile Include="cor_profiler_base.cpp" />
+    <ClCompile Include="cor_profiler.cpp" />
+    <ClCompile Include="environment_variables_util.cpp" />
+    <ClCompile Include="il_rewriter.cpp" />
+    <ClCompile Include="il_rewriter_wrapper.cpp" />
+    <ClCompile Include="integration.cpp" />
+    <ClCompile Include="line_probe.cpp" />
+    <ClCompile Include="member_resolver.cpp" />
+    <ClCompile Include="metadata_builder.cpp" />
+    <ClCompile Include="method_rewriter.cpp" />
+    <ClCompile Include="miniutf.cpp" />
+    <ClCompile Include="native_symbol_resolver.cpp" />
+    <ClCompile Include="netfx_runtime_capture.cpp" />
+    <ClCompile Include="profiler_api_adapter.cpp" />
+    <ClCompile Include="regex_utils.cpp" />
+    <ClCompile Include="rejit_handler.cpp" />
+    <ClCompile Include="rejit_preprocessor.cpp" />
+    <ClCompile Include="rejit_work_offloader.cpp" />
+    <ClCompile Include="safe_native_walk_service.cpp" />
+    <ClCompile Include="stack_capturer.cpp" />
+    <ClCompile Include="stack_walk_guard.cpp" />
+    <ClCompile Include="string_utils.cpp" />
+    <ClCompile Include="stub_generator.cpp" />
+    <ClCompile Include="suspension_guards.cpp" />
+    <ClCompile Include="thread_suspend.cpp" />
+    <ClCompile Include="tracer_tokens.cpp" />
+    <ClCompile Include="util.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include="docs\README.md" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
