@@ -181,9 +181,11 @@ internal abstract class CollectorBase : IDisposable
         {
             this.Collect();
         }
-        catch
+        catch (Exception ex)
         {
-            // Telemetry must never crash the host. Drop and continue.
+            // Telemetry must never crash the host. Drop and continue — but say so, because this
+            // silently loses a whole flush window.
+            ServiceEventsEventSource.Log.CollectFailed(this.Name, ex);
         }
         finally
         {

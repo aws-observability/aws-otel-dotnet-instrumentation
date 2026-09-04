@@ -11,7 +11,7 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Tests.Collectors;
 /// rate limit + per-error dedup. Uses an injected clock to drive window roll-over
 /// deterministically.
 /// </summary>
-public class IncidentRateLimiterTests
+public partial class IncidentRateLimiterTests
 {
     // A controllable monotonic clock for deterministic window boundaries.
     private long now;
@@ -80,7 +80,7 @@ public class IncidentRateLimiterTests
             for (var i = 0; i < 500; i++)
             {
                 // One hash, so every thread contends for the same per-error counter.
-                if (limiter.CheckDeduplication("same-hash"))
+                if (limiter.CheckDeduplication("same-hash") == DedupOutcome.Admitted)
                 {
                     Interlocked.Increment(ref admitted);
                 }
@@ -104,6 +104,65 @@ public class IncidentRateLimiterTests
         limiter.CheckRateLimit().Should().BeFalse("the 4th call exceeds maxPerMinute=3");
     }
 
+    /// <summary>
+    /// A clock moving backwards must not reset the window, because that would admit a burst the cap was
+    /// configured to refuse.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The step has to cross a window boundary to mean anything: window index is
+    /// <c>clock / 60_000</c>, so a backwards step inside the same bucket changes no index and would
+    /// pass whatever the code did. Starting at exactly one window and stepping back into the previous
+    /// one is the smallest movement that lowers the index.
+    /// </para>
+    /// <para>
+    /// Mutation-verified: restoring the original <c>index != window.PeriodIndex</c> condition makes
+    /// this fail, because the lowered index then installs a fresh window and returns the cap to full.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void CheckRateLimit_WithClockSteppingBackwardsAcrossAWindow_DoesNotResetTheCap()
+    {
+        // One whole window in, so there is a previous bucket to fall back into.
+        this.now = 60_000;
+        var limiter = this.NewLimiter(maxPerMinute: 2);
+
+        limiter.CheckRateLimit().Should().BeTrue();
+        limiter.CheckRateLimit().Should().BeTrue();
+        limiter.CheckRateLimit().Should().BeFalse("the cap is spent");
+
+        // Index 1 -> index 0: a lower window, which must not be treated as a rollover.
+        this.now -= 5_000;
+
+        limiter.CheckRateLimit().Should().BeFalse(
+            "a clock moving backwards must not hand out a fresh window's worth of capacity");
+    }
+
+    /// <summary>
+    /// The per-error ceiling is likewise not reset by a clock moving backwards.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the global cap because they are separate counters on the window, and a reset
+    /// restores both. Suppressing this one wrongly is the more visible failure: the same error starts
+    /// producing snapshots again inside the minute it was meant to be deduplicated.
+    /// </remarks>
+    [Fact]
+    public void CheckDeduplication_WithClockSteppingBackwardsAcrossAWindow_DoesNotResetTheCeiling()
+    {
+        this.now = 60_000;
+        var limiter = this.NewLimiter(maxSameError: 1);
+        var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
+
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.PerErrorLimit);
+
+        this.now -= 5_000;
+
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.PerErrorLimit,
+            "a clock moving backwards must not clear the per-error count");
+    }
+
     [Fact]
     public void CheckRateLimit_ResetsAfterWindowRollover()
     {
@@ -125,9 +184,10 @@ public class IncidentRateLimiterTests
         var limiter = this.NewLimiter(maxSameError: 2);
         var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeFalse("the 3rd identical error exceeds maxSameError=2");
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.PerErrorLimit, "the 3rd identical error exceeds maxSameError=2");
     }
 
     [Fact]
@@ -137,9 +197,10 @@ public class IncidentRateLimiterTests
         var a = IncidentRateLimiter.GenerateErrorHash("GET /a", "ArgumentException", originMethod: null);
         var b = IncidentRateLimiter.GenerateErrorHash("GET /b", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(a).Should().BeTrue();
-        limiter.CheckDeduplication(a).Should().BeFalse();
-        limiter.CheckDeduplication(b).Should().BeTrue("a different operation is a different hash");
+        limiter.CheckDeduplication(a).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(a).Should().Be(DedupOutcome.PerErrorLimit);
+        limiter.CheckDeduplication(b).Should().Be(
+            DedupOutcome.Admitted, "a different operation is a different hash");
     }
 
     [Fact]
@@ -148,12 +209,13 @@ public class IncidentRateLimiterTests
         var limiter = this.NewLimiter(maxSameError: 1);
         var hash = IncidentRateLimiter.GenerateErrorHash("GET /x", "ArgumentException", originMethod: null);
 
-        limiter.CheckDeduplication(hash).Should().BeTrue();
-        limiter.CheckDeduplication(hash).Should().BeFalse();
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.Admitted);
+        limiter.CheckDeduplication(hash).Should().Be(DedupOutcome.PerErrorLimit);
 
         this.now += 60_001;
 
-        limiter.CheckDeduplication(hash).Should().BeTrue("a new window resets per-error counts");
+        limiter.CheckDeduplication(hash).Should().Be(
+            DedupOutcome.Admitted, "a new window resets per-error counts");
     }
 
     [Fact]
@@ -259,5 +321,79 @@ public class IncidentRateLimiterTests
 
         limiter.CheckRateLimit().Should().BeTrue("clamped to at least 1");
         limiter.CheckRateLimit().Should().BeFalse();
+    }
+}
+
+public partial class IncidentRateLimiterTests
+{
+    /// <summary>
+    /// Once the window is tracking <see cref="IncidentRateLimiter.MaxErrorHashEntries" /> distinct error
+    /// hashes, a hash it has never seen is refused as <see cref="DedupOutcome.CardinalityGuard" /> rather
+    /// than <see cref="DedupOutcome.PerErrorLimit" />.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Separating these two outcomes is the entire reason <see cref="DedupOutcome" /> exists instead of a
+    /// <c>bool</c>, and until this test the distinction was unasserted: the suite exercised only
+    /// <c>Admitted</c> and <c>PerErrorLimit</c>, so the guard could have returned either value — or the
+    /// wrong one — without failing anything.
+    /// </para>
+    /// <para>
+    /// The two mean different things to whoever reads the diagnostics. <c>PerErrorLimit</c> says one error
+    /// is repeating and the cap is doing its job; <c>CardinalityGuard</c> says the error population is too
+    /// varied to track, so raising the per-error cap will not help and the shape of the problem is
+    /// different. Reporting the first when the second happened points an operator at the wrong knob.
+    /// </para>
+    /// <para>
+    /// Uses the real constant rather than a literal, so the test follows the guard if it is ever retuned
+    /// instead of silently asserting a boundary that has moved.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void CheckDeduplication_WhenTheDistinctHashTableIsFull_ReportsTheCardinalityGuard()
+    {
+        // maxSameError of 2 keeps every fill hash admitted on its first call, so the table fills with
+        // tracked entries rather than rejections.
+        var limiter = this.NewLimiter(maxPerMinute: int.MaxValue, maxSameError: 2);
+
+        for (var i = 0; i < IncidentRateLimiter.MaxErrorHashEntries; i++)
+        {
+            limiter.CheckDeduplication($"fill-{i}")
+                .Should().Be(DedupOutcome.Admitted, "each distinct hash is admitted the first time it is seen");
+        }
+
+        limiter.CheckDeduplication("one-too-many")
+            .Should().Be(
+                DedupOutcome.CardinalityGuard,
+                "a hash that cannot be tracked at all is a different outcome from one that hit its own ceiling");
+    }
+
+    /// <summary>
+    /// The guard refuses only hashes it has never seen; hashes already tracked keep their own ceiling.
+    /// </summary>
+    /// <remarks>
+    /// The complement of the test above, and the one that catches a guard placed too early. Refusing
+    /// everything once the table is full would also produce <c>CardinalityGuard</c> for the new hash, so
+    /// that assertion alone cannot tell a correct guard from one that stops all deduplication — which
+    /// would silently disable the per-error cap for every error already being tracked.
+    /// </remarks>
+    [Fact]
+    public void CheckDeduplication_WithAFullTable_StillAppliesThePerErrorCeilingToKnownHashes()
+    {
+        var limiter = this.NewLimiter(maxPerMinute: int.MaxValue, maxSameError: 2);
+
+        for (var i = 0; i < IncidentRateLimiter.MaxErrorHashEntries; i++)
+        {
+            limiter.CheckDeduplication($"fill-{i}");
+        }
+
+        limiter.CheckDeduplication("one-too-many").Should().Be(DedupOutcome.CardinalityGuard);
+
+        // "fill-0" is already tracked with a count of 1, so its second occurrence is still admitted and
+        // its third is refused by the per-error ceiling, not by the guard.
+        limiter.CheckDeduplication("fill-0")
+            .Should().Be(DedupOutcome.Admitted, "a tracked hash is unaffected by the table being full");
+        limiter.CheckDeduplication("fill-0")
+            .Should().Be(DedupOutcome.PerErrorLimit, "its own ceiling still applies");
     }
 }

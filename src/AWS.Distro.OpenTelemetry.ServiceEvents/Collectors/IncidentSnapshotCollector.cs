@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Models;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
 
@@ -175,27 +176,40 @@ internal sealed class IncidentSnapshotCollector : CollectorBase, IIncidentSnapsh
         // The set this claim landed in is captured so the release below targets the same one. Collect()
         // replaces the set on a flush, so without this a claim made just before a flush would be
         // released out of the *new* set — cancelling a different request's legitimate claim.
+        // Each rejection below reports why. Suppression is normal and is how volume stays bounded, but
+        // it is indistinguishable from "no incidents happened" unless it is stated: an operator asking
+        // why they see nothing has no other way to tell a quiet service from a throttled one.
         HashSet<string> claimedIn;
         lock (this.batchLock)
         {
             claimedIn = this.currentBatchHashes;
             if (!claimedIn.Add(errorHash))
             {
+                ServiceEventsEventSource.Log.IncidentDropped(
+                    ServiceEventsEventSource.DropReason.BatchDuplicate, operation);
                 return null;
             }
         }
 
         // Per-error dedup, then global rate limit (dedup first so deduped requests
         // don't burn rate-limit slots).
-        if (!this.rateLimiter.CheckDeduplication(errorHash))
+        var dedup = this.rateLimiter.CheckDeduplication(errorHash);
+        if (dedup != DedupOutcome.Admitted)
         {
             this.UnclaimBatchHash(claimedIn, errorHash);
+            ServiceEventsEventSource.Log.IncidentDropped(
+                dedup == DedupOutcome.CardinalityGuard
+                    ? ServiceEventsEventSource.DropReason.CardinalityGuard
+                    : ServiceEventsEventSource.DropReason.PerErrorLimit,
+                operation);
             return null;
         }
 
         if (!this.rateLimiter.CheckRateLimit())
         {
             this.UnclaimBatchHash(claimedIn, errorHash);
+            ServiceEventsEventSource.Log.IncidentDropped(
+                ServiceEventsEventSource.DropReason.RateLimit, operation);
             return null;
         }
 
