@@ -157,7 +157,7 @@ public class InstrumentationRegistryTests
     }
 
     [Fact]
-    public void TryResolveKeyByType_ResolvesRegisteredTypeViaIndex()
+    public void ResolveKeysByType_ResolvesRegisteredTypeViaIndex()
     {
         var registry = new InstrumentationRegistry();
         var config = CreateConfig();
@@ -165,30 +165,30 @@ public class InstrumentationRegistryTests
         registry.Register(config);
 
         // MyApp.Svc -> the registered key, resolved by the TypeName index (not a scan).
-        registry.TryResolveKeyByType("MyApp.Svc").Should().Be(config.InstrumentationKey);
-        registry.TryResolveKeyByType("Not.Registered").Should().BeNull();
+        registry.ResolveKeysByType("MyApp.Svc").Should().BeEquivalentTo(new[] { config.InstrumentationKey });
+        registry.ResolveKeysByType("Not.Registered").Should().BeNull();
     }
 
     [Fact]
-    public void TryResolveKeyByType_AfterRemoveStale_NoLongerResolves()
+    public void ResolveKeysByType_AfterRemoveStale_NoLongerResolves()
     {
         // The TypeName index must stay in sync with RemoveStale: once the only config for a type is
         // dropped, that type must stop resolving (otherwise a woven call resolves to a dead key).
         var registry = new InstrumentationRegistry();
         var config = CreateConfig();
         registry.Register(config);
-        registry.TryResolveKeyByType("MyApp.Svc").Should().NotBeNull();
+        registry.ResolveKeysByType("MyApp.Svc").Should().NotBeNull();
 
         registry.RemoveStale(new HashSet<string>()); // nothing active → remove all
 
-        registry.TryResolveKeyByType("MyApp.Svc").Should().BeNull();
+        registry.ResolveKeysByType("MyApp.Svc").Should().BeNull();
     }
 
     [Fact]
-    public void TryResolveKeyByType_MultipleMethodsSameType_ReturnsNull_ThenResolvesWhenUnambiguous()
+    public void ResolveKeysByType_MultipleMethodsSameType_ReturnsNull_ThenResolvesWhenUnambiguous()
     {
         // Type-only resolution must NOT guess among multiple configs on one type: guessing wrong
-        // misattributes a capture to the wrong probe (worse than dropping it, see #3). So while two
+        // misattributes a capture to the wrong probe (worse than dropping it). So while two
         // methods are registered it returns null; once only one remains it's unambiguous and resolves.
         var registry = new InstrumentationRegistry();
         var a = CreateConfig(locationHash: "ha", method: "A");
@@ -197,17 +197,17 @@ public class InstrumentationRegistryTests
         registry.Register(b);
 
         // Two configs on MyApp.Svc → ambiguous by type alone → null (drop rather than misattribute).
-        registry.TryResolveKeyByType("MyApp.Svc").Should().BeNull();
+        registry.ResolveKeysByType("MyApp.Svc").Should().BeNull();
 
         // Drop A; the type now hosts exactly one config → unambiguous → resolves to the survivor.
         registry.RemoveStale(new HashSet<string> { b.InstrumentationKey });
-        registry.TryResolveKeyByType("MyApp.Svc").Should().Be(b.InstrumentationKey);
+        registry.ResolveKeysByType("MyApp.Svc").Should().BeEquivalentTo(new[] { b.InstrumentationKey });
     }
 
     [Fact]
-    public void TryResolveKeyByTypeAndArity_DifferentArities_DisambiguatesCoLocatedMethods()
+    public void ResolveKeysByTypeAndArity_DifferentArities_DisambiguatesCoLocatedMethods()
     {
-        // The core #3 fix: two methods on one type, one arg-count each. A woven call resolves to the
+        // Arity resolution: two methods on one type, one arg-count each. A woven call resolves to the
         // config whose method has the matching parameter count — not "first key wins".
         var registry = new InstrumentationRegistry();
         var oneArg = CreateConfig(locationHash: "h1", method: "Process");
@@ -217,12 +217,12 @@ public class InstrumentationRegistryTests
         registry.IndexArities("MyApp.Svc", oneArg.InstrumentationKey, new[] { 1 });
         registry.IndexArities("MyApp.Svc", twoArg.InstrumentationKey, new[] { 2 });
 
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 1).Should().Be(oneArg.InstrumentationKey);
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 2).Should().Be(twoArg.InstrumentationKey);
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 1).Should().BeEquivalentTo(new[] { oneArg.InstrumentationKey });
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 2).Should().BeEquivalentTo(new[] { twoArg.InstrumentationKey });
     }
 
     [Fact]
-    public void TryResolveKeyByTypeAndArity_UnindexedArity_ReturnsNull()
+    public void ResolveKeysByTypeAndArity_UnindexedArity_ReturnsNull()
     {
         // Resolution is precise: an arity that was never indexed does not resolve (caller falls back to
         // the type-only index).
@@ -231,8 +231,8 @@ public class InstrumentationRegistryTests
         registry.Register(config);
         registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 });
 
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 2).Should().BeNull();
-        registry.TryResolveKeyByTypeAndArity("Not.Registered", 1).Should().BeNull();
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 2).Should().BeNull();
+        registry.ResolveKeysByTypeAndArity("Not.Registered", 1).Should().BeNull();
     }
 
     [Fact]
@@ -244,15 +244,15 @@ public class InstrumentationRegistryTests
         registry.Register(config);
         registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 0, 1, 3 });
 
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 0).Should().Be(config.InstrumentationKey);
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 1).Should().Be(config.InstrumentationKey);
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 3).Should().Be(config.InstrumentationKey);
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 0).Should().BeEquivalentTo(new[] { config.InstrumentationKey });
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 1).Should().BeEquivalentTo(new[] { config.InstrumentationKey });
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 3).Should().BeEquivalentTo(new[] { config.InstrumentationKey });
     }
 
     [Fact]
     public void IndexArities_SameArityTwoMethods_ReturnsBothCollidingKeys()
     {
-        // The documented #3 residual: two methods on one type sharing a parameter count are
+        // The documented residual: two methods on one type sharing a parameter count are
         // indistinguishable at capture time (args.Length can't separate them). IndexArities returns the
         // FULL colliding set so the caller can report ERROR on every ambiguous config, not just the last.
         var registry = new InstrumentationRegistry();
@@ -282,7 +282,7 @@ public class InstrumentationRegistryTests
     }
 
     [Fact]
-    public void TryResolveKeyByTypeAndArity_AfterRemoveStale_NoLongerResolves()
+    public void ResolveKeysByTypeAndArity_AfterRemoveStale_NoLongerResolves()
     {
         // The arity index must stay in sync with RemoveStale, exactly like the type-only index — a dropped
         // config must stop resolving by arity too, or a woven call resolves to a dead key.
@@ -290,10 +290,10 @@ public class InstrumentationRegistryTests
         var config = CreateConfig();
         registry.Register(config);
         registry.IndexArities("MyApp.Svc", config.InstrumentationKey, new[] { 1 });
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 1).Should().NotBeNull();
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 1).Should().NotBeNull();
 
         registry.RemoveStale(new HashSet<string>()); // nothing active → remove all
 
-        registry.TryResolveKeyByTypeAndArity("MyApp.Svc", 1).Should().BeNull();
+        registry.ResolveKeysByTypeAndArity("MyApp.Svc", 1).Should().BeNull();
     }
 }

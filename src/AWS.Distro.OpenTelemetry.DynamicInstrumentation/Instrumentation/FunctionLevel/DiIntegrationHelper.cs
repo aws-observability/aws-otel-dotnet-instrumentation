@@ -96,12 +96,15 @@ internal static class DiIntegrationHelper
     }
 
     /// <summary>
-    /// Finds the instrumentation key for a registered config whose type name exactly equals
+    /// Finds every instrumentation key for registered configs whose type name exactly equals
     /// <paramref name="targetTypeFullName"/>, via the registry's indexed lookup (O(1), not a scan).
     /// </summary>
+    /// <param name="targetTypeFullName">Fully-qualified type name from the woven call.</param>
+    /// <param name="registry">The instrumentation registry to resolve against.</param>
+    /// <returns>All matching keys, or null when the type is unregistered or ambiguous.</returns>
     // Exact match only: a suffix match would collide across namespaces (e.g. A.Svc vs B.Svc).
-    internal static string? MatchKeyByType(string targetTypeFullName, InstrumentationRegistry registry) =>
-        registry.TryResolveKeyByType(targetTypeFullName);
+    internal static List<string>? MatchKeysByType(string targetTypeFullName, InstrumentationRegistry registry) =>
+        registry.ResolveKeysByType(targetTypeFullName);
 
     internal static StackFrameInfo[] CaptureStackTrace(int maxFrames)
     {
@@ -163,24 +166,63 @@ internal static class DiIntegrationHelper
             return CallTargetState.GetDefault();
         }
 
-        var instrumentationKey = ResolveInstrumentationKey(instance, args.Length);
-        if (instrumentationKey == null)
+        var instrumentationKeys = ResolveInstrumentationKeys(instance, args.Length);
+        if (instrumentationKeys == null)
         {
             return CallTargetState.GetDefault();
         }
 
-        if (!registry.TryHit(instrumentationKey))
+        // The trace context is a property of the CALL, so it is read once and shared; everything else is
+        // per-configuration, because each one carries its own capture policy.
+        string? traceId = null, spanId = null;
+        var activity = Activity.Current;
+        if (activity != null)
+        {
+            traceId = activity.TraceId.ToHexString();
+            spanId = activity.SpanId.ToHexString();
+        }
+
+        // ONE ENTRY PER CONFIGURATION, each independently rate-limited. TryHit is per config, so a
+        // BREAKPOINT that has exhausted its MaxHits stops capturing while a PROBE on the same method
+        // continues — which is the whole point of them being separate configurations.
+        List<CaptureEntry>? entries = null;
+        foreach (var instrumentationKey in instrumentationKeys)
+        {
+            if (!registry.TryHit(instrumentationKey))
+            {
+                continue;
+            }
+
+            var reg = registry.Get(instrumentationKey);
+            if (reg == null)
+            {
+                continue;
+            }
+
+            var entryData = BuildEntryData(instrumentationKey, reg.Config, args, traceId, spanId);
+            (entries ??= new List<CaptureEntry>(instrumentationKeys.Count))
+                .Add(new CaptureEntry(instrumentationKey, DIDataStore.RecordEntry(entryData)));
+        }
+
+        if (entries == null)
         {
             return CallTargetState.GetDefault();
         }
 
-        var reg = registry.Get(instrumentationKey);
-        if (reg == null)
-        {
-            return CallTargetState.GetDefault();
-        }
+        // Profiler CallTargetState is (Activity, object state); stash the per-config entries so
+        // OnMethodEnd pairs with THIS invocation's captures (recursion-safe).
+        return new CallTargetState(activity, new CaptureState(entries.ToArray()));
+    }
 
-        var config = reg.Config;
+    // Captures the entry-side of one configuration's snapshot: arguments and stack under THAT config's
+    // limits, since MaxStringLength/MaxCollectionSize/CaptureStackTrace differ per configuration.
+    private static PendingEntryData BuildEntryData(
+        string instrumentationKey,
+        InstrumentationConfiguration config,
+        object?[] args,
+        string? traceId,
+        string? spanId)
+    {
         var limits = config.Capture;
 
         Dictionary<string, CapturedValue>? capturedArgs = null;
@@ -204,14 +246,6 @@ internal static class DiIntegrationHelper
             }
         }
 
-        string? traceId = null, spanId = null;
-        var activity = Activity.Current;
-        if (activity != null)
-        {
-            traceId = activity.TraceId.ToHexString();
-            spanId = activity.SpanId.ToHexString();
-        }
-
         StackFrameInfo[]? stackTrace = null;
         if (limits.CaptureStackTrace)
         {
@@ -219,7 +253,7 @@ internal static class DiIntegrationHelper
         }
 
         // Stored for pairing with OnMethodEnd.
-        var entryData = new PendingEntryData
+        return new PendingEntryData
         {
             InstrumentationKey = instrumentationKey,
             LocationHash = config.LocationHash,
@@ -231,12 +265,6 @@ internal static class DiIntegrationHelper
             ThreadName = Thread.CurrentThread.Name ?? $"Thread-{Environment.CurrentManagedThreadId}",
             StackTrace = stackTrace,
         };
-
-        var callId = DIDataStore.RecordEntry(entryData);
-
-        // Profiler CallTargetState is (Activity, object state); stash the key + per-call id so
-        // OnMethodEnd pairs with THIS invocation's entry (recursion-safe).
-        return new CallTargetState(activity, new CaptureState(instrumentationKey, callId));
     }
 
     // Shared end-of-method capture; hasReturn distinguishes a real (possibly null) return from a void method.
@@ -247,8 +275,18 @@ internal static class DiIntegrationHelper
             return;
         }
 
-        var instrumentationKey = captureState.InstrumentationKey;
-        var entryData = DIDataStore.RetrieveEntry(captureState.CallId);
+        // One snapshot per configuration that captured on entry. Each is serialized under its OWN limits, so
+        // a probe with MaxStringLength=10 and one with 255 both report what they were configured to report.
+        foreach (var entry in captureState.Entries)
+        {
+            EndOne(entry, returnValue, hasReturn, exception);
+        }
+    }
+
+    private static void EndOne<TReturn>(CaptureEntry entry, TReturn returnValue, bool hasReturn, Exception? exception)
+    {
+        var instrumentationKey = entry.InstrumentationKey;
+        var entryData = DIDataStore.RetrieveEntry(entry.CallId);
         if (entryData == null)
         {
             return;
@@ -305,11 +343,11 @@ internal static class DiIntegrationHelper
         DIDataStore.Enqueue(capture);
     }
 
-    // Resolves the config for a woven call. The callback carries no method identity (#3), so we
+    // Resolves EVERY config for a woven call. The callback carries no method identity, so we
     // disambiguate co-located methods by arity (the parameter count, = args.Length). Falls back to a
     // type-only match when the arity index has no entry yet — e.g. a capture that fires before the
     // Apply-time IndexArities call, or a registry populated without applying (unit tests).
-    private static string? ResolveInstrumentationKey<TTarget>(TTarget instance, int arity)
+    private static List<string>? ResolveInstrumentationKeys<TTarget>(TTarget instance, int arity)
     {
         if (registry == null)
         {
@@ -322,7 +360,7 @@ internal static class DiIntegrationHelper
             return null;
         }
 
-        var byArity = registry.TryResolveKeyByTypeAndArity(targetType, arity);
+        var byArity = registry.ResolveKeysByTypeAndArity(targetType, arity);
         if (byArity != null)
         {
             return byArity;
@@ -340,7 +378,7 @@ internal static class DiIntegrationHelper
         // The fallback still serves its documented purpose: a capture that fires between Register and the
         // Apply-time IndexArities call, and registries populated without applying (unit tests). Both are
         // cases where the type has never been woven.
-        return registry.HasArityIndex(targetType) ? null : MatchKeyByType(targetType, registry);
+        return registry.HasArityIndex(targetType) ? null : MatchKeysByType(targetType, registry);
     }
 
     // True when the woven method's return is an awaitable the profiler will continue on (calling

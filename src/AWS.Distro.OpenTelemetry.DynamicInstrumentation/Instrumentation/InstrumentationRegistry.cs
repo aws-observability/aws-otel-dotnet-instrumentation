@@ -20,7 +20,7 @@ internal sealed class InstrumentationRegistry
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> keysByType = new();
 
     // (TypeName, arity) -> instrumentation keys. The callback only receives (instance, args), never the
-    // method name/token (#3), so we disambiguate co-located methods by parameter count: args.Length at
+    // method name/token, so we disambiguate co-located methods by parameter count: args.Length at
     // capture time. Populated at Apply time (IndexArities) because arity comes from reflecting the loaded
     // type, not from the config. Same-arity methods on one type still collide — the documented residual.
     private readonly ConcurrentDictionary<(string Type, int Arity), ConcurrentDictionary<string, byte>> keysByTypeAndArity = new();
@@ -75,14 +75,23 @@ internal sealed class InstrumentationRegistry
         var removed = new List<InstrumentationConfiguration>();
         foreach (var key in this.configs.Keys)
         {
-            if (!activeKeys.Contains(key))
+            if (activeKeys.Contains(key) || !this.configs.TryGetValue(key, out var reg))
             {
-                if (this.configs.TryRemove(key, out var reg))
-                {
-                    removed.Add(reg.Config);
-                    this.RemoveFromTypeIndex(reg.Config.TypeName, key);
-                    this.RemoveFromArityIndex(reg.Config.TypeName, key);
-                }
+                continue;
+            }
+
+            // INDEXES FIRST, `configs` LAST. Resolution reads the indexes and then reads `configs` to group
+            // keys by method, so a key that is visible in an index must still be resolvable in `configs`.
+            // Removing from `configs` first opens a window where the type index still advertises two keys
+            // while one of them no longer resolves — SpansSeveralMethods then undercounts, calls an ambiguous
+            // type unambiguous, and a deleted method's next call attributes to the survivor's LocationHash.
+            // That is precisely the misattribution arityIndexedTypes exists to prevent.
+            this.RemoveFromTypeIndex(reg.Config.TypeName, key);
+            this.RemoveFromArityIndex(reg.Config.TypeName, key);
+
+            if (this.configs.TryRemove(key, out _))
+            {
+                removed.Add(reg.Config);
             }
         }
 
@@ -92,9 +101,9 @@ internal sealed class InstrumentationRegistry
     /// <summary>
     /// Records, at Apply time, that <paramref name="key"/>'s target method exists at the given parameter
     /// counts on <paramref name="typeName"/>. One config maps to several arities when the method is
-    /// overloaded. Lets the capture hot path disambiguate co-located methods by arity (see #3).
+    /// overloaded. Lets the capture hot path disambiguate co-located methods by arity.
     /// Returns the FULL set of instrumentation keys in any bucket that now holds more than one key — a
-    /// same-arity collision that arity resolution cannot disambiguate (the documented #3 residual). The set
+    /// same-arity collision that arity resolution cannot disambiguate (the documented residual). The set
     /// includes both the incoming key and its pre-existing peer(s), so the caller can report ERROR on every
     /// ambiguous config, not just the one that happened to apply second. Empty when there is no collision.
     /// </summary>
@@ -113,9 +122,12 @@ internal sealed class InstrumentationRegistry
             var bucket = this.keysByTypeAndArity.GetOrAdd((typeName, arity), _ => new ConcurrentDictionary<string, byte>());
             bucket[key] = 0;
 
-            // More than one key in the bucket → every key in it is indistinguishable at capture time
-            // (args.Length can't separate them). Surface all of them so both/all sides get an ERROR.
-            if (bucket.Count > 1)
+            // More than one key in the bucket is only a COLLISION when the keys name different METHODS —
+            // args.Length cannot separate those. Several configurations on the SAME method (a PROBE and a
+            // BREAKPOINT, say) also share a bucket, but they are not ambiguous: the call belongs to all of
+            // them, and the capture path fans out. Reporting those as OVERLOADED_METHODS would fail the very
+            // configurations that now work.
+            if (bucket.Count > 1 && this.SpansSeveralMethods(bucket))
             {
                 foreach (var member in bucket.Keys)
                 {
@@ -128,24 +140,31 @@ internal sealed class InstrumentationRegistry
     }
 
     /// <summary>
-    /// Resolves the instrumentation key for a woven call by its declaring type name and parameter count.
-    /// Returns null when no config's method on that type has the given arity. When two configured methods
-    /// on one type share both name-slot and arity this still returns one of them — the documented #3
-    /// residual (same-arity collision), which method identity in the callback would be needed to resolve.
+    /// Resolves EVERY instrumentation key for a woven call, by declaring type name and parameter count.
+    /// Returns null when no config's method on that type has the given arity.
     /// </summary>
-    public string? TryResolveKeyByTypeAndArity(string typeName, int arity)
+    /// <param name="typeName">Fully-qualified type name from the woven call.</param>
+    /// <param name="arity">Parameter count of the woven call (args.Length).</param>
+    /// <returns>All matching keys, or null when none match.</returns>
+    // RETURNS ALL, NOT ONE. Several configurations can legitimately target one method — a PROBE and a
+    // BREAKPOINT each with their own LocationHash, capture policy and MaxHits budget — and the call belongs
+    // to all of them. Returning the first key silently served whichever registered first and dropped the
+    // rest. When the bucket spans different METHODS the keys really are ambiguous, and IndexArities has
+    // already reported OVERLOADED_METHODS for them at Apply time.
+    public List<string>? ResolveKeysByTypeAndArity(string typeName, int arity)
     {
-        if (this.keysByTypeAndArity.TryGetValue((typeName, arity), out var keys))
+        if (!this.keysByTypeAndArity.TryGetValue((typeName, arity), out var keys))
         {
-            // First key wins; on the capture hot path, so enumerate rather than allocate via .Keys.First().
-            // Same-arity collisions (the documented #3 residual) resolve to one of them nondeterministically.
-            foreach (var key in keys.Keys)
-            {
-                return key;
-            }
+            return null;
         }
 
-        return null;
+        List<string>? resolved = null;
+        foreach (var entry in keys)
+        {
+            (resolved ??= new List<string>(keys.Count)).Add(entry.Key);
+        }
+
+        return resolved;
     }
 
     /// <summary>
@@ -163,7 +182,7 @@ internal sealed class InstrumentationRegistry
     /// Resolves the instrumentation key for a woven call by its declaring type name alone, when that is
     /// unambiguous — i.e. exactly one config targets the type. Returns null if no config targets the type,
     /// OR if two-or-more do (a type-only match would have to guess which, and guessing wrong misattributes
-    /// the capture to the wrong probe — worse than dropping it; see #3).
+    /// the capture to the wrong probe — worse than dropping it).
     /// </summary>
     /// <param name="typeName">Fully-qualified type name from the woven call.</param>
     /// <returns>The single instrumentation key targeting the type, or null when it is not unambiguous.</returns>
@@ -171,19 +190,28 @@ internal sealed class InstrumentationRegistry
     // capture that fires in the window after Register but before the Apply-time IndexArities call, or a
     // registry populated without applying (unit tests). TryResolveKeyByTypeAndArity is the precise path, and
     // this fallback is refused outright for a type that has been woven (see HasArityIndex).
-    public string? TryResolveKeyByType(string typeName)
+    public List<string>? ResolveKeysByType(string typeName)
     {
-        if (this.keysByType.TryGetValue(typeName, out var keys) && keys.Count == 1)
+        if (!this.keysByType.TryGetValue(typeName, out var keys) || keys.IsEmpty)
         {
-            // Exactly one config for this type → unambiguous. First key wins; enumerate to avoid the
-            // .Keys.First() allocation on the capture hot path.
-            foreach (var key in keys.Keys)
-            {
-                return key;
-            }
+            return null;
         }
 
-        return null;
+        // Unambiguous means ONE METHOD, not one config: several configs on a single method all own the call.
+        // Two different methods on the type would require guessing which, and guessing misattributes the
+        // capture to the wrong probe — worse than dropping it.
+        if (this.SpansSeveralMethods(keys))
+        {
+            return null;
+        }
+
+        List<string>? resolved = null;
+        foreach (var entry in keys)
+        {
+            (resolved ??= new List<string>(keys.Count)).Add(entry.Key);
+        }
+
+        return resolved;
     }
 
     public RegisteredInstrumentation? Get(string instrumentationKey) =>
@@ -200,6 +228,32 @@ internal sealed class InstrumentationRegistry
 
     private static HitState CreateHitState(InstrumentationConfiguration config) =>
         new(config.Capture.MaxHits, config.ExpiresAt);
+
+    // Whether a set of keys names more than one target method. Reads MethodKey from each registered config
+    // rather than parsing the key string, so the key format stays an implementation detail.
+    private bool SpansSeveralMethods(ConcurrentDictionary<string, byte> keys)
+    {
+        string? first = null;
+        foreach (var entry in keys)
+        {
+            if (!this.configs.TryGetValue(entry.Key, out var reg))
+            {
+                continue;
+            }
+
+            var methodKey = reg.Config.MethodKey;
+            if (first == null)
+            {
+                first = methodKey;
+            }
+            else if (!string.Equals(first, methodKey, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private void RemoveFromTypeIndex(string typeName, string key)
     {
