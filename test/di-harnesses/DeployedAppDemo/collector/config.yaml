@@ -1,0 +1,102 @@
+# OTel Collector config: receive DI snapshots as OTLP logs, ship them to CloudWatch Logs.
+#
+# WHY A COLLECTOR AND NOT THE CLOUDWATCH AGENT. In production, DI snapshots go to the CloudWatch Agent's OTLP
+# logs receiver on :4316 and the agent forwards them to CloudWatch Logs. The PUBLIC CloudWatch Agent has OTLP
+# receivers for metrics and traces only — its repo has no OTLP *logs* translator — so it cannot ingest
+# snapshots. Verified by walking aws/amazon-cloudwatch-agent's tree: 48 otlp-related paths, none under logs.
+# The DI-capable agent build is not publicly downloadable.
+#
+# This collector does the same job for the leg we care about: OTLP logs in, CloudWatch Logs out, using the
+# credentials in the environment. That is what puts snapshots in the console.
+#
+# WHAT THIS DOES NOT DO: serve probe configurations. That is the agent's other role (:2000), and the harness's
+# beta proxy already does it against the real Application Signals API. So the two legs are:
+#     configs    operator -> beta proxy (SigV4) -> REAL beta          [already real]
+#     snapshots  app -> THIS collector -> REAL CloudWatch Logs        [what this adds]
+
+receivers:
+  # 4316 is DI's default snapshot endpoint (OTEL_AWS_OTLP_LOGS_ENDPOINT), and DI pins http/protobuf — it does
+  # NOT honour OTEL_EXPORTER_OTLP_PROTOCOL — so only the HTTP listener matters here. A gRPC-only port would
+  # silently receive nothing.
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4316
+
+processors:
+  # RECOVERS WHAT raw_log WOULD OTHERWISE THROW AWAY, and makes the body queryable.
+  #
+  # Two measured problems this fixes. (1) `raw_log: true` writes ONLY the LogRecord body, so all 13 aws.di.*
+  # attributes — location_hash, method_name, snapshot_id, duration_ms, thread_* — were dropped: 0 of 48 real
+  # events carried any of them. A snapshot you cannot attribute to a probe is close to useless. (2) The .NET
+  # OTel SDK types LogRecord.Body as `string?`, so the capture tree arrives as a JSON *string*; ParseJSON turns
+  # it back into a real map, which is what Logs Insights can walk (`captures.entry.arguments.x.value`).
+  #
+  # Net result, verified against real snapshots: one JSON object with a walkable `captures` tree plus an
+  # `instrumentation` map, 48/48 events carrying location_hash.
+  # NO ParseJSON HERE ANY MORE. DiOtlpLogExporter now hands us a real kvlist body, so the body is already a
+  # map; ParseJSON(body) fails with "expected string but got pcommon.Map". Kept as a `case` on the body type so
+  # the pipeline still works against a build that emits the old string body.
+  transform:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        conditions:
+          - 'IsString(body)'
+        statements:
+          - set(body, ParseJSON(body))
+      - context: log
+        statements:
+          - set(body["instrumentation"], attributes)
+
+  # Small batches so snapshots appear in the console in seconds rather than on a 30s+ boundary. This is a demo
+  # pipeline; throughput is irrelevant and latency is the whole point.
+  batch:
+    timeout: 2s
+    send_batch_size: 10
+
+exporters:
+  awscloudwatchlogs:
+    # NOT A CANONICAL NAME. The consumer (cloudwatch-applicationsignals-mcp-server) takes log_group_name as a
+    # PARAMETER — `logs.start_query(logGroupName=log_group_name, ...)` — so the real destination is whatever the
+    # CloudWatch Agent is configured to write to, and no hardcoded DI group name exists in any code I could
+    # find. This default is a reasonable guess, overridable so a demo can point at the group the console is
+    # actually looking at.
+    #
+    # Do NOT default this to /aws/application-signals/data: that is the Transaction Search / spans group that
+    # X-Ray writes to, and mixing DI snapshots into it would be wrong and confusing.
+    log_group_name: ${env:DI_LOG_GROUP}
+    log_stream_name: ${env:DI_LOG_STREAM}
+    region: ${env:AWS_REGION}
+    # Empty means "use the ambient credentials". Set DI_CW_ROLE_ARN to write to a DIFFERENT account than the
+    # one the config leg authenticates as — which is the normal case here, because the beta config API and the
+    # customer's CloudWatch Logs are not the same account. Snapshots silently landing in the beta account is
+    # exactly the confusion this exists to prevent.
+    role_arn: ${env:DI_CW_ROLE_ARN}
+    # raw_log: emit the log record's BODY as the CloudWatch event, with no envelope wrapped around it. That
+    # matters here: the DI snapshot body IS the payload the console's snapshot reader parses
+    # (body.captures.*), so wrapping it would change the shape the consumer sees.
+    raw_log: true
+    log_retention: 1
+    # Keys verified against the exporter's own config.go for v0.159.0 rather than guessed — the first attempt
+    # used an invented key (emf_no_resource_to_telemetry_conversion) and the collector refused to start.
+    retry_on_failure:
+      enabled: true
+      initial_interval: 2s
+      max_interval: 10s
+
+  # Mirrors every record to the collector's own stdout. Kept deliberately: without it, a snapshot that fails to
+  # reach CloudWatch is indistinguishable from a snapshot that was never captured, and the demo would have no
+  # local evidence at all.
+  debug:
+    verbosity: detailed
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [awscloudwatchlogs, debug]

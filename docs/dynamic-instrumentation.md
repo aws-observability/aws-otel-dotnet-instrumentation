@@ -56,6 +56,34 @@ applies it automatically — no restart needed.
 
 ---
 
+## Captured data is your production data
+
+A probe captures **real values from live requests** — whatever the argument, return value, or local actually
+holds at that moment. If a method handles a password, an access token, a card number, or personal data, a
+probe on it will capture that data and send it to CloudWatch.
+
+**There is no automatic redaction.** Nothing is filtered, masked, or detected by content. The only limits
+applied are size limits — string length, collection size, nesting depth, field count — and those truncate a
+long value, they do not remove a sensitive one. A truncated secret is still a secret.
+
+So the choice of what to capture is a data-classification decision:
+
+- **Name the values you need rather than capturing everything.** For function-level probes, prefer naming a
+  subset of arguments over capturing all of them. For line-level probes, name only the locals you are
+  debugging.
+- **Avoid probing methods that handle credentials or regulated data** — authentication, payment, and
+  PII-handling paths especially.
+- **Treat snapshots with the same sensitivity as the data they capture.** They are stored as log records and
+  are visible to anyone who can read your telemetry.
+- **Remove probes when you are done.** Deleting a probe stops capture immediately, and a probe left in place
+  keeps capturing every matching call.
+
+Who may create a probe is controlled by IAM through the Application Signals API, so restricting that
+permission is the primary control over what gets captured. Dynamic Instrumentation is also **disabled by
+default** — it captures nothing until you explicitly enable it and create a probe.
+
+---
+
 ## What gets captured (function-level)
 
 At the entry and exit of a probed method, a snapshot may include:

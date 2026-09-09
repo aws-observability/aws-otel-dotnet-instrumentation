@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- R9 (removal-under-load) + gap-2/3 (>2 probes, mixed emission modes) harness. Clones the
+       poc/N2MultiProbeE2E exit-code contract (exit = failed assertions) and runs against the REAL
+       forked native profiler. DEBUG, portable PDB (the harness reads its OWN pdb's sequence points
+       to discover statement-boundary offsets), net8.0, NOT ReadyToRun. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>R9RemovalUnderLoadE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Optimizations OFF so the DEBUG IL matches the sequence points we read from the PDB. -->
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Callback sink in a SEPARATE assembly, forcing a genuine cross-assembly AssemblyRef+MemberRef
+         resolution on the native side (Q3). It lives OUTSIDE this project's directory on purpose:
+         when it was a subdirectory the SDK's default globbing also compiled R9Sink.cs INTO this
+         assembly (CS0436), so the harness would have read a different R9Sink type than the injected
+         IL calls — a false-negative generator. -->
+    <ProjectReference Include="../R9SinkLib/R9Sink.csproj" />
+  </ItemGroup>
+</Project>

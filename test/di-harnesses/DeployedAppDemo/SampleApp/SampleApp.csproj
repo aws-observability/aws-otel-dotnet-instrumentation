@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SampleApp</AssemblyName>
+  </PropertyGroup>
+  <!-- Deliberately NO reference to the DI project. This is an ordinary app; DI is applied
+       from the outside by the ADOT profiler + plugin, exactly as a customer app would be. -->
+</Project>
