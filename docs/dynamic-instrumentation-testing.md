@@ -19,7 +19,7 @@ progressively.
 | **2. Contract** | A profiler-instrumented app really emits correct snapshots and reports status over HTTP | `test/contract-tests/tests/test/amazon/di/` | ⏳ lands with the DI contract-test PR |
 | **3. Native gates** | The shipped native profiler loads, exports resolve, and its glibc floor is low enough | `build/Build.NativeProfiler.cs` + `pr-build.yml` | ✅ every PR |
 | **4. Soak** | The managed capture path survives sustained load without leaking or corrupting | `…Tests/Soak/DISoakTests.cs` | ⚠️ runs, but only 5s by default |
-| **5. Real-backend E2E** | The loop closes through the actual Application Signals backend | manual, out of repo | ❌ needs credentials CI does not have |
+| **5. Real-backend E2E** | The loop closes through the actual Application Signals backend | `test/di-harnesses/` | ❌ needs credentials CI does not have |
 
 Layers 1 and 2 mirror the Java distro's two-layer model. Layer 3 is specific to .NET because .NET is the only
 distro that vendors a native profiler.
