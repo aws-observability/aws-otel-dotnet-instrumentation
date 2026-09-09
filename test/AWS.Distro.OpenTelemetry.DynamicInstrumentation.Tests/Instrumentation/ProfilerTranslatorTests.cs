@@ -51,6 +51,49 @@ public class ProfilerTranslatorTests
         capturedDefs[0].TargetAssembly.Should().Be("MyApp");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(9)]
+    public void ApplyInstrumentation_TheIntegrationNameItHandsTheProfiler_ResolvesToARealPublicType(int arity)
+    {
+        // THE WIRE VALUE, ASSERTED WHOLE. The other tests here only check EndsWith("DiIntegrationN"), so a
+        // namespace move or an assembly rename would sail straight through them -- and that failure is
+        // invisible at build time: the profiler weaves a call to a type that does not exist and the probe
+        // either throws MethodAccessException on first hit or silently never fires.
+        //
+        // Resolving the name the profiler is actually given is what closes that. It also pins the two
+        // properties the profiler depends on and the compiler cannot: the type EXISTS, and it is PUBLIC
+        // (the profiler bakes it into the customer assembly's IL as a generic type argument, so an internal
+        // type is inaccessible from there).
+        NativeCallTargetDefinition[]? defs = null;
+        var translator = new ProfilerTranslator(
+            (_, d, _) => defs = d,
+            Resolver("MyApp", arity));
+
+        translator.ApplyInstrumentation(CreateConfig());
+
+        defs.Should().NotBeNull();
+        var definition = defs![0];
+
+        definition.IntegrationAssembly.Should().Be(
+            "AWS.Distro.OpenTelemetry.DynamicInstrumentation",
+            "the profiler loads the callback assembly BY THIS EXACT NAME");
+        definition.IntegrationType.Should().Be(
+            $"AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel.DiIntegration{arity}",
+            "and binds the integration type by this exact fully-qualified name");
+
+        var resolved = Type.GetType($"{definition.IntegrationType}, {definition.IntegrationAssembly}");
+        resolved.Should().NotBeNull(
+            $"'{definition.IntegrationType}' must be a REAL type — the profiler cannot weave a name that "
+            + "resolves to nothing, and nothing else in the build would notice");
+        resolved!.IsPublic.Should().BeTrue(
+            "the profiler bakes this type into the customer assembly's rewritten IL as a generic type "
+            + "argument, so an internal type throws MethodAccessException on the first woven call");
+    }
+
     [Fact]
     public void ApplyInstrumentation_ResolvesArity_PicksMatchingIntegration()
     {
@@ -107,7 +150,7 @@ public class ProfilerTranslatorTests
     public void ApplyInstrumentation_Applied_SurfacesSupportedArities()
     {
         // The out overload reports the woven arities so the Manager can index them for arity-aware
-        // capture resolution (#3). Only profiler-supported arities appear (15 dropped, 2 kept).
+        // capture resolution. Only profiler-supported arities appear (15 dropped, 2 kept).
         var translator = new ProfilerTranslator((_, _, _) => { }, Resolver("MyApp", 2, 15));
 
         var result = translator.ApplyInstrumentation(CreateConfig(), out var arities);

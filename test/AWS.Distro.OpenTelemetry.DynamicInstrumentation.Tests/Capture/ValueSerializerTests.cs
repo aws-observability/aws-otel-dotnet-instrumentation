@@ -457,6 +457,26 @@ public class ValueSerializerTests
             "the shadowed name counts once: two distinct names (Name, Other), not three members");
     }
 
+    [Fact]
+    public void Serialize_ObjectWithIndexerAndWriteOnlyMembers_CountsOnlyCapturableOnesInTheTotal()
+    {
+        // `size` is compared against the fields emitted, so it has to be counted with the SAME filter the
+        // capture loop applies. An indexer or a write-only property is never captured; counting them would
+        // report truncation on an object that was captured completely.
+        // MaxFieldsPerObject = 1 ON PURPOSE. With a cap above the member count, OriginalSize is null whatever
+        // the filter does, so the assertion could not fail. Capping at 1 forces the count onto the wire:
+        // correct is 2 (Readable + Extra); a filter that counted the indexer and the write-only property
+        // would report 4.
+        var limits = DefaultLimits with { MaxFieldsPerObject = 1 };
+
+        var result = ValueSerializer.Serialize(new UncapturableMembers(), limits);
+
+        result.Fields.Should().HaveCount(1);
+        result.OriginalSize.Should().Be(
+            2,
+            "only the readable, non-indexed members count toward the total");
+    }
+
     private class ShadowedBase
     {
         public string Name = "base";
@@ -473,6 +493,21 @@ public class ValueSerializerTests
     {
         public string Name { get; set; } = "";
         public int Age { get; set; }
+    }
+
+    // Two capturable members plus two the capture loop always skips: an indexer and a write-only property.
+    private class UncapturableMembers
+    {
+        public string Readable { get; set; } = "kept";
+
+        public string Extra { get; set; } = "also kept";
+
+        public string WriteOnly
+        {
+            set => _ = value;
+        }
+
+        public string this[int index] => index.ToString();
     }
 
     private class Nested

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Phase-2 PoC harness. Clones the poc/ProfilerE2E exit-code contract (exit = failed
+       assertions). Runs the target under the FORKED native profiler and asserts the injected
+       line probe fired. DEBUG build, portable PDB, net8.0, NOT ReadyToRun (per BRIEF scope). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LineProbeE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <!-- Explicitly NOT ReadyToRun so mid-body ReJIT is a plain IL re-JIT (BRIEF: R2R out of scope). -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Keep optimizations off so the DEBUG IL matches what we inspected for the hardcoded offset. -->
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The callback sink lives in a SEPARATE assembly, forcing the native rewrite to build a
+         genuine cross-assembly AssemblyRef+MemberRef (Q3). -->
+    <ProjectReference Include="../LineProbeSink/LineProbeSink.csproj" />
+  </ItemGroup>
+</Project>

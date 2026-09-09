@@ -20,7 +20,7 @@ internal sealed class InstrumentationRegistry
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> keysByType = new();
 
     // (TypeName, arity) -> instrumentation keys. The callback only receives (instance, args), never the
-    // method name/token (#3), so we disambiguate co-located methods by parameter count: args.Length at
+    // method name/token, so we disambiguate co-located methods by parameter count: args.Length at
     // capture time. Populated at Apply time (IndexArities) because arity comes from reflecting the loaded
     // type, not from the config. Same-arity methods on one type still collide — the documented residual.
     private readonly ConcurrentDictionary<(string Type, int Arity), ConcurrentDictionary<string, byte>> keysByTypeAndArity = new();
@@ -92,9 +92,9 @@ internal sealed class InstrumentationRegistry
     /// <summary>
     /// Records, at Apply time, that <paramref name="key"/>'s target method exists at the given parameter
     /// counts on <paramref name="typeName"/>. One config maps to several arities when the method is
-    /// overloaded. Lets the capture hot path disambiguate co-located methods by arity (see #3).
+    /// overloaded. Lets the capture hot path disambiguate co-located methods by arity.
     /// Returns the FULL set of instrumentation keys in any bucket that now holds more than one key — a
-    /// same-arity collision that arity resolution cannot disambiguate (the documented #3 residual). The set
+    /// same-arity collision that arity resolution cannot disambiguate (the documented residual). The set
     /// includes both the incoming key and its pre-existing peer(s), so the caller can report ERROR on every
     /// ambiguous config, not just the one that happened to apply second. Empty when there is no collision.
     /// </summary>
@@ -130,7 +130,7 @@ internal sealed class InstrumentationRegistry
     /// <summary>
     /// Resolves the instrumentation key for a woven call by its declaring type name and parameter count.
     /// Returns null when no config's method on that type has the given arity. When two configured methods
-    /// on one type share both name-slot and arity this still returns one of them — the documented #3
+    /// on one type share both name-slot and arity this still returns one of them — the documented
     /// residual (same-arity collision), which method identity in the callback would be needed to resolve.
     /// </summary>
     public string? TryResolveKeyByTypeAndArity(string typeName, int arity)
@@ -138,7 +138,7 @@ internal sealed class InstrumentationRegistry
         if (this.keysByTypeAndArity.TryGetValue((typeName, arity), out var keys))
         {
             // First key wins; on the capture hot path, so enumerate rather than allocate via .Keys.First().
-            // Same-arity collisions (the documented #3 residual) resolve to one of them nondeterministically.
+            // Same-arity collisions (the documented residual) resolve to one of them nondeterministically.
             foreach (var key in keys.Keys)
             {
                 return key;
@@ -163,7 +163,7 @@ internal sealed class InstrumentationRegistry
     /// Resolves the instrumentation key for a woven call by its declaring type name alone, when that is
     /// unambiguous — i.e. exactly one config targets the type. Returns null if no config targets the type,
     /// OR if two-or-more do (a type-only match would have to guess which, and guessing wrong misattributes
-    /// the capture to the wrong probe — worse than dropping it; see #3).
+    /// the capture to the wrong probe — worse than dropping it).
     /// </summary>
     /// <param name="typeName">Fully-qualified type name from the woven call.</param>
     /// <returns>The single instrumentation key targeting the type, or null when it is not unambiguous.</returns>

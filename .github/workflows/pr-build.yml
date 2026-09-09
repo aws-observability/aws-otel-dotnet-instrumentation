@@ -128,6 +128,60 @@ jobs:
           
           echo "No github.event usage found in run steps"
 
+  # Without this job pr-build never compiles C++ at all: build.sh with no --build-native-profiler ships the
+  # stock upstream binary, so a broken line_probe.cpp or a source file dropped from CMakeLists.txt goes GREEN
+  # here and only breaks on main. Mirrors main-build.yml's build-native-x64 — the old-glibc container and the
+  # floor test are explained there.
+  #
+  # Validation only, no artifact upload: nothing in this workflow consumes one. main-build.yml uploads
+  # because its `build` job swaps the result into the distribution via --build-native-profiler.
+  build-native-x64:
+    name: Build native profiler (linux-glibc-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Build native profiler in old-glibc container
+        run: |
+          set -e
+          docker build -t adot-native-1604 -f ./docker/ubuntu1604-native.dockerfile ./docker
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project -w /project \
+            adot-native-1604 /bin/bash -c '
+              set -e
+              mkdir -p src/OpenTelemetry.AutoInstrumentation.Native/build
+              cd src/OpenTelemetry.AutoInstrumentation.Native/build
+              cmake ../ -DCMAKE_BUILD_TYPE=Release -DOTEL_AUTO_VERSION=1.16.0 \
+                -DOTEL_AUTO_VERSION_MAJOR=1 -DOTEL_AUTO_VERSION_MINOR=16 -DOTEL_AUTO_VERSION_PATCH=0
+              cmake --build . --config Release --parallel'
+
+      # Not redundant with the build succeeding: a source file missing from CMakeLists.txt still links, and
+      # only an eager load rejects the result.
+      - name: Assert the native profiler loads and exports resolve
+        run: bash build.sh AssertNativeProfilerLoads --skip Clean Restore
+
+      # A binary built against a newer glibc than a customer's loads here and fails there, so the only
+      # meaningful floor check is a load on the OLDEST supported glibc.
+      - name: Assert the native profiler loads on the MINIMUM glibc
+        run: |
+          set -e
+          docker run --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project -w /project \
+            adot-native-1604 /bin/bash -c '
+              set -e
+              LIB=src/OpenTelemetry.AutoInstrumentation.Native/build/bin/OpenTelemetry.AutoInstrumentation.Native.so
+              echo "container glibc: $(ldd --version | head -1)"
+              echo "library floor:   $(strings -a "$LIB" | grep -oE "GLIBC_2\.[0-9]+" | sort -uV | tail -1)"
+              readelf -d "$LIB" | grep NEEDED
+              gcc -o /tmp/gate build/native-gate/dlopen_gate.c -ldl
+              /tmp/gate "$LIB"'
+
   build:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -398,7 +452,7 @@ jobs:
 
   all-pr-checks-pass:
     runs-on: ubuntu-latest
-    needs: [static-code-checks, build, cloudwatch-plugin-tests, build-arm, build-x64-musl, build-arm-musl, build-and-scan-images, contract-test, cloudwatch-plugin-otel-contract-tests]
+    needs: [static-code-checks, build-native-x64, build, cloudwatch-plugin-tests, build-arm, build-x64-musl, build-arm-musl, build-and-scan-images, contract-test, cloudwatch-plugin-otel-contract-tests]
     if: always()
     steps:
       - name: Checkout to get workflow file

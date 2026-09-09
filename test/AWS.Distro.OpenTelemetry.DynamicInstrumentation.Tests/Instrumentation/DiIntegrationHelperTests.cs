@@ -34,7 +34,7 @@ public class DiIntegrationHelperTests
     [Fact]
     public void MatchKeyByType_SameClassNameDifferentNamespace_DoesNotCollide()
     {
-        // Regression for C4: two classes named "Svc" in different namespaces must not
+        // Regression guard: two classes named "Svc" in different namespaces must not
         // collide. Only the exact fully-qualified match should win.
         var registry = new InstrumentationRegistry();
         registry.Register(Config("A", "Svc"));

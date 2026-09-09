@@ -558,6 +558,89 @@ public class StatusReporterTests
         act.Should().NotThrow();
     }
 
+    [Fact]
+    public void ReportStatuses_RunsTheBeforeReportHook_AndEmitsItsErrorAheadOfThePeriodsActive()
+    {
+        // WHY THE HOOK EXISTS. Line-probe weave verdicts arrive out of band: the native rewriter decides them
+        // on a ReJIT thread whenever the target method first runs, and the configuration poller latches on an
+        // unchanged fingerprint — so in a service whose probe set has settled, OnConfigurationsChanged may
+        // never be called again. Without a periodic hook, a probe reported READY that the rewriter refused
+        // would stay READY for the life of the process.
+        //
+        // ORDER IS ASSERTED, not just the call. One config can produce both statuses in a period: a
+        // multi-local probe capturing on the locals that wove (ACTIVE) with one local refused (ERROR).
+        // ACTIVE-then-ERROR reads as a probe that broke after working.
+        var sentBodies = new List<string>();
+        var handler = new MockHttpHandler(req =>
+        {
+            sentBodies.Add(new StreamReader(req.Content!.ReadAsStream()).ReadToEnd());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var client = new DynamicInstrumentationClient(new HttpClient(handler), "http://localhost:2000", "svc", "env");
+        var registry = new InstrumentationRegistry();
+        using var cts = new CancellationTokenSource();
+
+        var config = CreateConfig(hash: "partly-woven");
+        registry.Register(config);
+
+        var hookCalls = 0;
+        StatusReporter? reporter = null;
+        reporter = new StatusReporter(
+            client,
+            registry,
+            cts.Token,
+            beforeReport: () =>
+            {
+                hookCalls++;
+                reporter!.ReportError(config, "RUNTIME_ERROR");
+            });
+
+        // A hit in this period, so the config also owes an ACTIVE.
+        registry.TryHit(config.InstrumentationKey).Should().BeTrue();
+
+        reporter.ReportStatuses();
+        reporter.FlushPending();
+
+        hookCalls.Should().Be(1);
+
+        var body = string.Concat(sentBodies);
+        body.Should().Contain("ERROR");
+        body.Should().Contain("ACTIVE");
+        body.IndexOf("ERROR", StringComparison.Ordinal).Should().BeLessThan(
+            body.IndexOf("ACTIVE", StringComparison.Ordinal),
+            "the hook runs first, so its ERROR is queued ahead of the period's ACTIVE");
+    }
+
+    [Fact]
+    public void ReportStatuses_WhenTheHookThrows_StillReportsTheRestOfThePeriod()
+    {
+        // The hook reaches the native profiler through a P/Invoke. If that ever throws something unforeseen,
+        // it must not take DISABLED/ACTIVE for every OTHER config down with it — status reporting is
+        // best-effort everywhere else in this class, and a hook is no reason to make it all-or-nothing.
+        var sentBodies = new List<string>();
+        var handler = new MockHttpHandler(req =>
+        {
+            sentBodies.Add(new StreamReader(req.Content!.ReadAsStream()).ReadToEnd());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var client = new DynamicInstrumentationClient(new HttpClient(handler), "http://localhost:2000", "svc", "env");
+        var registry = new InstrumentationRegistry();
+        using var cts = new CancellationTokenSource();
+        var reporter = new StatusReporter(
+            client, registry, cts.Token, beforeReport: () => throw new InvalidOperationException("boom"));
+
+        var config = CreateConfig(hash: "still-active");
+        registry.Register(config);
+        registry.TryHit(config.InstrumentationKey).Should().BeTrue();
+
+        var act = () => reporter.ReportStatuses();
+
+        act.Should().NotThrow();
+        reporter.FlushPending();
+
+        string.Concat(sentBodies).Should().Contain("ACTIVE").And.Contain("still-active");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         int count = 0, idx = 0;

@@ -237,6 +237,44 @@ public class ConfigurationPollerTests
         ProbeCursorAdvanced(poller).Should().BeTrue("a fully-applied set advances the cursor");
     }
 
+    [Fact]
+    public void Dispose_WaitsForAnInFlightPollToFinish()
+    {
+        // Dispose used to be an empty method, relying on the cancellation token alone. Cancellation is
+        // asynchronous, so it returned while a poll thread was still inside FetchAndApply — using the
+        // HttpClient and applying configurations. The manager's Cleanup disposes the HttpClient and tears
+        // down the capture engine on the very next lines, so "disposed" has to mean "no poll is running".
+        var applyStarted = new ManualResetEventSlim(false);
+        var applyFinished = new ManualResetEventSlim(false);
+
+        using var cts = new CancellationTokenSource();
+        var client = ClientReturning(ChangedResponse(ProbeConfig("aabb0000000000ee")));
+        var poller = new ConfigurationPoller(
+            client,
+            probeIntervalSeconds: 1,
+            breakpointIntervalSeconds: 1,
+            _ =>
+            {
+                applyStarted.Set();
+
+                // Stands in for the real apply, which does profiler work of non-trivial duration.
+                Thread.Sleep(500);
+                applyFinished.Set();
+                return true;
+            },
+            cts.Token);
+
+        poller.Start();
+        applyStarted.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue("the poller must reach the apply callback");
+
+        cts.Cancel();
+        poller.Dispose();
+
+        applyFinished.IsSet.Should().BeTrue(
+            "Dispose must join the poll threads, so it cannot return while a poll is still applying "
+            + "configurations against resources the caller is about to dispose");
+    }
+
     [Fact(Skip = "parity: needs staleness-warning / forced-resync — not yet implemented (source has only a TODO at ConfigurationPoller.cs:43)")]
     public void StalenessWarning_ForcesFullResync_WhenNoSuccessWithinWindow()
     {

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- G1 gate harness (branch + EH relocation). Mirrors LineProbeE2E's exit-code contract
+       (exit = number of FAILED assertions). Runs targets with REAL control flow (forward
+       branches + backward loop branch, and try/catch/finally) under the FORKED native profiler
+       and asserts the injected interior probe keeps the body runtime-valid: branches still land,
+       EH still catches, and unsafe offsets are refused. DEBUG, portable PDB, net8.0, NOT R2R. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>G1BranchEhE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Callback sink lives in a SEPARATE assembly, forcing a genuine cross-assembly MemberRef. -->
+    <ProjectReference Include="../LineProbeSink/LineProbeSink.csproj" />
+  </ItemGroup>
+</Project>

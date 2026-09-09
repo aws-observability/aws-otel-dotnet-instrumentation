@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Dedicated sink for the R9 harness. Deliberately NOT poc/LineProbeSink: R9 needs per-probe
+       fire COUNTS (not just "seen"), and adding counters to the shared sink would perturb
+       LineProbeTimingE2E's steady-state ns/call measurements. Separate assembly also keeps the
+       cross-assembly AssemblyRef+MemberRef resolution under test (Q3). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>R9Sink</AssemblyName>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

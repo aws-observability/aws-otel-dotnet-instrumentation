@@ -71,8 +71,8 @@ internal sealed class DISnapshotCollector : IDisposable
     private void DrainOnce()
     {
         // Queue growth is bounded in practice: HitState rate-limits captures to 5/sec per instrumentation
-        // (enqueue side), and the snapshot exporter's 10s timeout (DISnapshotOtlpEmitter.Create) makes Emit
-        // fail fast on a wedged endpoint rather than block the drain thread (drain side).
+        // (enqueue side), and Emit only hands the record to a BatchLogRecordExportProcessor, so a wedged
+        // endpoint stalls that processor's own thread inside DiOtlpLogExporter, never this one (drain side).
         foreach (var capture in DIDataStore.Drain())
         {
             try
