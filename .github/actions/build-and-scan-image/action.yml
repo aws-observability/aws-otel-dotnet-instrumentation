@@ -104,6 +104,18 @@ runs:
         skip-dirs: '/usr/share/dotnet,/usr/share/powershell'
         trivyignore-file: ${{ inputs.trivyignore-file }}
 
+    # Verify each Linux image: the operator-copied payload is intact (copy fidelity) and matches
+    # the main-build artifact it was built from (OpenTelemetryDistribution/<arch>, already staged).
+    - name: Verify x64 image
+      if: runner.os == 'Linux'
+      shell: bash
+      run: .github/scripts/test-adot-dotnet-image.sh "${{ inputs.image-name }}-amd64" "OpenTelemetryDistribution/amd64"
+
+    - name: Verify arm64 image
+      if: runner.os == 'Linux'
+      shell: bash
+      run: .github/scripts/test-adot-dotnet-image.sh "${{ inputs.image-name }}-arm64" "OpenTelemetryDistribution/arm64"
+
     - name: Scan Windows image
       if: runner.os == 'Windows'
       uses: ./.github/actions/image_scan
