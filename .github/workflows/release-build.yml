@@ -30,20 +30,86 @@ permissions:
   contents: write
 
 jobs:
-  build-sdk:
-    strategy:
-      fail-fast: false
-      matrix:
-        aws-region: [ 'us-east-1' ]
-    uses: ./.github/workflows/main-build.yml
-    secrets: inherit
-    with:
-      caller-workflow-name: 'release_build_workflow'
-  
+  # Reuse the distribution artifacts from the main build that already validated this commit
+  # instead of rebuilding them. The artifacts are pulled cross-run and re-uploaded to this run
+  # so downstream jobs keep consuming them by name with no changes.
+  download-artifacts:
+    environment: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Get successful main build run
+        id: main_build
+        uses: ./.github/actions/get_main_build_run
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}
+
+      - name: Download main build artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ steps.main_build.outputs.run_id }}
+        run: |
+          set -e
+          for name in \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-windows.zip \
+            aws-otel-dotnet-install.sh \
+            AWS.Otel.DotNet.Auto.psm1; do
+            gh run download "$RUN_ID" -n "$name" -D "staging/$name"
+          done
+
+      - name: Re-upload linux glibc x64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+
+      - name: Re-upload linux musl x64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+
+      - name: Re-upload linux glibc arm64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+
+      - name: Re-upload linux musl arm64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Re-upload windows artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+
+      - name: Re-upload bash installation script
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-otel-dotnet-install.sh
+          path: staging/aws-otel-dotnet-install.sh/aws-otel-dotnet-install.sh
+
+      - name: Re-upload psm1 installation script
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: AWS.Otel.DotNet.Auto.psm1
+          path: staging/AWS.Otel.DotNet.Auto.psm1/AWS.Otel.DotNet.Auto.psm1
+
   # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
     # since deleting from Private ECR is not possible.
   build-release-nuget:
-    needs: build-sdk
+    needs: download-artifacts
     environment: Release
     runs-on: windows-latest
     strategy:
