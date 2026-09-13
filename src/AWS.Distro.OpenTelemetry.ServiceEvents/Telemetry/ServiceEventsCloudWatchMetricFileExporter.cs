@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -35,6 +36,16 @@ namespace AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
 /// </remarks>
 internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<Metric>
 {
+    /// <summary>
+    /// Size at which the output file is rotated, in bytes.
+    /// </summary>
+    /// <remarks>
+    /// Generous, because the file exists to be read by whoever turned it on and truncating their
+    /// evidence early is its own failure. The number that matters is the total: one previous
+    /// generation is kept, so the path is bounded at roughly twice this.
+    /// </remarks>
+    internal const long MaxOutputFileBytes = 100L * 1024 * 1024;
+
     // OTLP proto enum: AGGREGATION_TEMPORALITY_DELTA = 1. ServiceEvents metrics are Delta.
     private const int AggregationTemporalityDelta = 1;
 
@@ -50,6 +61,31 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
     /// metric exporters acquire this same lock so writes from either side
     /// don't interleave a JSON line.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The lock is held <b>across the file write</b>, which couples the two exporters to each other and
+    /// to the disk. They do not run on equivalent threads: the metric exporter is driven by a
+    /// <c>PeriodicExportingMetricReader</c> on a background thread, while the log exporter is registered
+    /// behind a <c>SimpleLogRecordExportProcessor</c> and therefore exports synchronously on whichever
+    /// thread emitted the record. A write that stalls — a full disk, a hung network mount, a stopped
+    /// container filesystem — holds this lock and blocks that emitting thread for as long as the stall
+    /// lasts.
+    /// </para>
+    /// <para>
+    /// That is accepted rather than fixed, and the bound is what makes it acceptable: this whole path
+    /// exists only when <c>OTEL_AWS_SERVICE_EVENTS_OUTPUT_FILE</c> is set, which is opt-in, defaults to
+    /// unset, and is documented as a local dev/test facility. The default configuration exports over the
+    /// network and never constructs either file exporter.
+    /// </para>
+    /// <para>
+    /// The real fix, were this ever to become a supported production sink, is to stop doing file I/O on
+    /// the export path at all — hand records to a bounded queue drained by one dedicated writer thread,
+    /// which also removes the need for a shared lock. That is a larger change than the exposure
+    /// justifies today, so it is named here rather than half-built: a partial version, such as holding
+    /// the lock for less of the write, would leave the same blocking behaviour while making it harder to
+    /// see.
+    /// </para>
+    /// </remarks>
     private static readonly Dictionary<string, object> FileLocks = new(StringComparer.Ordinal);
 
     private readonly string fullPath;
@@ -117,13 +153,16 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
         // dual-buffer corruption that two persistent StreamWriters on one file cause.
         lock (this.writeLock)
         {
+            RotateIfOversized(this.fullPath);
+
             try
             {
                 File.AppendAllText(this.fullPath, request.ToJsonString(SerializerOptions) + "\n");
                 return ExportResult.Success;
             }
-            catch
+            catch (Exception ex)
             {
+                ServiceEventsEventSource.Log.FileWriteFailed(this.fullPath, ex);
                 return ExportResult.Failure;
             }
         }
@@ -144,6 +183,60 @@ internal sealed class ServiceEventsCloudWatchMetricFileExporter : BaseExporter<M
             }
 
             return lockObj;
+        }
+    }
+
+    /// <summary>
+    /// Rotate the output file if it has reached <paramref name="maxBytes" />, keeping one previous
+    /// generation alongside it. No-op when the file is absent or still under the cap.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the file grows for the life of the process. A long soak or a left-on debug setting
+    /// eventually fills the volume, and that harms the host rather than just this feature: on a shared
+    /// filesystem the process that fails first is whichever one next needs to write, which may well be
+    /// the application being instrumented. Telemetry is not entitled to take the disk with it.
+    /// </para>
+    /// <para>
+    /// One previous generation, replaced each time, bounds the path at roughly twice the cap. Keeping N
+    /// generations would need a shift of N files per rotation under the shared write lock, for a
+    /// dev/test artefact where the recent tail is the part anyone reads.
+    /// </para>
+    /// <para>
+    /// Callers <b>must</b> already hold the lock from <see cref="GetOrCreateFileLock" /> for this path.
+    /// Rotation reads a size and renames a file, and doing either concurrently with an append from the
+    /// other exporter would race — the rename could land between another writer's size check and its
+    /// write, sending that write to the rotated-away file.
+    /// </para>
+    /// <para>
+    /// Deliberately total: any failure is reported and swallowed. A rename can lose to a virus scanner
+    /// or a reader holding the file open on Windows, and neither losing the export nor throwing into the
+    /// SDK's export path is a proportionate response to being unable to rename a debug file. Continuing
+    /// to append leaves the file oversized, which is the same state as before this existed, and the next
+    /// flush tries again.
+    /// </para>
+    /// </remarks>
+    /// <param name="fullPath">Absolute path to the output file.</param>
+    /// <param name="maxBytes">Size at which to rotate. Overridable so tests need not write 100 MB.</param>
+    internal static void RotateIfOversized(string fullPath, long maxBytes = MaxOutputFileBytes)
+    {
+        try
+        {
+            var info = new FileInfo(fullPath);
+            if (!info.Exists || info.Length < maxBytes)
+            {
+                return;
+            }
+
+            // Size is checked before appending rather than predicted from the pending batch, so the
+            // file can exceed the cap by at most one batch. Bounding it exactly would mean measuring
+            // every serialized batch before writing it, to hold a limit that is already approximate.
+            File.Move(fullPath, fullPath + ".1", overwrite: true);
+            ServiceEventsEventSource.Log.OutputFileRotated(fullPath, info.Length);
+        }
+        catch (Exception ex)
+        {
+            ServiceEventsEventSource.Log.FileWriteFailed(fullPath, ex);
         }
     }
 

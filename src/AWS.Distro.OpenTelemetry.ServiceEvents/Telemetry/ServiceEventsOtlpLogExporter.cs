@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 
@@ -54,6 +55,13 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     private readonly Uri endpoint;
     private readonly string? logGroup;
     private readonly string? logStream;
+
+    /// <summary>
+    /// Monotonic deadline for exports once shutdown has begun, or <c>long.MaxValue</c> while running
+    /// normally. Written by <see cref="OnShutdown" /> and read by <see cref="Export" />, possibly on
+    /// the batch processor's thread, so accessed through <see cref="Volatile" />.
+    /// </summary>
+    private long shutdownDeadlineTicks = long.MaxValue;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServiceEventsOtlpLogExporter"/> class.
@@ -133,11 +141,34 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
                 request.Headers.TryAddWithoutValidation("x-aws-log-stream", this.logStream);
             }
 
-            using var response = HttpClient.Send(request);
-            return response.IsSuccessStatusCode ? ExportResult.Success : ExportResult.Failure;
+            // Bounded by whatever the shutdown budget has left, when shutting down. The client's own
+            // 10s timeout is fine while the process is running, but during teardown it is an order of
+            // magnitude beyond the window ServiceEvents is allowed, and overrunning that window gets
+            // the process terminated mid-flush — losing this batch and everything behind it.
+            var remaining = this.RemainingShutdownTime();
+            if (remaining == TimeSpan.Zero)
+            {
+                ServiceEventsEventSource.Log.ExportAbandonedOnShutdown(this.endpoint.ToString(), 0);
+                return ExportResult.Failure;
+            }
+
+            using var cts = remaining == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(remaining);
+            using var response = HttpClient.Send(request, cts?.Token ?? default);
+            if (response.IsSuccessStatusCode)
+            {
+                return ExportResult.Success;
+            }
+
+            // A rejection is not an exception, and is the shape a misconfigured endpoint produces.
+            // Reported through the same event so a listener does not have to know the difference.
+            ServiceEventsEventSource.Log.ExportFailed(
+                this.endpoint.ToString(),
+                $"HTTP {(int)response.StatusCode} {response.StatusCode}");
+            return ExportResult.Failure;
         }
-        catch
+        catch (Exception ex)
         {
+            ServiceEventsEventSource.Log.ExportFailed(this.endpoint.ToString(), ex);
             return ExportResult.Failure;
         }
     }
@@ -216,6 +247,83 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
                 WriteString(empty, 1, string.Empty);
                 return empty.ToArray();
         }
+    }
+
+    /// <summary>
+    /// Arm the shutdown deadline from ServiceEvents' own teardown, before the SDK's drain begins, so
+    /// that queued and in-flight exports stop attempting once it passes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This — not <see cref="OnShutdown" /> — is what actually bounds the shutdown drain, and the
+    /// reason is an ordering problem in the SDK that makes the exporter's own hook useless for it.
+    /// <c>BatchExportProcessor.OnShutdown</c> calls <c>worker.Shutdown(timeout)</c> first, which
+    /// performs the drain (that is, the <c>Export</c> calls), and only afterwards calls
+    /// <c>exporter.Shutdown(remaining)</c>. So by the time <see cref="OnShutdown" /> runs, every export
+    /// it was meant to bound has already happened, with the deadline still unset.
+    /// </para>
+    /// <para>
+    /// Nor does the processor's <c>exporterTimeoutMilliseconds</c> help: in OTel .NET 1.16.0 it is
+    /// stored, passed to the worker and exposed as a property, but never read — the export is a bare
+    /// <c>Exporter.Export(batch)</c> with no timeout and no cancellation. What actually governs the
+    /// drain is a hardcoded constant: <c>LoggerProviderSdk.Dispose</c> calls
+    /// <c>Processor?.Shutdown(5000)</c> regardless of any configured value.
+    /// </para>
+    /// <para>
+    /// Calling this immediately before disposing the logger factory is therefore the only way to make
+    /// the budget real, because it is the last moment we control before the SDK's drain starts.
+    /// </para>
+    /// <para>
+    /// Teardown runs sequentially — collectors flush, then the providers drain over the network — and
+    /// the whole sequence has to fit inside the runtime's process-exit allowance. Overrunning it is
+    /// worse than giving up: the process is terminated mid-flush, so the batch is lost anyway, having
+    /// delayed the host's shutdown to lose it. Under a container orchestrator that can mean a grace
+    /// period expiring and a rolling deployment stalling.
+    /// </para>
+    /// </remarks>
+    /// <param name="budget">
+    /// Time the drain may take. Zero or negative expires the deadline immediately, which abandons the
+    /// remaining batches rather than attempting them outside the window.
+    /// </param>
+    internal void BeginShutdown(TimeSpan budget)
+    {
+        var milliseconds = budget <= TimeSpan.Zero ? 0L : (long)budget.TotalMilliseconds;
+        this.ArmDeadline(Environment.TickCount64 + milliseconds);
+    }
+
+    /// <summary>
+    /// Honour a shutdown timeout handed to us by the SDK, tightening the deadline if it is stricter
+    /// than the one already armed.
+    /// </summary>
+    /// <remarks>
+    /// Retained for correctness rather than as the mechanism that bounds the drain — see
+    /// <see cref="BeginShutdown" /> for why this hook runs too late to do that. The SDK is entitled to
+    /// call it, and a budget stricter than our own is worth honouring.
+    /// </remarks>
+    /// <param name="timeoutMilliseconds">Milliseconds allowed, or <c>Timeout.Infinite</c> for no limit.</param>
+    /// <returns>
+    /// Always <c>true</c>. There is nothing here that can fail, and reporting failure would only make
+    /// the SDK record a shutdown problem the host can do nothing about.
+    /// </returns>
+    protected override bool OnShutdown(int timeoutMilliseconds)
+    {
+        // Timeout.Infinite (-1) is the only negative the SDK permits, and it means "no limit", so it
+        // leaves the deadline alone. Everything else arms one -- including 0, which the OTel contract
+        // defines as "give up immediately" and which therefore has to expire the deadline rather than
+        // skip arming it. An earlier version guarded on `> 0` and so treated 0 as unbounded, the exact
+        // opposite of its meaning; BatchExportProcessor.OnShutdown calls exporter.Shutdown(0) verbatim
+        // when its own timeout is 0, and Stopwatch.Remaining clamps to 0 whenever the drain has already
+        // consumed the whole budget, so that path is reachable rather than theoretical.
+        //
+        // This hook is not what bounds the shutdown drain -- see BeginShutdown, which is. It remains
+        // wired because the SDK is entitled to call it, and honouring a tighter budget than we armed
+        // ourselves is correct.
+        if (timeoutMilliseconds != Timeout.Infinite)
+        {
+            this.ArmDeadline(Environment.TickCount64 + timeoutMilliseconds);
+        }
+
+        return true;
     }
 
     /// <summary>Encode one <see cref="LogRecord"/> as an OTLP <c>LogRecord</c> protobuf message.</summary>
@@ -459,5 +567,49 @@ internal sealed class ServiceEventsOtlpLogExporter : BaseExporter<LogRecord>
     {
         var bits = BitConverter.DoubleToInt64Bits(d);
         WriteFixed64(buf, field, (ulong)bits);
+    }
+
+    /// <summary>
+    /// Move the shutdown deadline earlier, never later.
+    /// </summary>
+    /// <remarks>
+    /// Tighten-only, because two callers arm this and they must not fight. <see cref="BeginShutdown" />
+    /// arms it from ServiceEvents' own teardown, then the SDK calls <see cref="OnShutdown" /> with
+    /// whatever remains of its own hardcoded grace period -- a larger number. Taking the later of the
+    /// two would let the SDK's value undo the budget we set for ourselves.
+    /// </remarks>
+    /// <param name="deadlineTicks">Candidate deadline, on the <see cref="Environment.TickCount64" /> clock.</param>
+    private void ArmDeadline(long deadlineTicks)
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref this.shutdownDeadlineTicks);
+            if (current <= deadlineTicks)
+            {
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref this.shutdownDeadlineTicks, deadlineTicks, current) == current)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Time left for an export attempt: <see cref="Timeout.InfiniteTimeSpan" /> while running normally,
+    /// otherwise what remains of the shutdown deadline, floored at zero.
+    /// </summary>
+    /// <returns>The remaining time, or <see cref="Timeout.InfiniteTimeSpan" />.</returns>
+    private TimeSpan RemainingShutdownTime()
+    {
+        var deadline = Volatile.Read(ref this.shutdownDeadlineTicks);
+        if (deadline == long.MaxValue)
+        {
+            return Timeout.InfiniteTimeSpan;
+        }
+
+        var left = deadline - Environment.TickCount64;
+        return left <= 0 ? TimeSpan.Zero : TimeSpan.FromMilliseconds(left);
     }
 }

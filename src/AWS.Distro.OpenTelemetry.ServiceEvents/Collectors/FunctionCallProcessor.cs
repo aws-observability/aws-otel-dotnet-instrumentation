@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 using AWS.Distro.OpenTelemetry.ServiceEvents.Telemetry;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Utils;
 using OpenTelemetry;
 
 namespace AWS.Distro.OpenTelemetry.ServiceEvents.Collectors;
@@ -104,9 +105,10 @@ internal sealed class FunctionCallProcessor : BaseProcessor<Activity>
                     Error: activity.Status == ActivityStatusCode.Error,
                     IsAsync: false));
         }
-        catch
+        catch (Exception ex)
         {
             // Telemetry must never crash the host. Drop and continue.
+            ServiceEventsEventSource.Log.ComponentFailed("FunctionCallProcessor.OnEnd", ex);
         }
     }
 

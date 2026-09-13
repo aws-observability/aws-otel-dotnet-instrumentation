@@ -117,9 +117,10 @@ internal sealed class DeploymentEventEmitter : IDisposable
         {
             this.emitter.EmitDeploymentEvent(this.context.ToEvent(trigger));
         }
-        catch
+        catch (Exception ex)
         {
             // Telemetry must never crash the host. Failed emissions are dropped.
+            ServiceEventsEventSource.Log.ComponentFailed($"DeploymentEventEmitter.Emit({trigger})", ex);
         }
     }
 

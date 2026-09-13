@@ -309,10 +309,10 @@ public class ServiceEventsConfigTests
     [InlineData(null, true, true, false)]    // unset + AS on + Lambda → false (Lambda wins over AS)
     [InlineData("true", true, true, false)]  // explicit on + Lambda → still false (Lambda wins over explicit)
     [InlineData(null, false, false, false)]  // unset + AS off → false
-    [InlineData(null, true, false, true)]    // unset + AS on → true (bundled with App Signals)
-    [InlineData("true", false, false, true)] // explicit on → true (overrides AS off)
-    [InlineData("false", true, false, false)] // explicit off → false (overrides AS on)
-    public void DetermineEnabled_AppliesSpecBundlingRule(string? enabledFlag, bool appSignalsEnabled, bool isLambda, bool expected)
+    [InlineData(null, true, false, false)]   // unset + AS on → false (opt-in: App Signals does not enable it)
+    [InlineData("true", false, false, true)] // explicit on → true (does not require App Signals)
+    [InlineData("false", true, false, false)] // explicit off → false
+    public void DetermineEnabled_RequiresAnExplicitOptIn(string? enabledFlag, bool appSignalsEnabled, bool isLambda, bool expected)
     {
         var envVars = new Dictionary<string, string>();
         if (enabledFlag is not null)
@@ -361,11 +361,12 @@ public class ServiceEventsConfigTests
 
         ServiceEventsConfig.DetermineEnabled(
                 new ServiceEventsConfig { Enabled = false, ApplicationSignalsEnabled = true })
-            .Should().BeFalse("an explicit false on the config must win over the bundling rule");
+            .Should().BeFalse("an explicit false on the config must disable ServiceEvents");
 
         ServiceEventsConfig.DetermineEnabled(
                 new ServiceEventsConfig { Enabled = null, ApplicationSignalsEnabled = true })
-            .Should().BeTrue("unset must defer to Application Signals, not read as false");
+            .Should().BeFalse(
+                "ServiceEvents is opt-in: enabling Application Signals must not enable it implicitly");
     }
 
     [Fact]

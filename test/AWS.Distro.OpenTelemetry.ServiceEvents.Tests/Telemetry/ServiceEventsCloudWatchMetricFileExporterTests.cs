@@ -26,10 +26,22 @@ public class ServiceEventsCloudWatchMetricFileExporterTests
 
         try
         {
-            using (var meter = new Meter(ServiceEventsOtlpEmitter.InstrumentationScopeName, ServiceEventsOtlpEmitter.InstrumentationScopeVersion))
+            // A meter name unique to this run, NOT the shared instrumentation scope name. Meter is
+            // process-global, and this test publishes a service.function.duration instrument — the same
+            // name the real FunctionCall pipeline emits. Under the shared name, any concurrently-running
+            // test whose provider subscribes to that scope collects this instrument too: the integration
+            // smoke tests did exactly that, found this test's data point first, and failed asserting on a
+            // function.name of "Test.FnSource.HttpRequestOut" that they never recorded.
+            //
+            // Nothing here depends on the name. The exporter writes the scope name as a constant rather
+            // than reading it from the metric, and the assertions below are all about the histogram's
+            // OTLP shape.
+            var meterName = $"{ServiceEventsOtlpEmitter.InstrumentationScopeName}.metricfileexporter.{Guid.NewGuid():N}";
+
+            using (var meter = new Meter(meterName, ServiceEventsOtlpEmitter.InstrumentationScopeVersion))
             {
                 using var provider = Sdk.CreateMeterProviderBuilder()
-                    .AddMeter(ServiceEventsOtlpEmitter.InstrumentationScopeName)
+                    .AddMeter(meterName)
                     .AddView(
                         instrumentName: "service.function.duration",
                         metricStreamConfiguration: new Base2ExponentialBucketHistogramConfiguration())

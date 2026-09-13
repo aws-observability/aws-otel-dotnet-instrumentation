@@ -727,9 +727,8 @@ public class Plugin
     }
 
     // ServiceEvents is hosted by this plugin (rather than a separate plugin/DLL) so it ships and
-    // loads with the existing distribution — customers get the feature on upgrade with no
-    // OTEL_DOTNET_AUTO_PLUGINS change. Enablement follows Application Signals unless
-    // OTEL_AWS_SERVICE_EVENTS_ENABLED is set explicitly, and is always off in Lambda; that rule
+    // loads with the existing distribution, with no OTEL_DOTNET_AUTO_PLUGINS change. Enablement
+    // requires OTEL_AWS_SERVICE_EVENTS_ENABLED=true, and is always off in Lambda; that rule
     // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
     // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
     // shipped in the .NET Framework build.
