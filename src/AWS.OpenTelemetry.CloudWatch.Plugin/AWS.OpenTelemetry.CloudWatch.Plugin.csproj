@@ -2,6 +2,8 @@
   <PropertyGroup>
     <Version>0.1.0</Version>
     <PackageId>AWS.OpenTelemetry.CloudWatchPluginOtel</PackageId>
+    <AssemblyName>AWS.OpenTelemetry.CloudWatchPluginOtel</AssemblyName>
+    <RootNamespace>AWS.OpenTelemetry.CloudWatchPluginOtel</RootNamespace>
     <Title>Amazon CloudWatch plugin for OpenTelemetry .NET</Title>
     <Description>Amazon CloudWatch plugin for OpenTelemetry .NET.</Description>
     <Authors>Amazon Web Services</Authors>

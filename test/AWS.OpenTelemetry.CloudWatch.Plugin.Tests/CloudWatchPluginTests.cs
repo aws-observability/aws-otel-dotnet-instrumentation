@@ -3,18 +3,18 @@
 
 using System.Diagnostics;
 using System.Reflection;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Tests.Implementation.SpanMetrics;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Tests.Implementation.SpanMetrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Tests;
 
 [Collection(SpanMetricsTestsCollection.Name)]
 public class CloudWatchPluginTests
 {
     private const string CloudWatchPluginName =
-        "AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin";
+        "AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatchPluginOtel";
 
     [Fact]
     public void AutoPluginRecordsMetricsWithoutExportingAlwaysOffSpans()

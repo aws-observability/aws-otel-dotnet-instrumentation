@@ -3,12 +3,13 @@
 
 using System.Reflection;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 
 internal static class SpanMetricsConstants
 {
     public const string ScopeName = "cloudwatch.plugin.otel.span_metrics";
     public const string CallsName = "traces.span.metrics.calls";
+    public const string CallsUnit = "{call}";
     public const string DurationName = "traces.span.metrics.duration";
     public const string DurationUnit = "s";
     public const string SpanName = "span.name";

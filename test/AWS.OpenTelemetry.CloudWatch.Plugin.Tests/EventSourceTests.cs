@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics.Tracing;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Tests;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Tests;
 
 [Collection(SpanMetricsTestsCollection.Name)]
 public class EventSourceTests
@@ -79,7 +79,7 @@ public class EventSourceTests
 
         protected override void OnEventSourceCreated(EventSource eventSource)
         {
-            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatch-Plugin")
+            if (eventSource.Name == "OpenTelemetry-AWS-CloudWatchPluginOtel")
             {
                 this.EnableEvents(eventSource, EventLevel.Error);
             }

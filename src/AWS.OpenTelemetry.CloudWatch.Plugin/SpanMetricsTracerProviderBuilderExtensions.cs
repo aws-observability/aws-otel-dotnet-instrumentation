@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.SpanMetrics;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
+using OpenTelemetry.Trace;
 
-namespace OpenTelemetry.Trace;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel;
 
 /// <summary>
 /// Extension methods for registering CloudWatch span metrics.

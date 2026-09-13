@@ -1,10 +1,19 @@
 #nullable enable
-AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin
-AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureMeterProvider(OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
-AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureTracerProvider(OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
-AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.CloudWatchPlugin() -> void
-OpenTelemetry.Metrics.SpanMetricsMeterProviderBuilderExtensions
-static OpenTelemetry.Metrics.SpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
-OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions
-static OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
-static OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder, OpenTelemetry.Trace.Sampler! rootSampler) -> OpenTelemetry.Trace.TracerProviderBuilder!
+AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin
+AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin.AfterConfigureMeterProvider(OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
+AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin.AfterConfigureTracerProvider(OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
+AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin.CloudWatchPlugin() -> void
+AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetricsMeterProviderBuilderExtensions
+static AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
+AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetricsTracerProviderBuilderExtensions
+static AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
+static AWS.OpenTelemetry.CloudWatchPluginOtel.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder, OpenTelemetry.Trace.Sampler! rootSampler) -> OpenTelemetry.Trace.TracerProviderBuilder!
+*REMOVED*AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin
+*REMOVED*AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureMeterProvider(OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
+*REMOVED*AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.AfterConfigureTracerProvider(OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
+*REMOVED*AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin.CloudWatchPlugin() -> void
+*REMOVED*OpenTelemetry.Metrics.SpanMetricsMeterProviderBuilderExtensions
+*REMOVED*static OpenTelemetry.Metrics.SpanMetricsMeterProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Metrics.MeterProviderBuilder! builder) -> OpenTelemetry.Metrics.MeterProviderBuilder!
+*REMOVED*OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions
+*REMOVED*static OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder) -> OpenTelemetry.Trace.TracerProviderBuilder!
+*REMOVED*static OpenTelemetry.Trace.SpanMetricsTracerProviderBuilderExtensions.AddCloudWatchSpanMetrics(this OpenTelemetry.Trace.TracerProviderBuilder! builder, OpenTelemetry.Trace.Sampler! rootSampler) -> OpenTelemetry.Trace.TracerProviderBuilder!
