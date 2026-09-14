@@ -336,12 +336,19 @@ jobs:
         with:
           python-version: '3.10'
 
+      # EVERY application whose tests the pytest run below collects has to be listed here. That run is
+      # directory-wide (`contract-tests/tests` minus one ignore), so adding a test package silently opts it
+      # into this job -- and an application missing from this list fails as `ImageNotFound: pull access
+      # denied`, which reads like a registry problem rather than a missing build. That is exactly how the DI
+      # suite broke this job: its own workflow (di-contract-tests.yml) builds every application and stayed
+      # green, so the focused signal passed while the full suite failed.
       - name: Set up contract tests
         run: |
           cd test
           bash ./build-and-install-distro.sh
           bash ./set-up-contract-tests.sh \
             AppSignals.NetCore \
+            DynamicInstrumentation.NetCore \
             ServiceEvents.NetCore \
             TestSimpleApp.AWSSDK.Core \
             TestSimpleApp.EfCore \

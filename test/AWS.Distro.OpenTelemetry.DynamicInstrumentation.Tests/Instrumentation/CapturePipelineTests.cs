@@ -234,7 +234,7 @@ public class CapturePipelineTests : IDisposable
     [Fact]
     public void CoLocatedMethods_ResolveByArity_AttributeToCorrectProbe()
     {
-        // #3 fix, end-to-end through the capture hot path: two instrumented methods on ONE type,
+        // Arity resolution, end-to-end through the capture hot path: two instrumented methods on ONE type,
         // differing in parameter count. Each woven call must attribute to its own config (LocationHash),
         // not "first key wins". Arity comes from args.Length, indexed via IndexArities (Apply-time).
         var registry = new InstrumentationRegistry();
@@ -283,7 +283,7 @@ public class CapturePipelineTests : IDisposable
     [Fact]
     public void RemovedCoLocatedMethod_DoesNotCaptureUnderTheSurvivingProbe()
     {
-        // REVIEW FINDING (vastin, PR #439): a removed method can still export under a SURVIVING probe on the
+        // REVIEW FINDING (PR #439): a removed method can still export under a SURVIVING probe on the
         // same type. Removal drops the arity-index entry but cannot un-weave the IL, so the removed method's
         // callback keeps firing. Resolution is `byTypeAndArity ?? byType`, and once the type has exactly ONE
         // config left, the type-only fallback becomes "unambiguous" again — so the removed method's next call
@@ -492,7 +492,7 @@ public class UnrelatedTarget
     public int Compute(int x) => x;
 }
 
-// Two instrumented methods on one type, differing in parameter count — the #3 arity-disambiguation
+// Two instrumented methods on one type, differing in parameter count — the arity-disambiguation
 // case. FullName must equal CodeUnit + ".MultiMethodTarget".
 public class MultiMethodTarget
 {

@@ -21,46 +21,46 @@ public class DiIntegrationHelperTests
         };
 
     [Fact]
-    public void MatchKeyByType_ExactMatch_ReturnsKey()
+    public void MatchKeysByType_ExactMatch_ReturnsKey()
     {
         var registry = new InstrumentationRegistry();
         registry.Register(Config("MyApp.Services", "OrderService"));
 
-        var key = DiIntegrationHelper.MatchKeyByType("MyApp.Services.OrderService", registry);
+        var keys = DiIntegrationHelper.MatchKeysByType("MyApp.Services.OrderService", registry);
 
-        key.Should().Be("MyApp.Services.OrderService.Process");
+        keys.Should().BeEquivalentTo(new[] { "MyApp.Services.OrderService.Process:PROBE" });
     }
 
     [Fact]
-    public void MatchKeyByType_SameClassNameDifferentNamespace_DoesNotCollide()
+    public void MatchKeysByType_SameClassNameDifferentNamespace_DoesNotCollide()
     {
-        // Regression for C4: two classes named "Svc" in different namespaces must not
+        // Regression guard: two classes named "Svc" in different namespaces must not
         // collide. Only the exact fully-qualified match should win.
         var registry = new InstrumentationRegistry();
         registry.Register(Config("A", "Svc"));
         registry.Register(Config("B", "Svc"));
 
-        DiIntegrationHelper.MatchKeyByType("A.Svc", registry).Should().Be("A.Svc.Process");
-        DiIntegrationHelper.MatchKeyByType("B.Svc", registry).Should().Be("B.Svc.Process");
+        DiIntegrationHelper.MatchKeysByType("A.Svc", registry).Should().BeEquivalentTo(new[] { "A.Svc.Process:PROBE" });
+        DiIntegrationHelper.MatchKeysByType("B.Svc", registry).Should().BeEquivalentTo(new[] { "B.Svc.Process:PROBE" });
     }
 
     [Fact]
-    public void MatchKeyByType_SuffixButNotExact_ReturnsNull()
+    public void MatchKeysByType_SuffixButNotExact_ReturnsNull()
     {
         // "Other.OrderService" must NOT match a registered "MyApp.Services.OrderService"
         // just because the class name suffix lines up.
         var registry = new InstrumentationRegistry();
         registry.Register(Config("MyApp.Services", "OrderService"));
 
-        DiIntegrationHelper.MatchKeyByType("Other.OrderService", registry).Should().BeNull();
+        DiIntegrationHelper.MatchKeysByType("Other.OrderService", registry).Should().BeNull();
     }
 
     [Fact]
-    public void MatchKeyByType_NoMatch_ReturnsNull()
+    public void MatchKeysByType_NoMatch_ReturnsNull()
     {
         var registry = new InstrumentationRegistry();
         registry.Register(Config("MyApp", "A"));
 
-        DiIntegrationHelper.MatchKeyByType("MyApp.B", registry).Should().BeNull();
+        DiIntegrationHelper.MatchKeysByType("MyApp.B", registry).Should().BeNull();
     }
 }

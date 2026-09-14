@@ -4,10 +4,12 @@
 namespace AWS.Distro.OpenTelemetry.DynamicInstrumentation.Capture;
 
 /// <summary>
-/// Stashed in the profiler's CallTargetState between OnMethodBegin and OnMethodEnd. Carries the
-/// instrumentation key plus a per-call id so each (possibly recursive) invocation pairs with its own
-/// entry in <see cref="DIDataStore"/>.
+/// Stashed in the profiler's CallTargetState between OnMethodBegin and OnMethodEnd. Carries one
+/// <see cref="CaptureEntry"/> per configuration that owns the call, each with its own per-call id so every
+/// (possibly recursive) invocation pairs with its own entries.
 /// </summary>
-/// <param name="InstrumentationKey">The instrumentation key of the woven config.</param>
-/// <param name="CallId">Unique id for this invocation, issued by <see cref="DIDataStore.RecordEntry"/>.</param>
-internal sealed record CaptureState(string InstrumentationKey, long CallId);
+/// <param name="Entries">One entry per configuration targeting the woven method.</param>
+// PLURAL, because a method can carry more than one configuration — a PROBE and a BREAKPOINT, each with its
+// own LocationHash, capture policy and MaxHits budget. The single-key version silently served whichever
+// config registered first.
+internal sealed record CaptureState(CaptureEntry[] Entries);

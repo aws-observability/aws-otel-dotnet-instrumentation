@@ -24,7 +24,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
     // Serializes OnConfigurationsChanged: the poller calls it from both poll threads. Lock order is always initLock -> configChangeLock.
     private readonly object configChangeLock = new();
 
-    // Configs already handed to the profiler; applied once each. Cleared on Cleanup (C3). Guarded by configChangeLock.
+    // Configs already handed to the profiler; applied once each. Cleared on Cleanup. Guarded by configChangeLock.
     // InstrumentationKey -> the LocationHash that was applied for it. Applied once per identity.
     //
     // WHY THE HASH AND NOT JUST THE KEY. An in-place edit of a probe (different captured arguments, a
@@ -268,7 +268,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
                     this.statusReporter?.MarkApplied(config);
 
                     // Index the woven arities so the capture hot path resolves this call by (type, arity),
-                    // disambiguating co-located methods that differ in parameter count (#3). A same-arity
+                    // disambiguating co-located methods that differ in parameter count. A same-arity
                     // collision (two configured methods on one type with the same parameter count) can't be
                     // told apart by args.Length, so captures may be misattributed — report OVERLOADED_METHODS
                     // on EVERY config in the ambiguous bucket (both the incoming one and its already-applied
@@ -339,7 +339,7 @@ public sealed class DynamicInstrumentationManager : IDisposable
         this.client = null;
         this.httpClient = null;
 
-        // Reset the capture engine; clear appliedInstrumentations with the registry so they don't diverge on restart (C3).
+        // Reset the capture engine; clear appliedInstrumentations with the registry so they don't diverge on restart.
         // configChangeLock guards against interleaving with an in-flight callback (order: initLock -> configChangeLock).
         this.registry = null;
         this.profilerTranslator = null;

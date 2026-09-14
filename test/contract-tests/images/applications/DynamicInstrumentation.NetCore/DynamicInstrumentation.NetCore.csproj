@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DynamicInstrumentation.NetCore</RootNamespace>
+
+    <!-- Portable PDBs, published alongside the assembly. Function-level probes do not need debug info,
+         but LINE-level probes resolve a source line through the PDB and are refused without it, so the
+         image ships them from the start rather than needing a Dockerfile change later. -->
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+</Project>
