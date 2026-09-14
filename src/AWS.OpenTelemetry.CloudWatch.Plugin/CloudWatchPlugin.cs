@@ -1,11 +1,11 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-using AWS.OpenTelemetry.CloudWatch.Plugin.Implementation.Sampling;
+using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel;
 
 /// <summary>
 /// CloudWatch auto-instrumentation plugin for OpenTelemetry .NET.

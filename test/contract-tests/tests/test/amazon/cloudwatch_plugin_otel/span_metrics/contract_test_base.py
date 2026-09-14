@@ -521,14 +521,21 @@ class SpanMetricsContractTestBase(ContractTestBase):
         metrics: List[ResourceScopeMetric],
         expected: Dict[str, Any],
     ) -> Dict[str, Any]:
-        calls = self._get_latest_data_point(
+        calls_metric = self._get_matching_metric(
             metrics, "traces.span.metrics.calls", expected
+        )
+        calls = self._get_latest_data_point(
+            [calls_metric], "traces.span.metrics.calls", expected
         )
         calls_attributes = self._get_attribute_values(calls.attributes)
         value_field = calls.WhichOneof("value")
         self.assertIsNotNone(value_field)
         self.assertEqual(1, getattr(calls, value_field))
-        self.assertEqual(_SERVICE_NAME, calls_attributes["service.name"])
+        resource_attributes = self._get_attribute_values(
+            calls_metric.resource_metrics.resource.attributes
+        )
+        self.assertEqual(_SERVICE_NAME, resource_attributes["service.name"])
+        self.assertEqual("{call}", calls_metric.metric.unit)
         self.assertEqual("v1", calls_attributes["aws.otel.span.metrics.schema"])
         self.assertEqual(
             self._get_library_version(),
@@ -565,6 +572,20 @@ class SpanMetricsContractTestBase(ContractTestBase):
         candidates = self._get_matching_data_points(metrics, metric_name, expected)
         self.assertTrue(candidates, f"No {metric_name} datapoint matched {expected}")
         return max(candidates, key=lambda data_point: data_point.time_unix_nano)
+
+    def _get_matching_metric(
+        self,
+        metrics: List[ResourceScopeMetric],
+        metric_name: str,
+        expected: Dict[str, Any],
+    ) -> ResourceScopeMetric:
+        candidates = [
+            metric
+            for metric in metrics
+            if self._get_matching_data_points([metric], metric_name, expected)
+        ]
+        self.assertTrue(candidates, f"No {metric_name} metric matched {expected}")
+        return candidates[-1]
 
     def _get_matching_data_points(
         self,

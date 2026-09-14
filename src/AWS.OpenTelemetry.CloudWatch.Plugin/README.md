@@ -2,11 +2,8 @@
 
 Amazon CloudWatch plugin for OpenTelemetry .NET.
 
-The NuGet package ID is `AWS.OpenTelemetry.CloudWatchPluginOtel`. The package
-contains `AWS.OpenTelemetry.CloudWatch.Plugin.dll` and exposes the
-`AWS.OpenTelemetry.CloudWatch.Plugin` namespace. Use the package ID for NuGet
-commands and package references, the assembly name for runtime plugin
-configuration, and the namespace in application code.
+The NuGet package ID, assembly name, and namespace are
+`AWS.OpenTelemetry.CloudWatchPluginOtel`.
 
 > [!IMPORTANT]
 > `CloudWatchPlugin` must be the last plugin listed in
@@ -40,12 +37,12 @@ dotnet add package AWS.OpenTelemetry.CloudWatchPluginOtel
 Configure auto-instrumentation with the plugin's CLR assembly-qualified type:
 
 ```sh
-export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatch.Plugin.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatch.Plugin"
+export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatchPluginOtel"
 ```
 
 For a deployment that cannot add an `AWS.OpenTelemetry.CloudWatchPluginOtel`
 package reference, extract the framework-specific
-`AWS.OpenTelemetry.CloudWatch.Plugin.dll` from the NuGet package into the
+`AWS.OpenTelemetry.CloudWatchPluginOtel.dll` from the NuGet package into the
 upstream distribution's managed assemblies directory under
 `OTEL_DOTNET_AUTO_HOME` (`net` for .NET or `netfx` for .NET Framework), then set
 `OTEL_DOTNET_AUTO_PLUGINS` as shown above.
@@ -59,13 +56,13 @@ a different sampling policy.
 ## Manual OpenTelemetry SDK registration
 
 After adding an `AWS.OpenTelemetry.CloudWatchPluginOtel` package reference,
-import its `AWS.OpenTelemetry.CloudWatch.Plugin` namespace. The span metrics
+import its `AWS.OpenTelemetry.CloudWatchPluginOtel` namespace. The span metrics
 connector emits `traces.span.metrics.calls` and `traces.span.metrics.duration`
 from recorded spans. Wire it into the application's existing OpenTelemetry
 builders:
 
 ```csharp
-using AWS.OpenTelemetry.CloudWatch.Plugin;
+using AWS.OpenTelemetry.CloudWatchPluginOtel;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -76,6 +73,10 @@ tracerBuilder
 
 meterBuilder.AddCloudWatchSpanMetrics();
 ```
+
+The meter provider's resource must include `service.name`. When configuring
+resources manually, configure it on `meterBuilder`; configuring
+`service.name` only on `tracerBuilder` does not add it to the emitted metrics.
 
 To generate complete span metrics, the plugin records every span in-process.
 The configured sampler's export decisions are preserved, so spans it drops are
@@ -90,11 +91,11 @@ The plugin emits:
 - `traces.span.metrics.calls`, a counter of completed spans.
 - `traces.span.metrics.duration`, a histogram of span duration in seconds.
 
-Both metrics include `service.name`, `span.name`, `span.kind`, `status.code`,
-schema version, and plugin version when available. They also include applicable
-HTTP, RPC, database, error, and messaging attributes from the source span.
-While OTLP span metrics are active, recorded spans also include the schema and
-plugin version attributes so the backend can avoid deriving duplicate metrics.
+Both metrics include `span.name`, `span.kind`, `status.code`, schema version,
+and plugin version when available. They also include applicable HTTP, RPC,
+database, error, and messaging attributes from the source span. While OTLP span
+metrics are active, recorded spans also include the schema and plugin version
+attributes so the backend can avoid deriving duplicate metrics.
 
 Metric dimensions create a distinct CloudWatch time series for each unique
 combination of values. In particular, `span.name`, `http.route`, database

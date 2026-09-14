@@ -3,9 +3,9 @@
 
 using System.Diagnostics.Tracing;
 
-namespace AWS.OpenTelemetry.CloudWatch.Plugin.Implementation;
+namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation;
 
-[EventSource(Name = "OpenTelemetry-AWS-CloudWatch-Plugin")]
+[EventSource(Name = "OpenTelemetry-AWS-CloudWatchPluginOtel")]
 internal sealed class CloudWatchPluginEventSource : EventSource
 {
     public static readonly CloudWatchPluginEventSource Log = new();
