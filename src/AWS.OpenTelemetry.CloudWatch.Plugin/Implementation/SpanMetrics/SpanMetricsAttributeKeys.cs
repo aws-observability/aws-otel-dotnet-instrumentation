@@ -35,4 +35,31 @@ internal static class SpanMetricsAttributeKeys
     public const string AttributeMessagingDestination = "messaging.destination";
     public const string AttributeMessagingDestinationTemporary = "messaging.destination.temporary";
     public const string AttributeMessagingDestinationAnonymous = "messaging.destination.anonymous";
+
+    // Messaging (https://opentelemetry.io/docs/specs/semconv/messaging/messaging-metrics/)
+    public const string AttributeMessagingOperationType = "messaging.operation.type";
+    public const string AttributeMessagingConsumerGroupName = "messaging.consumer.group.name";
+
+    // Peer (https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/)
+    public const string AttributeServerAddress = "server.address";
+    public const string AttributeServerPort = "server.port";
+
+    // GenAI (https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
+    public const string AttributeGenAiRequestModel = "gen_ai.request.model";
+    public const string AttributeGenAiProviderName = "gen_ai.provider.name";
+    public const string AttributeGenAiOperationName = "gen_ai.operation.name";
+
+    // AWS resource identity
+    // (https://opentelemetry.io/docs/specs/semconv/registry/attributes/aws/)
+    public const string AttributeAwsS3Bucket = "aws.s3.bucket";
+    public const string AttributeAwsDynamoDbTableNames = "aws.dynamodb.table_names";
+    public const string AttributeAwsLambdaInvokedArn = "aws.lambda.invoked_arn";
+    public const string AttributeAwsSnsTopicArn = "aws.sns.topic.arn";
+    public const string AttributeAwsSqsQueueUrl = "aws.sqs.queue.url";
+
+    // FaaS (https://opentelemetry.io/docs/specs/semconv/registry/attributes/faas/)
+    public const string AttributeFaasInvokedName = "faas.invoked_name";
+    public const string AttributeFaasInvokedProvider = "faas.invoked_provider";
+    public const string AttributeFaasInvokedRegion = "faas.invoked_region";
+    public const string AttributeFaasTrigger = "faas.trigger";
 }
