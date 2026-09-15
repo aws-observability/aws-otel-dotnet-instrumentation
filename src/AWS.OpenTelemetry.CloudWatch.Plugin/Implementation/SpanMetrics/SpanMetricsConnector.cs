@@ -291,6 +291,35 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         Copy(ref tags, activity, AttributeMessagingSystem);
         Copy(ref tags, activity, AttributeMessagingOperationName);
 
+        // Messaging (https://opentelemetry.io/docs/specs/semconv/messaging/messaging-metrics/)
+        Copy(ref tags, activity, AttributeMessagingOperationType);
+        Copy(ref tags, activity, AttributeMessagingConsumerGroupName);
+
+        // Peer (https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/)
+        // server.port is an int per semconv, so it is copied through as its native long value.
+        Copy(ref tags, activity, AttributeServerAddress);
+        Copy(ref tags, activity, AttributeServerPort);
+
+        // GenAI (https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
+        Copy(ref tags, activity, AttributeGenAiRequestModel);
+        Copy(ref tags, activity, AttributeGenAiProviderName);
+        Copy(ref tags, activity, AttributeGenAiOperationName);
+
+        // AWS resource identity
+        // (https://opentelemetry.io/docs/specs/semconv/registry/attributes/aws/)
+        // aws.dynamodb.table_names is a string array per semconv and is copied through unchanged.
+        Copy(ref tags, activity, AttributeAwsS3Bucket);
+        Copy(ref tags, activity, AttributeAwsDynamoDbTableNames);
+        Copy(ref tags, activity, AttributeAwsLambdaInvokedArn);
+        Copy(ref tags, activity, AttributeAwsSnsTopicArn);
+        Copy(ref tags, activity, AttributeAwsSqsQueueUrl);
+
+        // FaaS (https://opentelemetry.io/docs/specs/semconv/registry/attributes/faas/)
+        Copy(ref tags, activity, AttributeFaasInvokedName);
+        Copy(ref tags, activity, AttributeFaasInvokedProvider);
+        Copy(ref tags, activity, AttributeFaasInvokedRegion);
+        Copy(ref tags, activity, AttributeFaasTrigger);
+
         if (activity.GetTagItem(AttributeMessagingDestinationTemporary) is not true &&
             activity.GetTagItem(AttributeMessagingDestinationAnonymous) is not true)
         {
