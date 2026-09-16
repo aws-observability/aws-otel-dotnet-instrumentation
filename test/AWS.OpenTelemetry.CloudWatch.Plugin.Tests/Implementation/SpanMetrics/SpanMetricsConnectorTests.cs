@@ -536,6 +536,74 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
+    public void SpanMetricsConnectorPreservesLegacyPeerAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-peer",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "payments.example.com");
+                activity.SetTag("net.peer.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-peer"));
+
+        Assert.Equal("payments.example.com", tags["net.peer.name"]);
+        Assert.Equal(8443, tags["net.peer.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPreservesLegacyServerSpanPeerAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-host",
+            ActivityKind.Server,
+            activity =>
+            {
+                activity.SetTag("net.host.name", "payments.example.com");
+                activity.SetTag("net.host.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-host"));
+
+        Assert.Equal("payments.example.com", tags["net.host.name"]);
+        Assert.Equal(8443, tags["net.host.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPeerAttributesTakePrecedenceOverLegacy()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "peer-precedence",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("server.address", "payments.example.com");
+                activity.SetTag("net.peer.name", "legacy.example.com");
+                activity.SetTag("server.port", 8443);
+                activity.SetTag("net.peer.port", 9000);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "peer-precedence"));
+
+        Assert.Equal("payments.example.com", tags["server.address"]);
+        Assert.Equal(8443, tags["server.port"]);
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
+    }
+
+    [Fact]
     public void SpanMetricsConnectorCopiesGenAiAttributes()
     {
         using var pipeline = new TestPipeline(new AlwaysOnSampler());

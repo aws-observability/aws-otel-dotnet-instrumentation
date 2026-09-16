@@ -43,6 +43,10 @@ internal static class SpanMetricsAttributeKeys
     // Peer (https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/)
     public const string AttributeServerAddress = "server.address";
     public const string AttributeServerPort = "server.port";
+    public const string AttributeNetPeerName = "net.peer.name";
+    public const string AttributeNetHostName = "net.host.name";
+    public const string AttributeNetPeerPort = "net.peer.port";
+    public const string AttributeNetHostPort = "net.host.port";
 
     // GenAI (https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
     public const string AttributeGenAiRequestModel = "gen_ai.request.model";

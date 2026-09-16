@@ -201,6 +201,30 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
         Activity activity,
         string primaryKey,
         string firstFallbackKey,
+        string secondFallbackKey)
+    {
+        var value = activity.GetTagItem(primaryKey);
+        if (value is not null)
+        {
+            tags.Add(primaryKey, value);
+            return;
+        }
+
+        value = activity.GetTagItem(firstFallbackKey);
+        if (value is not null)
+        {
+            tags.Add(firstFallbackKey, value);
+            return;
+        }
+
+        Copy(ref tags, activity, secondFallbackKey);
+    }
+
+    private static void Copy(
+        ref TagList tags,
+        Activity activity,
+        string primaryKey,
+        string firstFallbackKey,
         string secondFallbackKey,
         string thirdFallbackKey,
         string fourthFallbackKey)
@@ -297,8 +321,9 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
 
         // Peer (https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/)
         // server.port is an int per semconv, so it is copied through as its native long value.
-        Copy(ref tags, activity, AttributeServerAddress);
-        Copy(ref tags, activity, AttributeServerPort);
+        // net.peer.* is the client-span spelling and net.host.* is the server-span spelling.
+        Copy(ref tags, activity, AttributeServerAddress, AttributeNetPeerName, AttributeNetHostName);
+        Copy(ref tags, activity, AttributeServerPort, AttributeNetPeerPort, AttributeNetHostPort);
 
         // GenAI (https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
         Copy(ref tags, activity, AttributeGenAiRequestModel);
