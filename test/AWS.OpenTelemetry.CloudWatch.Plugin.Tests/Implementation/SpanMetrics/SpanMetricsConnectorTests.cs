@@ -604,6 +604,36 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
+    public void SpanMetricsConnectorPrefersNetPeerNameOverNetHostNameWhenBothPresentAndServerAddressAbsent()
+    {
+        // net.peer.name (client-span spelling) and net.host.name (server-span spelling) are
+        // mutually exclusive in practice, so instrumentation sets one or the other. This test
+        // locks in the deliberate fallback precedence for the theoretical both-present case:
+        // net.peer.name is checked first, so it wins when server.address is absent.
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-peer-host",
+            ActivityKind.Server,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "peer.example.com");
+                activity.SetTag("net.host.name", "host.example.com");
+                activity.SetTag("net.peer.port", 9000);
+                activity.SetTag("net.host.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-peer-host"));
+
+        Assert.Equal("peer.example.com", tags["net.peer.name"]);
+        Assert.Equal(9000, tags["net.peer.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+        Assert.DoesNotContain("net.host.name", tags.Keys);
+        Assert.DoesNotContain("net.host.port", tags.Keys);
+    }
+
+    [Fact]
     public void SpanMetricsConnectorCopiesGenAiAttributes()
     {
         using var pipeline = new TestPipeline(new AlwaysOnSampler());
