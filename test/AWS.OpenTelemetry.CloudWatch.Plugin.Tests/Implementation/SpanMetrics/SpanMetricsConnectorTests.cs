@@ -488,6 +488,258 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
+    public void SpanMetricsConnectorCopiesMessagingOperationAndConsumerGroup()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "messaging-derived",
+            ActivityKind.Consumer,
+            activity =>
+            {
+                activity.SetTag("messaging.system", "kafka");
+                activity.SetTag("messaging.operation.type", "receive");
+                activity.SetTag("messaging.consumer.group.name", "order-processors");
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(
+            pipeline.Metrics,
+            "traces.span.metrics.calls",
+            "messaging-derived"));
+
+        Assert.Equal("receive", tags["messaging.operation.type"]);
+        Assert.Equal("order-processors", tags["messaging.consumer.group.name"]);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorCopiesPeerAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "peer",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("server.address", "payments.example.com");
+                activity.SetTag("server.port", 8443);
+                activity.SetTag("network.peer.address", "10.0.0.1"); // not allowlisted
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "peer"));
+
+        Assert.Equal("payments.example.com", tags["server.address"]);
+
+        // server.port is an int per semconv, copied through as its native numeric value.
+        Assert.Equal(8443, tags["server.port"]);
+        Assert.DoesNotContain("network.peer.address", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPreservesLegacyPeerAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-peer",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "payments.example.com");
+                activity.SetTag("net.peer.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-peer"));
+
+        Assert.Equal("payments.example.com", tags["net.peer.name"]);
+        Assert.Equal(8443, tags["net.peer.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPreservesLegacyServerSpanPeerAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-host",
+            ActivityKind.Server,
+            activity =>
+            {
+                activity.SetTag("net.host.name", "payments.example.com");
+                activity.SetTag("net.host.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-host"));
+
+        Assert.Equal("payments.example.com", tags["net.host.name"]);
+        Assert.Equal(8443, tags["net.host.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPeerAttributesTakePrecedenceOverLegacy()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "peer-precedence",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("server.address", "payments.example.com");
+                activity.SetTag("net.peer.name", "legacy.example.com");
+                activity.SetTag("server.port", 8443);
+                activity.SetTag("net.peer.port", 9000);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "peer-precedence"));
+
+        Assert.Equal("payments.example.com", tags["server.address"]);
+        Assert.Equal(8443, tags["server.port"]);
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorPrefersNetPeerNameOverNetHostNameWhenBothPresentAndServerAddressAbsent()
+    {
+        // net.peer.name (client-span spelling) and net.host.name (server-span spelling) are
+        // mutually exclusive in practice, so instrumentation sets one or the other. This test
+        // locks in the deliberate fallback precedence for the theoretical both-present case:
+        // net.peer.name is checked first, so it wins when server.address is absent.
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-peer-host",
+            ActivityKind.Server,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "peer.example.com");
+                activity.SetTag("net.host.name", "host.example.com");
+                activity.SetTag("net.peer.port", 9000);
+                activity.SetTag("net.host.port", 8443);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-peer-host"));
+
+        Assert.Equal("peer.example.com", tags["net.peer.name"]);
+        Assert.Equal(9000, tags["net.peer.port"]);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+        Assert.DoesNotContain("net.host.name", tags.Keys);
+        Assert.DoesNotContain("net.host.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorCopiesGenAiAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "gen-ai",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("gen_ai.request.model", "claude-sonnet-4");
+                activity.SetTag("gen_ai.provider.name", "aws.bedrock");
+                activity.SetTag("gen_ai.operation.name", "chat");
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "gen-ai"));
+
+        Assert.Equal("claude-sonnet-4", tags["gen_ai.request.model"]);
+        Assert.Equal("aws.bedrock", tags["gen_ai.provider.name"]);
+        Assert.Equal("chat", tags["gen_ai.operation.name"]);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorCopiesAwsResourceIdentityAttributes()
+    {
+        var tableNames = new[] { "orders", "items" };
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "aws-resource",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("aws.s3.bucket", "my-bucket");
+                activity.SetTag("aws.dynamodb.table_names", tableNames);
+                activity.SetTag("aws.lambda.invoked_arn", "arn:aws:lambda:us-east-1:123:function:fn");
+                activity.SetTag("aws.sns.topic.arn", "arn:aws:sns:us-east-1:123:topic");
+                activity.SetTag(
+                    "aws.sqs.queue.url",
+                    "https://sqs.us-east-1.amazonaws.com/123/queue");
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "aws-resource"));
+
+        Assert.Equal("my-bucket", tags["aws.s3.bucket"]);
+
+        // table_names stays a string array per semconv: copied through unchanged, not normalized.
+        Assert.Equal(tableNames, Assert.IsType<string[]>(tags["aws.dynamodb.table_names"]));
+        Assert.Equal("arn:aws:lambda:us-east-1:123:function:fn", tags["aws.lambda.invoked_arn"]);
+        Assert.Equal("arn:aws:sns:us-east-1:123:topic", tags["aws.sns.topic.arn"]);
+        Assert.Equal(
+            "https://sqs.us-east-1.amazonaws.com/123/queue",
+            tags["aws.sqs.queue.url"]);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorCopiesFaasAttributes()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "faas",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("faas.invoked_name", "my-function");
+                activity.SetTag("faas.invoked_provider", "aws");
+                activity.SetTag("faas.invoked_region", "us-east-1");
+                activity.SetTag("faas.trigger", "http");
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "faas"));
+
+        Assert.Equal("my-function", tags["faas.invoked_name"]);
+        Assert.Equal("aws", tags["faas.invoked_provider"]);
+        Assert.Equal("us-east-1", tags["faas.invoked_region"]);
+        Assert.Equal("http", tags["faas.trigger"]);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorDropsAttributesOutsideTheAllowlist()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "not-allowlisted",
+            ActivityKind.Client,
+            activity =>
+            {
+                activity.SetTag("server.address", "payments.example.com");
+                activity.SetTag("gen_ai.request.temperature", "0.7"); // not allowlisted
+                activity.SetTag("aws.dynamodb.item_count", 5); // not allowlisted
+                activity.SetTag("faas.invocation_id", "req-123"); // not allowlisted
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(
+            pipeline.Metrics,
+            "traces.span.metrics.calls",
+            "not-allowlisted"));
+
+        Assert.Equal("payments.example.com", tags["server.address"]);
+        Assert.DoesNotContain("gen_ai.request.temperature", tags.Keys);
+        Assert.DoesNotContain("aws.dynamodb.item_count", tags.Keys);
+        Assert.DoesNotContain("faas.invocation_id", tags.Keys);
+    }
+
+    [Fact]
     public void SpanMetricsConnectorUsesDbCollectionFallbackOrder()
     {
         using var pipeline = new TestPipeline(new AlwaysOnSampler());

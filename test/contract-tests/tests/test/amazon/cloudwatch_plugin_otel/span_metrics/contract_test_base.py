@@ -398,12 +398,24 @@ class SpanMetricsContractTestBase(ContractTestBase):
                 "db.sql.table": "users",
             },
         )
-        self._assert_span_metrics_recorded(
+        # The peer dimension is copied through on the downstream HTTP client span, so this is
+        # the end-to-end check for the peer family. Depending on the OpenTelemetry .NET build
+        # and target, the instrumentation emits either the current server.address key or the
+        # legacy net.peer.name key, so accept whichever one the client span carried. The
+        # remaining new families (GenAI, FaaS, the AWS resource-identity keys, and the
+        # messaging operation/consumer-group keys) are exercised by the unit tests instead,
+        # because real instrumentation cannot reliably produce those spans in this harness.
+        # See https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/.
+        http_client_attributes = self._assert_span_metrics_recorded(
             metrics,
             {
                 "span.kind": "CLIENT",
                 "http.request.method": "GET",
             },
+        )
+        self.assertTrue(
+            "server.address" in http_client_attributes or "net.peer.name" in http_client_attributes,
+            "expected a peer dimension (server.address or net.peer.name) on the HTTP client span metric",
         )
         self._assert_span_metrics_recorded_variants(
             metrics,

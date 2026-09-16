@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* Add peer, GenAI, AWS resource-identity, FaaS, and messaging derived dimensions, with legacy net.peer.*/net.host.* fallbacks for server.address/server.port ([#468](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/468))
 * **BREAKING:** Renamed the assembly and `CloudWatchPlugin` namespace from
   `AWS.OpenTelemetry.CloudWatch.Plugin` to
   `AWS.OpenTelemetry.CloudWatchPluginOtel`. Update
