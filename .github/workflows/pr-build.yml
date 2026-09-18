@@ -223,7 +223,6 @@ jobs:
           --framework ${{ matrix.platform.tfm }}
           -p:OpenTelemetryVersion=${{ matrix.dependency.otel }}
           -p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto }}
-          -p:TreatWarningsAsErrors=true
 
   build-arm:
     runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}

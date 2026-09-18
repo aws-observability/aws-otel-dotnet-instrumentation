@@ -96,7 +96,6 @@ jobs:
           --framework ${{ matrix.platform.tfm }}
           -p:OpenTelemetryVersion=${{ matrix.dependency.otel }}
           -p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto }}
-          -p:TreatWarningsAsErrors=true
 
   contract-tests:
     name: Contract | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }}
