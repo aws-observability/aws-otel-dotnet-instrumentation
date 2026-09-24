@@ -36,6 +36,13 @@ jobs:
   download-artifacts:
     environment: Release
     runs-on: ubuntu-latest
+    # This job selects another workflow run and downloads its artifacts cross-run; both the
+    # workflow-run query and the cross-run artifact download require actions: read. Because the
+    # workflow-level permissions block is declared, unlisted scopes default to none, so grant it
+    # here at job level only -- the publish jobs don't need it.
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -46,6 +53,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref_name }}
+          # Pin to the main build of the exact commit being released so the reused ZIPs/scripts
+          # can't drift from the NuGet package and release metadata built at github.sha.
+          head-sha: ${{ github.sha }}
 
       - name: Download main build artifacts
         env:
