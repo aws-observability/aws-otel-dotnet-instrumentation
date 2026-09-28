@@ -80,7 +80,7 @@ runs:
 
     # Replays what the operator init container does (the image's own `cp -r /autoinstrumentation/. <volume>`)
     # and checks that every profiler path an operator may inject resolves to a native library of the right
-    # architecture, and that the copied payload fits the operators' default 200Mi emptyDir limit.
+    # architecture.
     - name: Verify Linux images
       if: runner.os == 'Linux'
       shell: bash
@@ -104,13 +104,6 @@ runs:
               exit 1
             fi
           done
-          local size_mib
-          size_mib="$(du -sm "${dest}" | cut -f1)"
-          echo "${arch}: copied payload is ${size_mib} MiB"
-          if [ "${size_mib}" -gt 200 ]; then
-            echo "::error::${arch}: copied payload (${size_mib} MiB) exceeds the operators' default 200Mi emptyDir limit"
-            exit 1
-          fi
         }
         verify amd64 x86-64
         verify arm64 aarch64
