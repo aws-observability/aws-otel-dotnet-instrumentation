@@ -37,6 +37,8 @@ RUN if [ $TARGETARCH = "amd64" ]; then export ARCH="x86_64" ; \
 # Stage 2: Add arch-agnostic linux/linux-musl symlinks pointing at the existing
 # arch-suffixed profiler directories, so OpenTelemetry Operator >= 0.157 (which injects
 # .../linux/...) works while older operators that inject .../linux-x64/... keep working.
+# On arm64 also add linux-x64/linux-musl-x64 aliases, because the CloudWatch Agent Operator
+# injects those paths regardless of the node architecture.
 # Needs a shell, so it cannot run in the scratch stage; reuse the builder image to avoid
 # pulling another base image.
 FROM public.ecr.aws/docker/library/rust:1.89 AS layout
@@ -51,8 +53,16 @@ RUN set -eux; \
       arm64) DOTNET_ARCH=arm64 ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
+    for dir in "linux-${DOTNET_ARCH}" "linux-musl-${DOTNET_ARCH}"; do \
+      test -f "${dir}/OpenTelemetry.AutoInstrumentation.Native.so" \
+        || { echo "missing ${dir}/OpenTelemetry.AutoInstrumentation.Native.so" >&2; exit 1; }; \
+    done; \
     ln -s "linux-${DOTNET_ARCH}" linux; \
-    ln -s "linux-musl-${DOTNET_ARCH}" linux-musl
+    ln -s "linux-musl-${DOTNET_ARCH}" linux-musl; \
+    if [ "${DOTNET_ARCH}" != "x64" ]; then \
+      ln -s "linux-${DOTNET_ARCH}" linux-x64; \
+      ln -s "linux-musl-${DOTNET_ARCH}" linux-musl-x64; \
+    fi
 
 # Stage 3: Build the distribution image by copying the THIRD-PARTY-LICENSES, the custom built cp command from stage 1, and OpenTelemetryDistribution to their respective destinations
 FROM scratch
