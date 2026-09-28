@@ -1,9 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-import time
 import re
+import time
 from logging import INFO, Logger, getLogger
-from typing import Dict, List
+from typing import Any, Dict, List
 from unittest import TestCase
 
 from docker import DockerClient
@@ -24,7 +24,7 @@ _logger: Logger = getLogger(__name__)
 _logger.setLevel(INFO)
 _MOCK_COLLECTOR_ALIAS: str = "collector"
 _MOCK_COLLECTOR_NAME: str = "aws-application-signals-mock-collector"
-_MOCK_COLLECTOR_PORT: int = 4315
+MOCK_COLLECTOR_PORT: int = 4315
 
 
 # pylint: disable=broad-exception-caught
@@ -47,13 +47,14 @@ class ContractTestBase(TestCase):
     @override
     def setUpClass(cls) -> None:
         cls.addClassCleanup(cls.class_tear_down)
-        cls.network = NetworkCollection(client=DockerClient()).create(NETWORK_NAME)
+        if cls.manages_test_network():
+            cls.network = NetworkCollection(client=DockerClient()).create(NETWORK_NAME)
         mock_collector_networking_config: Dict[str, EndpointConfig] = {
             NETWORK_NAME: EndpointConfig(version="1.22", aliases=[_MOCK_COLLECTOR_ALIAS])
         }
         cls.mock_collector: DockerContainer = (
             DockerContainer(_MOCK_COLLECTOR_NAME)
-            .with_exposed_ports(_MOCK_COLLECTOR_PORT)
+            .with_exposed_ports(MOCK_COLLECTOR_PORT)
             .with_name(_MOCK_COLLECTOR_NAME)
             .with_kwargs(network=NETWORK_NAME, networking_config=mock_collector_networking_config)
         )
@@ -77,7 +78,8 @@ class ContractTestBase(TestCase):
         except Exception:
             _logger.exception("Failed to tear down mock collector")
 
-        cls.network.remove()
+        if cls.manages_test_network():
+            cls.network.remove()
 
     @override
     def setUp(self) -> None:
@@ -88,33 +90,19 @@ class ContractTestBase(TestCase):
         self.application: DockerContainer = (
             DockerContainer(self.get_application_image_name())
             .with_exposed_ports(self.get_application_port())
-            .with_env("OTEL_METRIC_EXPORT_INTERVAL", "50")
-            .with_env("OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "true")
-            .with_env("OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED", self.is_runtime_enabled())
-            .with_env("OTEL_METRICS_EXPORTER", "none")
-            .with_env("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
-            .with_env("OTEL_BSP_SCHEDULE_DELAY", "1")
-            .with_env("OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT", f"http://collector:{_MOCK_COLLECTOR_PORT}")
-            .with_env("OTEL_EXPORTER_OTLP_ENDPOINT", f"http://collector:{_MOCK_COLLECTOR_PORT}")
-            .with_env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", f"http://collector:{_MOCK_COLLECTOR_PORT}")
-            .with_env("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", f"http://collector:{_MOCK_COLLECTOR_PORT}")
-            .with_env("OTEL_RESOURCE_ATTRIBUTES", self.get_application_otel_resource_attributes())
-            .with_env("OTEL_TRACES_SAMPLER", "always_on")
-            .with_env("OTEL_DOTNET_AUTO_PLUGINS", "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, AWS.Distro.OpenTelemetry.AutoInstrumentation")
-            .with_env("CORECLR_ENABLE_PROFILING", "1")
-            .with_env("CORECLR_PROFILER", "{918728DD-259F-4A6A-AC2B-B85E1B658318}")
-            .with_env("RESOURCE_DETECTORS_ENABLED", "false")
             .with_kwargs(network=NETWORK_NAME, networking_config=application_networking_config)
             .with_name(self.get_application_image_name())
         )
 
+        for key, value in self.get_application_environment_variables().items():
+            self.application.with_env(key, value)
         extra_env: Dict[str, str] = self.get_application_extra_environment_variables()
-        for key in extra_env:
-            self.application.with_env(key, extra_env.get(key))
+        for key, value in extra_env.items():
+            self.application.with_env(key, value)
         self.application.start()
         wait_for_logs(self.application, self.get_application_wait_pattern(), timeout=1200)
         self.mock_collector_client: MockCollectorClient = MockCollectorClient(
-            self.mock_collector.get_container_host_ip(), self.mock_collector.get_exposed_port(_MOCK_COLLECTOR_PORT)
+            self.mock_collector.get_container_host_ip(), self.mock_collector.get_exposed_port(MOCK_COLLECTOR_PORT)
         )
         # Sleep for 100ms to ensure any startup metrics have been exported
         time.sleep(0.1)
@@ -149,15 +137,14 @@ class ContractTestBase(TestCase):
         self._assert_metric_attributes(metrics, ERROR_METRIC, expected_error, **kwargs)
         self._assert_metric_attributes(metrics, FAULT_METRIC, expected_fault, **kwargs)
 
-    def do_send_request(
-            self, path: str, method: str, status_code: int
-    ) -> None:
+    def do_send_request(self, path: str, method: str, status_code: int) -> Response:
         address: str = self.application.get_container_host_ip()
         port: str = self.application.get_exposed_port(self.get_application_port())
         url: str = f"http://{address}:{port}/{path}"
         _logger.info("call " + url)
         response: Response = request(method, url, timeout=200)
         self.assertEqual(status_code, response.status_code)
+        return response
 
     def _get_attributes_dict(self, attributes_list: List[KeyValue]) -> Dict[str, AnyValue]:
         attributes_dict: Dict[str, AnyValue] = {}
@@ -169,6 +156,13 @@ class ContractTestBase(TestCase):
                 self.fail(f"Attribute {key} unexpectedly duplicated. Value 1: {old_value} Value 2: {value}")
             attributes_dict[key] = value
         return attributes_dict
+
+    def _get_attribute_values(self, attributes_list: List[KeyValue]) -> Dict[str, Any]:
+        values: Dict[str, Any] = {}
+        for key, value in self._get_attributes_dict(attributes_list).items():
+            value_field = value.WhichOneof("value")
+            values[key] = getattr(value, value_field) if value_field is not None else None
+        return values
 
     def _is_regex(self, value: str) -> bool:
         try:
@@ -220,8 +214,36 @@ class ContractTestBase(TestCase):
     def tear_down_dependency_container(cls):
         return
 
+    @classmethod
+    def manages_test_network(cls) -> bool:
+        return True
+
     def get_application_port(self) -> int:
         return 8080
+
+    def get_application_environment_variables(self) -> Dict[str, str]:
+        collector_endpoint = f"http://collector:{MOCK_COLLECTOR_PORT}"
+        return {
+            "OTEL_METRIC_EXPORT_INTERVAL": "50",
+            "OTEL_AWS_APPLICATION_SIGNALS_ENABLED": "true",
+            "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED": self.is_runtime_enabled(),
+            "OTEL_METRICS_EXPORTER": "none",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+            "OTEL_BSP_SCHEDULE_DELAY": "1",
+            "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT": collector_endpoint,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": collector_endpoint,
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": collector_endpoint,
+            "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": collector_endpoint,
+            "OTEL_RESOURCE_ATTRIBUTES": self.get_application_otel_resource_attributes(),
+            "OTEL_TRACES_SAMPLER": "always_on",
+            "OTEL_DOTNET_AUTO_PLUGINS": (
+                "AWS.Distro.OpenTelemetry.AutoInstrumentation.Plugin, "
+                "AWS.Distro.OpenTelemetry.AutoInstrumentation"
+            ),
+            "CORECLR_ENABLE_PROFILING": "1",
+            "CORECLR_PROFILER": "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
+            "RESOURCE_DETECTORS_ENABLED": "false",
+        }
 
     def get_application_extra_environment_variables(self) -> Dict[str, str]:
         return {}

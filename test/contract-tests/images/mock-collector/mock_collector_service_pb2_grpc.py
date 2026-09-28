@@ -30,6 +30,11 @@ class MockCollectorServiceStub(object):
                 request_serializer=mock__collector__service__pb2.GetMetricsRequest.SerializeToString,
                 response_deserializer=mock__collector__service__pb2.GetMetricsResponse.FromString,
                 )
+        self.get_logs = channel.unary_unary(
+                '/MockCollectorService/get_logs',
+                request_serializer=mock__collector__service__pb2.GetLogsRequest.SerializeToString,
+                response_deserializer=mock__collector__service__pb2.GetLogsResponse.FromString,
+                )
 
 
 class MockCollectorServiceServicer(object):
@@ -57,6 +62,13 @@ class MockCollectorServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_logs(self, request, context):
+        """Returns logs exported to mock collector
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MockCollectorServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -74,6 +86,11 @@ def add_MockCollectorServiceServicer_to_server(servicer, server):
                     servicer.get_metrics,
                     request_deserializer=mock__collector__service__pb2.GetMetricsRequest.FromString,
                     response_serializer=mock__collector__service__pb2.GetMetricsResponse.SerializeToString,
+            ),
+            'get_logs': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_logs,
+                    request_deserializer=mock__collector__service__pb2.GetLogsRequest.FromString,
+                    response_serializer=mock__collector__service__pb2.GetLogsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,5 +151,22 @@ class MockCollectorService(object):
         return grpc.experimental.unary_unary(request, target, '/MockCollectorService/get_metrics',
             mock__collector__service__pb2.GetMetricsRequest.SerializeToString,
             mock__collector__service__pb2.GetMetricsResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_logs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/MockCollectorService/get_logs',
+            mock__collector__service__pb2.GetLogsRequest.SerializeToString,
+            mock__collector__service__pb2.GetLogsResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

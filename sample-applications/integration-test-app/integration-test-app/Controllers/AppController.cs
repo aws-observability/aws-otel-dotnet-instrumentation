@@ -40,6 +40,20 @@ public class AppController : ControllerBase
         return "Application started!";
     }
 
+    [HttpGet]
+    [Route("/error")]
+    public IActionResult Error()
+    {
+        return this.StatusCode(500, "Internal Server Error");
+    }
+
+    [HttpGet]
+    [Route("/fault")]
+    public IActionResult Fault()
+    {
+        return this.StatusCode(503, "Service Unavailable");
+    }
+
     private string GetTraceId()
     {
         var traceId = Activity.Current.TraceId.ToHexString();

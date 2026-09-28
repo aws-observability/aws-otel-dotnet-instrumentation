@@ -35,6 +35,8 @@ public class SamplerUtil
     private static readonly string DefaultSamplingProxyEndpoint = "http://127.0.0.1:2000";
     private static readonly string? TracesSampler = System.Environment.GetEnvironmentVariable(OtelTracesSampler);
 
+    internal static global::OpenTelemetry.Sampler.AWS.AWSXRayRemoteSampler? LastCreatedXRaySampler { get; private set; }
+
     /// <summary>
     /// This function is based on an internal function in Otel:
     /// https://github.com/open-telemetry/opentelemetry-dotnet/blob/1bbafaa7b7bed6470ff52fc76b6e881cd19692a5/src/OpenTelemetry/Trace/TracerProviderSdk.cs#L408
@@ -143,9 +145,11 @@ public class SamplerUtil
         Logger.Log(LogLevel.Information, "XRay Sampler Endpoint: {0}", endpoint);
         Logger.Log(LogLevel.Information, "XRay Sampler Polling Interval:: {0}", pollingInterval);
 
-        return AWSXRayRemoteSampler.Builder(resource) // you must provide a resource
+        var builder = AWSXRayRemoteSampler.Builder(resource)
             .SetPollingInterval(TimeSpan.FromSeconds(pollingInterval))
-            .SetEndpoint(endpoint)
-            .Build();
+            .SetEndpoint(endpoint);
+        var result = builder.Build();
+        LastCreatedXRaySampler = builder.InnerSampler;
+        return result;
     }
 }

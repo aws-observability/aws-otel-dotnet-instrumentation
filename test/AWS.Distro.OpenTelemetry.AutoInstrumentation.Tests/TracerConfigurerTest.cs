@@ -9,6 +9,10 @@ using Xunit.Repeat;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
+// Sets OTEL_TRACES_SAMPLER and OTEL_AWS_APPLICATION_SIGNALS_ENABLED in its constructor. Those are
+// process-global, so this class must not run beside other classes that read or write them; xUnit
+// runs collections in parallel by default.
+[Collection("ProcessGlobalState")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class TracerConfigurerTest
 {

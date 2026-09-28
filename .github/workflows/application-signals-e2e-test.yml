@@ -217,7 +217,26 @@ jobs:
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
-        
+
+  # Service Events EKS cell. adot-image-name is required for this to exercise the image staged by
+  # upload-main-build-image; left empty, the operator's own default ADOT image is validated instead.
+  #
+  # dotnet-eks-linux-test is a needs edge for isolation, not for data. Both cells share the
+  # 'e2e-dotnet-adot-test' cluster and each deletes every ns-<run>-<attempt> namespace on startup,
+  # so running them concurrently lets one delete the other's live namespace. The workflow-level
+  # concurrency group already prevents two runs of this workflow from overlapping, so serializing
+  # these two jobs closes the remaining window. Remove this edge once the cells no longer share a
+  # cluster, or once the framework's namespace cleanup is scoped to its own run.
+  dotnet-eks-service-events-test:
+    needs: [ upload-main-build-image, dotnet-eks-linux-test ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-service-events-test.yml@main
+    secrets: inherit
+    with:
+      aws-region: us-east-1
+      test-cluster-name: 'e2e-dotnet-adot-test'
+      caller-workflow-name: 'main-build'
+      adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
+
   build-lambda-staging-sample-app:
     runs-on: ubuntu-latest
     steps:
@@ -289,4 +308,7 @@ jobs:
   validate-all-tests-are-accounted-for:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@main
     with:
-      exclusions: dotnet-ec2-nuget-test.yml
+      # dotnet-ec2-service-events-test.yml is temporarily excluded: the test framework added this
+      # .NET EC2 service-events e2e test, but it is not yet wired into this workflow. Remove this
+      # exclusion once the corresponding job is added here.
+      exclusions: dotnet-ec2-nuget-test.yml,dotnet-ec2-service-events-test.yml

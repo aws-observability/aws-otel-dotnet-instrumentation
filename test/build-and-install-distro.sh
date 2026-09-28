@@ -4,17 +4,17 @@
 
 check_if_step_failed_and_exit() {
   if [ $? -ne 0 ]; then
-    echo $1
+    echo "$1"
     exit 1
   fi
 }
 
 # Build distro
-cd ..
+cd .. || exit 1
 bash build.sh
 check_if_step_failed_and_exit "There was an error building AWS Otel DotNet, exiting"
 
-cd test
+cd test || exit 1
 rm -rf ./OpenTelemetryDistribution
 mkdir -p ./dist
 cp -r ../OpenTelemetryDistribution ./dist

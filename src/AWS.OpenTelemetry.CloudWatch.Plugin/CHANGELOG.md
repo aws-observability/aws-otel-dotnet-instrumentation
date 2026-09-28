@@ -1,0 +1,24 @@
+# Changelog - AWS.OpenTelemetry.CloudWatchPluginOtel
+
+## 0.1.1 - 2026-09-18
+
+* Add peer, GenAI, AWS resource-identity, FaaS, and messaging derived dimensions, with legacy net.peer.*/net.host.* fallbacks for server.address/server.port ([#468](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/468))
+* **BREAKING:** Renamed the assembly and `CloudWatchPlugin` namespace from
+  `AWS.OpenTelemetry.CloudWatch.Plugin` to
+  `AWS.OpenTelemetry.CloudWatchPluginOtel`. Update
+  `OTEL_DOTNET_AUTO_PLUGINS` and application imports to use the new name.
+* **BREAKING:** Moved the `AddCloudWatchSpanMetrics` extension methods from the
+  `OpenTelemetry.Metrics` and `OpenTelemetry.Trace` namespaces to
+  `AWS.OpenTelemetry.CloudWatchPluginOtel`.
+* **BREAKING:** Moved `service.name` from metric datapoint attributes to the
+  metric resource. Manual registration must configure `service.name` on the
+  meter provider's resource.
+* **BREAKING:** Renamed the diagnostics event source from
+  `OpenTelemetry-AWS-CloudWatch-Plugin` to
+  `OpenTelemetry-AWS-CloudWatchPluginOtel`.
+* Set the `traces.span.metrics.calls` unit to `{call}`.
+
+## 0.1.0 - 2026-08-24
+
+* Added CloudWatch span metrics instrumentation.
+  ([#445](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/445))
