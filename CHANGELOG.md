@@ -11,6 +11,9 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Support AWS China partition (`amazonaws.com.cn`) X-Ray and CloudWatch Logs OTLP endpoints for
+  SigV4-signed export
+  ([#471](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/471))
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
