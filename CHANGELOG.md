@@ -27,9 +27,11 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   Targets modern .NET (net8.0/net9.0/net10.0) and is not enabled in AWS Lambda. Temporality
   honors `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` rather than being forced, and
   `OTEL_METRIC_EXPORT_INTERVAL` is used as configured. Setting an `Authorization` header in
-  `OTEL_EXPORTER_OTLP_METRICS_HEADERS` selects bearer-token authentication instead and suppresses
-  SigV4. AWS Application Signals metrics are unaffected and continue to be sent to the CloudWatch
-  Agent endpoint
+  `OTEL_EXPORTER_OTLP_METRICS_HEADERS` selects bearer-token authentication instead: metrics are
+  still exported to the same endpoint, carrying that header, with no SigV4 signature. Other headers
+  set in that variable are sent as well, and take precedence over `OTEL_EXPORTER_OTLP_HEADERS`. AWS
+  Application Signals metrics are unaffected and continue to be sent to the CloudWatch Agent
+  endpoint
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,

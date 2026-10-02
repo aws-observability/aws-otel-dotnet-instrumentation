@@ -53,6 +53,7 @@ public class Plugin
     // Collector-less OTLP metrics export is net8.0+ only, so these are declared under the same
     // condition as the code that reads them. Left unguarded they are unused fields on net472, and
     // CS0414 is an error in this build.
+    private static readonly string AuthorizationHeaderName = "Authorization";
     private static readonly string OtelExporterOtlpMetricsEndpointConfig = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
     private static readonly string OtelExporterOtlpMetricsHeadersConfig = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
     private static readonly string OtelExporterOtlpMetricsProtocolConfig = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
@@ -349,7 +350,8 @@ public class Plugin
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
 #if !NETFRAMEWORK
-        bool collectorlessMetricsEnabled = this.IsSigV4MetricsEnabled();
+        CollectorlessMetricsAuthMode metricsAuthMode = this.DetermineCollectorlessMetricsAuthMode();
+        bool collectorlessMetricsEnabled = metricsAuthMode != CollectorlessMetricsAuthMode.Disabled;
 #else
         bool collectorlessMetricsEnabled = false;
 #endif
@@ -404,13 +406,13 @@ public class Plugin
             // Attached to the provider upstream configured, not a provider of our own: upstream
             // registers the instrumentation and customer meters there, so a separate provider would
             // see almost nothing to export.
-            var signedReader = new PeriodicExportingMetricReader(
-                CreateSigV4MetricExporter(endpoint), GetCollectorlessMetricExportInterval())
+            var reader = new PeriodicExportingMetricReader(
+                CreateCollectorlessMetricExporter(endpoint, metricsAuthMode), GetCollectorlessMetricExportInterval())
             {
                 TemporalityPreference = GetMetricsTemporalityPreference(),
             };
 
-            builder.AddReader(signedReader);
+            builder.AddReader(reader);
 
             if (this.IsApplicationSignalsEnabled())
             {
@@ -420,12 +422,23 @@ public class Plugin
                     endpoint);
             }
 
-            Logger.Log(
-                LogLevel.Information,
-                "Exporting OTLP metrics to {0} with SigV4 authentication, service {1} in region {2}.",
-                endpoint,
-                AwsOtlpEndpoint.MetricsSigningServiceName,
-                AwsOtlpEndpoint.GetRegion(endpoint));
+            if (metricsAuthMode == CollectorlessMetricsAuthMode.BearerToken)
+            {
+                Logger.Log(
+                    LogLevel.Information,
+                    "Exporting OTLP metrics to {0} using the Authorization header configured in {1}; SigV4 authentication is not applied.",
+                    endpoint,
+                    OtelExporterOtlpMetricsHeadersConfig);
+            }
+            else
+            {
+                Logger.Log(
+                    LogLevel.Information,
+                    "Exporting OTLP metrics to {0} with SigV4 authentication, service {1} in region {2}.",
+                    endpoint,
+                    AwsOtlpEndpoint.MetricsSigningServiceName,
+                    AwsOtlpEndpoint.GetRegion(endpoint));
+            }
         }
 #endif
 
@@ -752,33 +765,81 @@ public class Plugin
     }
 
 #if !NETFRAMEWORK
-    // Builds upstream's own OtlpMetricExporter and only replaces its transport, so upstream keeps
-    // ownership of serialization, compression, timeout, TLS and retry. Signing happens in the
+    // Builds upstream's own OtlpMetricExporter and, for SigV4, only replaces its transport, so
+    // upstream keeps ownership of serialization, compression, TLS and retry. Signing happens in the
     // handler, per HTTP attempt, which is also what makes credential rotation work.
     //
     // Note the handler removes any Authorization already present before setting its own, so a
     // global OTEL_EXPORTER_OTLP_HEADERS bearer token is replaced rather than duplicated. A
-    // signal-specific bearer suppresses signing entirely; see IsSigV4MetricsEnabled.
-    private static OtlpMetricExporter CreateSigV4MetricExporter(string endpoint)
+    // signal-specific bearer selects BearerToken mode instead, which still exports: see
+    // CollectorlessMetricsAuthMode.
+    private static OtlpMetricExporter CreateCollectorlessMetricExporter(string endpoint, CollectorlessMetricsAuthMode authMode)
+        => new OtlpMetricExporter(CreateCollectorlessExporterOptions(endpoint, authMode));
+
+    // Separated from exporter construction so tests can assert on the resolved options and drive
+    // the real handler chain, rather than reimplementing this wiring. Reimplementing it in tests is
+    // what previously hid two defects: the exporter's synchronous send path going unsigned, and the
+    // configured timeout being dropped when the client factory was replaced.
+    //
+    // innerHandler and authenticator are test seams, following the same pattern as
+    // OtlpAwsSpanExporter's internal constructor. In production both are null.
+    private static OtlpExporterOptions CreateCollectorlessExporterOptions(
+        string endpoint,
+        CollectorlessMetricsAuthMode authMode,
+        HttpMessageHandler? innerHandler = null,
+        IAwsAuthenticator? authenticator = null)
     {
-        string region = AwsOtlpEndpoint.GetRegion(endpoint)!;
+        int timeoutMilliseconds = GetCollectorlessMetricTimeout();
 
         var options = new OtlpExporterOptions
         {
             Endpoint = new Uri(endpoint),
             Protocol = OtlpExportProtocol.HttpProtobuf,
-            TimeoutMilliseconds = GetCollectorlessMetricTimeout(),
+            TimeoutMilliseconds = timeoutMilliseconds,
         };
 
-        // Setting this explicitly also opts out of upstream's IHttpClientFactory integration, which
-        // only substitutes its own factory while HttpClientFactory is still the default one.
-        options.HttpClientFactory = () => new HttpClient(
-            new SigV4SigningHandler(AwsOtlpEndpoint.MetricsSigningServiceName, region)
-            {
-                InnerHandler = new HttpClientHandler(),
-            });
+        // new OtlpExporterOptions() resolves the generic OTEL_EXPORTER_OTLP_* variables only; the
+        // overload that reads the signal-specific ones is internal to upstream. So any headers the
+        // customer set in OTEL_EXPORTER_OTLP_METRICS_HEADERS have to be applied here or they are
+        // silently dropped. Assigning replaces the global value, which is the precedence the OTLP
+        // specification defines (selected, not merged).
+        string? metricsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig);
+        if (!string.IsNullOrEmpty(metricsHeaders))
+        {
+            options.Headers = metricsHeaders;
+        }
 
-        return new OtlpMetricExporter(options);
+        if (authMode == CollectorlessMetricsAuthMode.SigV4)
+        {
+            string region = AwsOtlpEndpoint.GetRegion(endpoint)!;
+
+            // Replacing the factory also replaces upstream's default one, which is where
+            // TimeoutMilliseconds is turned into HttpClient.Timeout. Setting it here keeps the
+            // configured timeout effective; without it the client silently falls back to 100s.
+            //
+            // Setting this explicitly also opts out of upstream's IHttpClientFactory integration,
+            // which only substitutes its own factory while HttpClientFactory is still the default.
+            options.HttpClientFactory = () => new HttpClient(
+                new SigV4SigningHandler(AwsOtlpEndpoint.MetricsSigningServiceName, region, authenticator)
+                {
+                    InnerHandler = innerHandler ?? new HttpClientHandler(),
+                })
+            {
+                Timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds),
+            };
+        }
+        else if (innerHandler != null)
+        {
+            // Bearer mode in production leaves HttpClientFactory alone, so upstream's default
+            // factory applies the timeout and installs no signing handler. A test transport still
+            // has to be reachable, hence this branch.
+            options.HttpClientFactory = () => new HttpClient(innerHandler)
+            {
+                Timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds),
+            };
+        }
+
+        return options;
     }
 
     // Deliberately not GetMetricExportInterval(): that one silently caps anything above 60s back
@@ -1096,21 +1157,25 @@ public class Plugin
 
 #if !NETFRAMEWORK
 
-    // Gate for collector-less OTLP metrics export with SigV4.
+    // Decides whether collector-less OTLP metrics export runs, and how it authenticates.
     //
     // OTEL_METRICS_EXPORTER=none is required for the same reason the traces gate requires it: the
     // plugin can add a reader to the meter provider but cannot remove the exporter upstream already
     // configured, so without it metrics would be exported twice, once unsigned.
     //
+    // That requirement is also why a bearer-token configuration returns BearerToken rather than
+    // Disabled. With no upstream reader left to fall back on, refusing to register one would export
+    // nothing at all while appearing to honor the customer's header.
+    //
     // Every rejection logs why. A customer who sets the endpoint but misses a prerequisite
     // otherwise sees no metrics and no explanation.
-    private bool IsSigV4MetricsEnabled()
+    private CollectorlessMetricsAuthMode DetermineCollectorlessMetricsAuthMode()
     {
         string? endpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsEndpointConfig);
 
         if (!AwsOtlpEndpoint.IsMetricsEndpoint(endpoint))
         {
-            return false;
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         Logger.Log(LogLevel.Information, "Detected using AWS OTLP CloudWatch Metrics Endpoint.");
@@ -1128,7 +1193,7 @@ public class Plugin
             Logger.Log(
                 LogLevel.Information,
                 "Collector-less OTLP metrics export is not supported in AWS Lambda; metrics will not be exported to the CloudWatch endpoint.");
-            return false;
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         if (!IsEnvFlagTrue(SigV4EnabledConfig))
@@ -1136,7 +1201,7 @@ public class Plugin
             Logger.Log(
                 LogLevel.Information,
                 $"Please enable SigV4 authentication when exporting metrics to the OTLP CloudWatch Metrics Endpoint by setting {SigV4EnabledConfig}=true");
-            return false;
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         string? metricsExporter = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
@@ -1145,7 +1210,7 @@ public class Plugin
             Logger.Log(
                 LogLevel.Information,
                 $"Please disable other metric exporters by setting {MetricExporterConfig}=none to avoid exporting metrics twice");
-            return false;
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         // CloudWatch's OTLP endpoints accept HTTP, not gRPC. Leave the exporter untouched rather
@@ -1158,24 +1223,24 @@ public class Plugin
                 LogLevel.Warning,
                 "The CloudWatch Metrics OTLP endpoint does not support gRPC. Set {0}=http/protobuf to export metrics with SigV4 authentication.",
                 OtelExporterOtlpMetricsProtocolConfig);
-            return false;
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         // An explicit signal-specific Authorization header means the customer chose bearer-token
-        // authentication, which CloudWatch Metrics also accepts. Preserve it instead of signing.
-        // Only the signal-specific variable is consulted, matching the cross-SDK contract; a global
-        // OTEL_EXPORTER_OTLP_HEADERS Authorization does not suppress SigV4.
+        // authentication, which CloudWatch Metrics also accepts. Export with that header and add no
+        // signature. Only the signal-specific variable is consulted, matching the cross-SDK
+        // contract; a global OTEL_EXPORTER_OTLP_HEADERS Authorization does not suppress SigV4.
         var metricsHeaders = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig));
-        if (metricsHeaders.Keys.Any(key => string.Equals(key, "Authorization", StringComparison.OrdinalIgnoreCase)))
+        if (metricsHeaders.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
         {
             Logger.Log(
                 LogLevel.Information,
-                "An explicit Authorization header is configured in {0}; preserving it and not applying SigV4 authentication to metrics.",
+                "An explicit Authorization header is configured in {0}; exporting metrics with that header and not applying SigV4 authentication.",
                 OtelExporterOtlpMetricsHeadersConfig);
-            return false;
+            return CollectorlessMetricsAuthMode.BearerToken;
         }
 
-        return true;
+        return CollectorlessMetricsAuthMode.SigV4;
     }
 #endif
 

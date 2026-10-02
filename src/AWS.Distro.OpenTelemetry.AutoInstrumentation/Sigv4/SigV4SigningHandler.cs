@@ -69,8 +69,41 @@ internal sealed class SigV4SigningHandler : DelegatingHandler
         this.authenticator = authenticator ?? new DefaultAwsAuthenticator();
     }
 
+    /// <summary>
+    /// Signs the request before forwarding it.
+    ///
+    /// This override is as load-bearing as the async one: upstream's OTLP/HTTP export client calls
+    /// the <b>synchronous</b> <c>HttpClient.Send</c> on every platform where it is supported
+    /// (everywhere except Android, Browser and iOS) unless HTTP/2 is required, which OTLP/HTTP does
+    /// not require. <see cref="DelegatingHandler.Send"/> forwards straight to the inner handler, so
+    /// overriding only <c>SendAsync</c> let the real exporter send unsigned requests even though
+    /// every handler test passed, because those tests drove the async path through
+    /// <c>HttpClient.PostAsync</c>.
+    /// </summary>
+    /// <param name="request">The request to sign and send.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The response from the inner handler.</returns>
+    protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        // Blocking on the signing path is acceptable here: the caller is already synchronous, and
+        // credential resolution is normally served from a cached provider.
+        this.SignOrThrow(request);
+
+        return base.Send(request, cancellationToken);
+    }
+
     /// <inheritdoc/>
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        await this.SignOrThrowAsync(request).ConfigureAwait(false);
+
+        return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void SignOrThrow(HttpRequestMessage request)
+        => this.SignOrThrowAsync(request).GetAwaiter().GetResult();
+
+    private async Task SignOrThrowAsync(HttpRequestMessage request)
     {
         try
         {
@@ -84,8 +117,6 @@ internal sealed class SigV4SigningHandler : DelegatingHandler
             throw new HttpRequestException(
                 $"Failed to SigV4-sign the OTLP request for service '{this.signingServiceName}' in region '{this.region}'.", ex);
         }
-
-        return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SignAsync(HttpRequestMessage request)

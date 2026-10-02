@@ -156,16 +156,23 @@ public class SigV4MetricsConfigurationTest : IDisposable
     /// A signal-specific Authorization header means the customer chose bearer-token authentication,
     /// which CloudWatch Metrics also accepts. It must be preserved rather than replaced by SigV4.
     /// </summary>
+    /// <summary>
+    /// A signal-specific Authorization header selects bearer-token authentication, which CloudWatch
+    /// Metrics accepts. It must still EXPORT: collector-less export requires
+    /// OTEL_METRICS_EXPORTER=none, so there is no upstream reader to fall back on, and treating
+    /// bearer as "disabled" would export nothing while appearing to honor the header.
+    /// </summary>
     [Theory]
     [InlineData("Authorization=Bearer abc123")]
     [InlineData("authorization=Bearer abc123")]
     [InlineData("x-custom=value,Authorization=Bearer abc123")]
-    public void TestDisabledWhenSignalSpecificBearerIsConfigured(string headers)
+    public void TestBearerConfigurationStillExportsWithoutSigning(string headers)
     {
         ConfigureValid(ValidEndpoint);
         Environment.SetEnvironmentVariable(MetricsHeadersVar, headers);
 
-        Assert.False(InvokeGate());
+        Assert.Equal(CollectorlessMetricsAuthMode.BearerToken, InvokeMode());
+        Assert.True(InvokeGate(), "bearer mode must still register a reader");
     }
 
     [Fact]
@@ -174,7 +181,7 @@ public class SigV4MetricsConfigurationTest : IDisposable
         ConfigureValid(ValidEndpoint);
         Environment.SetEnvironmentVariable(MetricsHeadersVar, "x-custom=value,x-another=value2");
 
-        Assert.True(InvokeGate());
+        Assert.Equal(CollectorlessMetricsAuthMode.SigV4, InvokeMode());
     }
 
     /// <summary>
@@ -262,14 +269,16 @@ public class SigV4MetricsConfigurationTest : IDisposable
         Environment.SetEnvironmentVariable(MetricsExporterVar, "none");
     }
 
-    private static bool InvokeGate()
+    private static CollectorlessMetricsAuthMode InvokeMode()
     {
         MethodInfo method = typeof(Plugin).GetMethod(
-            "IsSigV4MetricsEnabled", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("IsSigV4MetricsEnabled not found");
+            "DetermineCollectorlessMetricsAuthMode", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("DetermineCollectorlessMetricsAuthMode not found");
 
-        return (bool)method.Invoke(new Plugin(), null)!;
+        return (CollectorlessMetricsAuthMode)method.Invoke(new Plugin(), null)!;
     }
+
+    private static bool InvokeGate() => InvokeMode() != CollectorlessMetricsAuthMode.Disabled;
 
     private static T Invoke<T>(string name)
     {
