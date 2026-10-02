@@ -11,6 +11,25 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
+  CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
+  endpoints, so those exports failed with HTTP 403. Note the signed OTLP log exporter is only
+  registered in AWS Lambda, so the logs half of this applies to Lambda workloads
+- Export OTLP metrics directly to the CloudWatch Metrics endpoint with SigV4 authentication, with
+  no CloudWatch Agent or Collector in between. Uses IAM role credentials, signing service
+  `monitoring`, and requires the `cloudwatch:PutMetricData` permission. Enable with:
+  ```
+  OTEL_METRICS_EXPORTER=none
+  OTEL_AWS_SIG_V4_ENABLED=true
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://monitoring.<region>.amazonaws.com/v1/metrics
+  ```
+  Targets modern .NET (net8.0/net9.0/net10.0) and is not enabled in AWS Lambda. Temporality
+  honors `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` rather than being forced, and
+  `OTEL_METRIC_EXPORT_INTERVAL` is used as configured. Setting an `Authorization` header in
+  `OTEL_EXPORTER_OTLP_METRICS_HEADERS` selects bearer-token authentication instead and suppresses
+  SigV4. AWS Application Signals metrics are unaffected and continue to be sent to the CloudWatch
+  Agent endpoint
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
