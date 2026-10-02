@@ -11,6 +11,11 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
+  CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
+  endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with
+  HTTP 403. Note the signed OTLP log exporter is only registered in AWS Lambda, so the logs half of
+  this applies to Lambda workloads
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
