@@ -48,12 +48,18 @@ public class Plugin
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
+#if !NETFRAMEWORK
+
+    // Collector-less OTLP metrics export is net8.0+ only, so these are declared under the same
+    // condition as the code that reads them. Left unguarded they are unused fields on net472, and
+    // CS0414 is an error in this build.
     private static readonly string OtelExporterOtlpMetricsEndpointConfig = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
     private static readonly string OtelExporterOtlpMetricsHeadersConfig = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
     private static readonly string OtelExporterOtlpMetricsProtocolConfig = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
     private static readonly string OtelExporterOtlpMetricsTimeoutConfig = "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT";
     private static readonly string OtelExporterOtlpMetricsTemporalityConfig = "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE";
     private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
+#endif
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
     private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
     private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
