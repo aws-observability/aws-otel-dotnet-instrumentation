@@ -19,7 +19,6 @@ using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
@@ -47,23 +46,6 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-
-    // The optional "\.cn" suffix covers the AWS China partition (cn-north-1, cn-northwest-1), whose
-    // endpoints are *.amazonaws.com.cn. Both patterns stay anchored with ^...$ so the optional group
-    // does not loosen matching: a lookalike host such as
-    // "https://xray.cn-north-1.amazonaws.com.cn.evil/v1/traces" still fails to match and falls back
-    // to the unsigned exporter. The same optional-suffix form is already used by
-    // S3PresignedUrlAttributor.
-    //
-    // Region extraction is unaffected. Both call sites take the second dot-separated label
-    // (OtlpAwsSpanExporter.cs and ConfigureLogsOptions below), which yields "cn-north-1" for a China
-    // host just as it yields "us-east-1" for a commercial one. Signing uses that region plus an
-    // explicit ServiceURL, so the DNS suffix never reaches the signer.
-    //
-    // Internal rather than private so the patterns can be asserted directly in unit tests; the
-    // gating methods that consume them read process-wide environment state captured at class load.
-    internal static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/traces$";
-    internal static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
@@ -398,10 +380,14 @@ public class Plugin
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
 
         string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+
+        // The IsNullOrEmpty check is redundant with IsLogsEndpoint, which rejects null and empty.
+        // It is kept so the compiler can see logsEndpoint is non-null below; the nullability
+        // attribute that would express this on the helper is unavailable on the net472 target.
+        if (!string.IsNullOrEmpty(logsEndpoint) && AwsOtlpEndpoint.IsLogsEndpoint(logsEndpoint))
         {
-            string region = new Uri(logsEndpoint).Host.Split('.')[1];
+            // Non-null: the endpoint just matched the logs pattern, whose capture group is the region.
+            string region = AwsOtlpEndpoint.GetRegion(logsEndpoint)!;
             var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
             var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
             options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
@@ -915,7 +901,7 @@ public class Plugin
     // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
     private bool IsSigV4AuthEnabled()
     {
-        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
+        bool isXrayOtlpEndpoint = AwsOtlpEndpoint.IsTracesEndpoint(OtelExporterOtlpTracesEndpoint);
 
         if (isXrayOtlpEndpoint)
         {
