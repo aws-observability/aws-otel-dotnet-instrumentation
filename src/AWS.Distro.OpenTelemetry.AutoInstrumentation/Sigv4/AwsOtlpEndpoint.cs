@@ -28,7 +28,10 @@ internal static class AwsOtlpEndpoint
     /// <c>OtlpAwsSpanExporter</c> passes "XRay" and still works: it never sets
     /// <c>AuthenticationServiceName</c> on the client config, so the signer falls back to the X-Ray
     /// config's own lowercase service name. Anything that sets the service name explicitly, as
-    /// <see cref="SigV4SigningHandler"/> does, has to spell it the way the service expects.
+    /// <c>SigV4SigningHandler</c> does, has to spell it the way the service expects.
+    ///
+    /// Referenced as plain text rather than a cref: that type is net8.0+ only, and an unresolvable
+    /// cref is a documentation-generation error on the net472 build.
     /// </summary>
     internal const string TracesSigningServiceName = "xray";
 
