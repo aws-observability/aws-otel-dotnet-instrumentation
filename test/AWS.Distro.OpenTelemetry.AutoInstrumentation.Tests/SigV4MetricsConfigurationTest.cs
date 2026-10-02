@@ -175,6 +175,60 @@ public class SigV4MetricsConfigurationTest : IDisposable
         Assert.True(InvokeGate(), "bearer mode must still register a reader");
     }
 
+    /// <summary>
+    /// The case that was missed first time round: bearer configured and OTEL_AWS_SIG_V4_ENABLED
+    /// unset. Bearer-token authentication has nothing to do with SigV4, so requiring that flag
+    /// would be contradictory, and because collector-less export requires
+    /// OTEL_METRICS_EXPORTER=none there is no upstream reader to fall back on, so the customer
+    /// would silently get no metrics while being told to enable SigV4.
+    ///
+    /// Earlier tests could not catch this: the flag-unset test set no headers, and the bearer tests
+    /// all set the flag via ConfigureValid. The two conditions were never crossed.
+    /// </summary>
+    [Fact]
+    public void TestBearerConfigurationDoesNotRequireTheSigV4Flag()
+    {
+        Environment.SetEnvironmentVariable(MetricsEndpointVar, ValidEndpoint);
+        Environment.SetEnvironmentVariable(MetricsExporterVar, "none");
+        Environment.SetEnvironmentVariable(MetricsHeadersVar, "Authorization=Bearer abc123");
+
+        // Deliberately no OTEL_AWS_SIG_V4_ENABLED.
+        Assert.Null(Environment.GetEnvironmentVariable(SigV4EnabledVar));
+
+        Assert.Equal(CollectorlessMetricsAuthMode.BearerToken, InvokeMode());
+    }
+
+    /// <summary>
+    /// The exporter list must match exactly. "none,otlp" previously satisfied the gate while
+    /// upstream also loaded its own unsigned OTLP exporter against the same CloudWatch endpoint,
+    /// which is a duplicate export and a permanent 403 loop. "nonesuch" is the other direction of
+    /// the same substring bug.
+    /// </summary>
+    [Theory]
+    [InlineData("none,otlp")]
+    [InlineData("otlp,none")]
+    [InlineData("nonesuch")]
+    [InlineData("none,console")]
+    public void TestDisabledWhenOtherMetricExportersRemainConfigured(string exporters)
+    {
+        ConfigureValid(ValidEndpoint);
+        Environment.SetEnvironmentVariable(MetricsExporterVar, exporters);
+
+        Assert.Equal(CollectorlessMetricsAuthMode.Disabled, InvokeMode());
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("NONE")]
+    [InlineData(" none ")]
+    public void TestEnabledForExactNoneInAnyCasingOrPadding(string exporters)
+    {
+        ConfigureValid(ValidEndpoint);
+        Environment.SetEnvironmentVariable(MetricsExporterVar, exporters);
+
+        Assert.Equal(CollectorlessMetricsAuthMode.SigV4, InvokeMode());
+    }
+
     [Fact]
     public void TestEnabledWhenSignalSpecificHeadersCarryNoAuthorization()
     {

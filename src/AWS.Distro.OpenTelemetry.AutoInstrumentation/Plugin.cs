@@ -1196,16 +1196,12 @@ public class Plugin
             return CollectorlessMetricsAuthMode.Disabled;
         }
 
-        if (!IsEnvFlagTrue(SigV4EnabledConfig))
-        {
-            Logger.Log(
-                LogLevel.Information,
-                $"Please enable SigV4 authentication when exporting metrics to the OTLP CloudWatch Metrics Endpoint by setting {SigV4EnabledConfig}=true");
-            return CollectorlessMetricsAuthMode.Disabled;
-        }
-
+        // Compared exactly, not with Contains: "none,otlp" would otherwise satisfy this gate while
+        // upstream also loads its own unsigned OTLP exporter against the same CloudWatch endpoint,
+        // producing a duplicate export and a permanent 403 loop. The traces gate above compares
+        // exactly for the same reason.
         string? metricsExporter = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
-        if (metricsExporter == null || !metricsExporter.Contains("none"))
+        if (!string.Equals(metricsExporter?.Trim(), "none", StringComparison.OrdinalIgnoreCase))
         {
             Logger.Log(
                 LogLevel.Information,
@@ -1226,10 +1222,15 @@ public class Plugin
             return CollectorlessMetricsAuthMode.Disabled;
         }
 
-        // An explicit signal-specific Authorization header means the customer chose bearer-token
-        // authentication, which CloudWatch Metrics also accepts. Export with that header and add no
-        // signature. Only the signal-specific variable is consulted, matching the cross-SDK
-        // contract; a global OTEL_EXPORTER_OTLP_HEADERS Authorization does not suppress SigV4.
+        // Bearer detection comes BEFORE the SigV4 flag check below, and the order is the point.
+        // Bearer-token authentication does not involve SigV4 at all, so requiring a customer to set
+        // OTEL_AWS_SIG_V4_ENABLED=true to use a bearer token would be contradictory. Worse, because
+        // collector-less export requires OTEL_METRICS_EXPORTER=none, failing the flag check leaves
+        // no upstream reader to fall back on: a bearer user without the flag would export nothing
+        // while being told to enable SigV4.
+        //
+        // Only the signal-specific variable is consulted, matching the cross-SDK contract; a global
+        // OTEL_EXPORTER_OTLP_HEADERS Authorization does not suppress SigV4.
         var metricsHeaders = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig));
         if (metricsHeaders.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
         {
@@ -1238,6 +1239,14 @@ public class Plugin
                 "An explicit Authorization header is configured in {0}; exporting metrics with that header and not applying SigV4 authentication.",
                 OtelExporterOtlpMetricsHeadersConfig);
             return CollectorlessMetricsAuthMode.BearerToken;
+        }
+
+        if (!IsEnvFlagTrue(SigV4EnabledConfig))
+        {
+            Logger.Log(
+                LogLevel.Information,
+                $"Please enable SigV4 authentication when exporting metrics to the OTLP CloudWatch Metrics Endpoint by setting {SigV4EnabledConfig}=true");
+            return CollectorlessMetricsAuthMode.Disabled;
         }
 
         return CollectorlessMetricsAuthMode.SigV4;

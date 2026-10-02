@@ -40,7 +40,6 @@ internal sealed class SigV4SigningHandler : DelegatingHandler
 {
     private const string ContentTypeHeader = "content-type";
     private const string HostHeader = "Host";
-    private const string DefaultContentType = "application/x-protobuf";
 
     // Export attempts repeat on a fixed interval, so an unresolvable credential chain would
     // otherwise emit an identical error on every cycle.
@@ -129,7 +128,12 @@ internal sealed class SigV4SigningHandler : DelegatingHandler
             ? Array.Empty<byte>()
             : await request.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
-        string contentType = request.Content?.Headers?.ContentType?.ToString() ?? DefaultContentType;
+        // Only ever sign a content-type that will actually be sent. The header lives on the content
+        // and is deliberately not copied back onto the request, so defaulting a missing value would
+        // put content-type into SignedHeaders while the wire request carried none, and the service
+        // would reject the signature with no indication why. Upstream always sets it for OTLP/HTTP,
+        // so in practice this is null only if that ever changes.
+        string? contentType = request.Content?.Headers?.ContentType?.ToString();
 
         using var contentStream = new MemoryStream(body, writable: false);
 
@@ -164,7 +168,11 @@ internal sealed class SigV4SigningHandler : DelegatingHandler
         }
 
         sigV4Request.Headers[HostHeader] = endpoint.Host;
-        sigV4Request.Headers[ContentTypeHeader] = contentType;
+
+        if (contentType != null)
+        {
+            sigV4Request.Headers[ContentTypeHeader] = contentType;
+        }
 
         this.authenticator.Sign(sigV4Request, config, credentials);
 

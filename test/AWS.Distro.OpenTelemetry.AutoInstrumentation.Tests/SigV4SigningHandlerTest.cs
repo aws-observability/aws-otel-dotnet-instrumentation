@@ -203,6 +203,29 @@ public class SigV4SigningHandlerTest
     }
 
     /// <summary>
+    /// When the content carries no content-type, none may appear in SignedHeaders. The header is
+    /// deliberately not copied back onto the request, so signing a defaulted value would commit to
+    /// a header the wire request never carries, and the service would reject the signature without
+    /// saying why.
+    /// </summary>
+    [Fact]
+    public async Task TestContentTypeIsNotSignedWhenAbsentFromTheContent()
+    {
+        var inner = new RecordingHandler();
+        using HttpClient client = CreateClient(inner, "monitoring", "us-east-1", StaticCredentials());
+
+        // No ContentType set on the content.
+        await client.PostAsync(MetricsEndpoint, new ByteArrayContent(new byte[] { 1, 2, 3 }));
+
+        HttpRequestMessage sent = Assert.Single(inner.Requests);
+        string authorization = sent.Headers.GetValues(AuthorizationHeader).Single();
+
+        Assert.DoesNotContain("content-type", authorization);
+        Assert.Contains("host", authorization);
+        Assert.Null(sent.Content!.Headers.ContentType);
+    }
+
+    /// <summary>
     /// The payload must survive signing intact; reading the body to sign it must not consume it.
     /// </summary>
     [Fact]
