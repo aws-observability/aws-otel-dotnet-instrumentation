@@ -78,6 +78,44 @@ runs:
         docker buildx build --platform linux/amd64 -t ${{ inputs.image-name }}-amd64 -f ./Dockerfile.linux --load .
         docker buildx build --platform linux/arm64 -t ${{ inputs.image-name }}-arm64 -f ./Dockerfile.linux --load .
 
+    # The arm64 image is built with BuildKit's own emulation; running it on the host needs QEMU registered too.
+    - name: Set up QEMU
+      if: runner.os == 'Linux'
+      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 #v4.4.0
+      with:
+        platforms: arm64
+
+    # Replays what the operator init container does (the image's own `cp -r /autoinstrumentation/. <volume>`)
+    # and checks that every profiler path an operator may inject resolves to a native library of the right
+    # architecture.
+    - name: Verify Linux images
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        verify() {
+          local arch="$1" elf_arch="$2"
+          local image="${{ inputs.image-name }}-${arch}"
+          local dest
+          dest="$(mktemp -d)"
+          docker run --rm --platform "linux/${arch}" -v "${dest}:/otel-auto-instrumentation-dotnet" \
+            --entrypoint /bin/cp "${image}" -r /autoinstrumentation/. /otel-auto-instrumentation-dotnet
+          for dir in linux linux-musl linux-x64 linux-musl-x64; do
+            local lib="${dest}/${dir}/OpenTelemetry.AutoInstrumentation.Native.so"
+            if [ ! -f "${lib}" ]; then
+              echo "::error::${arch}: ${dir}/OpenTelemetry.AutoInstrumentation.Native.so is missing after copy"
+              exit 1
+            fi
+            if ! file -bL "${lib}" | grep -q "${elf_arch}"; then
+              echo "::error::${arch}: ${dir}/OpenTelemetry.AutoInstrumentation.Native.so is not ${elf_arch}: $(file -bL "${lib}")"
+              exit 1
+            fi
+          done
+          echo "${arch}: all profiler paths resolve to ${elf_arch}"
+        }
+        verify amd64 x86-64
+        verify arm64 aarch64
+
     - name: Build Windows container
       if: runner.os == 'Windows'
       shell: powershell
