@@ -92,6 +92,13 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
+
+      - name: Download Linux x64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          path: ./artifacts/linux/x64-musl
           
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
@@ -105,6 +112,7 @@ jobs:
         run: |
           mkdir -p ./OpenTelemetryDistribution/amd64
           unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
+          unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution/amd64
 
       - name: Set up Docker Buildx
         if: runner.os == 'Linux'
