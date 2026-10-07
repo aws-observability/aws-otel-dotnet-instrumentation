@@ -67,11 +67,19 @@ runs:
           sudo chmod +x /usr/local/bin/yq
         fi
 
-    # CodeBuild runs the job in a container, so /.dockerenv exists. Testcontainers 3.x then resolves
-    # container addresses through Docker's default "bridge" network, which fails (KeyError: 'bridge') for
-    # containers on a custom network, as our contract tests use. Without the marker it uses localhost and
-    # the mapped ports, as on GitHub-hosted runners.
-    - name: Let Testcontainers treat the runner as a host
+    # CodeBuild runs the job in a container (/.dockerenv exists) next to the Docker daemon, not on it.
+    # Testcontainers 3.x then resolves container addresses through Docker's default "bridge" network,
+    # which fails (KeyError: 'bridge') for containers on a custom network, as our contract tests use.
+    # Mapped ports are not reachable on localhost from the job container, only via its default gateway
+    # (the Docker host), so point Testcontainers there and drop the in-container detection.
+    - name: Point Testcontainers at the Docker host
       if: runner.os == 'Linux'
       shell: bash
-      run: sudo rm -f /.dockerenv
+      run: |
+        if [ -f /.dockerenv ]; then
+          gateway=$(ip route 2>/dev/null | awk '/^default/ {print $3; exit}')
+          if [ -n "$gateway" ]; then
+            echo "TC_HOST=$gateway" >> "$GITHUB_ENV"
+            sudo rm -f /.dockerenv
+          fi
+        fi
