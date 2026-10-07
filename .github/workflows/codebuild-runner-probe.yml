@@ -1,0 +1,135 @@
+# TEMPORARY: probes CodeBuild-hosted runner images for the tools our workflows assume
+# GitHub-hosted runners provide. Delete this file once the runner migration is done.
+# Uses no secrets and assumes no AWS role; it only requests an OIDC token to prove one can be minted.
+name: CodeBuild Runner Probe
+on:
+  push:
+    branches:
+      - codebuild-probe
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Documented runner image labels.
+          - name: ubuntu-7.0
+            override: image:ubuntu-7.0
+          - name: linux-5.0
+            override: image:linux-5.0
+          # Ubuntu 24.04 (closest to ubuntu-latest); not in the runner label table, so this verifies whether it is accepted.
+          - name: ubuntu-8.0
+            override: image:ubuntu-8.0
+          # Project default image (ARM_CONTAINER, amazonlinux-aarch64-standard:3.0), as a baseline.
+          - name: project-default-arm
+            override: instance-size:medium
+    # The probe-<name> label keeps every job's label set unique so jobs cannot take each other's runners.
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - ${{ matrix.override }}
+      - probe-${{ matrix.name }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Machine
+        run: |
+          uname -a; cat /etc/os-release | head -3; nproc; free -g; df -h "$GITHUB_WORKSPACE" /tmp
+          echo "user=$(id)"; sudo -n true && echo "sudo: yes" || echo "sudo: NO"
+
+      - name: Tools assumed by our workflows
+        run: |
+          for t in git bash jq yq shellcheck gh aws python3 pip3 unzip zip wget curl file gpg less shasum perl gawk dpkg pwsh dotnet docker java node terraform; do
+            if command -v "$t" >/dev/null 2>&1; then printf '%-10s %s\n' "$t" "$("$t" --version 2>&1 | head -1)"; else printf '%-10s MISSING\n' "$t"; fi
+          done
+          echo "--- yq flavor (we need mikefarah/yq)"; yq --version 2>&1 || true
+          echo "--- awk -i inplace (GNU awk)"; printf 'a\n' > /tmp/awk-probe && awk -i inplace '{print "b"}' /tmp/awk-probe && cat /tmp/awk-probe || echo "awk -i inplace: NO"
+          echo "--- dotnet SDKs"; dotnet --list-sdks 2>&1 || true
+
+      - name: Docker
+        run: |
+          docker info --format 'server={{.ServerVersion}} os={{.OperatingSystem}} arch={{.Architecture}} driver={{.Driver}}' || echo "docker daemon: NO"
+          docker buildx ls || echo "buildx: NO"
+          docker run --rm public.ecr.aws/docker/library/alpine:3.20 echo "docker run: ok"
+          mkdir -p /tmp/bind && echo hi > /tmp/bind/f && docker run --rm -v "$GITHUB_WORKSPACE":/w public.ecr.aws/docker/library/alpine:3.20 ls /w/build.sh && echo "bind mount of workspace: ok"
+          echo "--- docker hub anonymous pull (rate limit check)"; docker pull -q redis:7 && echo "docker hub pull: ok" || echo "docker hub pull: FAILED"
+          echo "--- privileged (expected to fail unless project has privilegedMode)"; docker run --rm --privileged public.ecr.aws/docker/library/alpine:3.20 true && echo "privileged: yes" || echo "privileged: NO"
+
+      - name: Network egress
+        run: |
+          for u in https://github.com https://api.nuget.org/v3/index.json https://dot.net https://public.ecr.aws https://registry-1.docker.io/v2/ http://keyserver.ubuntu.com; do
+            printf '%-45s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$u" || echo FAIL)"
+          done
+
+      - name: OIDC token can be minted
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")
+          echo "OIDC token request: HTTP $code"
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # On-demand Windows Server 2022 EC2 image (needed for nanoserver:ltsc2022 containers).
+          - name: windows-ec2-2022
+            override: image:windows-ec2-2022
+          # Existing reserved fleet (windows-base:2022-1.0, shared with windows-dotnet-e2e-ecr-build).
+          - name: windows-fleet
+            override: fleet:codebuild-adot-windows-builder-fleet
+          # On-demand Windows Server 2019 container image (no Docker expected).
+          - name: windows-3.0
+            override: image:windows-3.0
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - ${{ matrix.override }}
+      - probe-${{ matrix.name }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Machine
+        shell: pwsh
+        run: |
+          systeminfo | Select-String "OS Name","OS Version"
+          [Environment]::ProcessorCount
+          Get-PSDrive C | Format-Table Used,Free
+          $rel = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full').Release; "NET Framework release key: $rel (>=461808 means 4.7.2+)"
+
+      - name: Tools assumed by our workflows
+        shell: pwsh
+        run: |
+          foreach ($t in 'git','bash','powershell','pwsh','dotnet','nuget','gh','aws','docker','jq','python','7z','tar') {
+            $c = Get-Command $t -ErrorAction SilentlyContinue
+            if ($c) { "{0,-10} {1}" -f $t, $c.Source } else { "{0,-10} MISSING" -f $t }
+          }
+          dotnet --list-sdks
+          bash -c 'echo "git bash: $BASH_VERSION"; uname -a' 2>&1
+
+      - name: Default shell works (pwsh)
+        run: echo "default run shell ok - $($PSVersionTable.PSVersion)"
+
+      - name: Bash shell works
+        shell: bash
+        run: echo "bash shell ok"
+
+      - name: Docker (Windows containers)
+        shell: powershell
+        run: |
+          docker version
+          docker info --format "os={{.OSType}} isolation={{.Isolation}}"
+          "FROM mcr.microsoft.com/windows/nanoserver:ltsc2022`nCMD echo ok" | Out-File -Encoding ascii $env:RUNNER_TEMP\Dockerfile.probe
+          docker build -t probe-nano -f $env:RUNNER_TEMP\Dockerfile.probe $env:RUNNER_TEMP
+          docker run --rm probe-nano
+
+      - name: OIDC token can be minted
+        shell: pwsh
+        run: |
+          $r = Invoke-WebRequest -UseBasicParsing -Headers @{Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN"} "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com"
+          "OIDC token request: HTTP $($r.StatusCode)"
