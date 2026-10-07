@@ -133,3 +133,26 @@ jobs:
         run: |
           $r = Invoke-WebRequest -UseBasicParsing -Headers @{Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN"} "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com"
           "OIDC token request: HTTP $($r.StatusCode)"
+
+  # Privileged project for the QEMU/buildx image builds.
+  linux-privileged:
+    runs-on:
+      - codebuild-adot-dotnet-runner-privileged-${{ github.run_id }}-${{ github.run_attempt }}
+      - probe-privileged
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Machine
+        run: uname -a; nproc; free -g; df -h "$GITHUB_WORKSPACE"
+
+      - name: QEMU and multi-platform buildx (as used by build-and-scan-image)
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 #v4.4.0
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 #v3.11.1
+
+      - name: Build a two-arch image
+        run: |
+          printf 'FROM public.ecr.aws/docker/library/alpine:3.20\nRUN uname -m > /arch\n' > "$RUNNER_TEMP/Dockerfile.probe"
+          docker buildx build --platform linux/amd64,linux/arm64 -f "$RUNNER_TEMP/Dockerfile.probe" "$RUNNER_TEMP"
+          docker run --rm --platform linux/arm64 public.ecr.aws/docker/library/alpine:3.20 uname -m
