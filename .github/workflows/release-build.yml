@@ -45,12 +45,29 @@ jobs:
   build-release-nuget:
     needs: build-sdk
     environment: Release
-    runs-on: windows-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:windows-ec2-2022
+      - instance-size:large
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
         fail-fast: true
+
+    # CodeBuild runner labels don't tell actionlint this is Windows; pwsh is also the runner's default here.
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
         
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -128,7 +145,13 @@ jobs:
 
   release-image:
     needs: build-release-nuget
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
       matrix:
         include:
@@ -136,6 +159,9 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Configure AWS credentials for public ECR
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -217,7 +243,10 @@ jobs:
 
   release-multi-platform-image:
     needs: release-image
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -258,7 +287,10 @@ jobs:
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
 
   setup-regions-matrix:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: release-multi-platform-image
     outputs:
       aws_regions_json: ${{ steps.set-matrix.outputs.aws_regions_json }}
@@ -281,7 +313,10 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
   publish-layer-prod:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: setup-regions-matrix
     strategy:
       matrix:
@@ -385,7 +420,10 @@ jobs:
         run: |
           aws s3 rb --force s3://${{ env.BUCKET_NAME }}
   generate-lambda-release-note:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: publish-layer-prod
     outputs:
       layer-note: ${{ steps.layer-note.outputs.layer-note }}
@@ -452,7 +490,10 @@ jobs:
 
   publish-github:
     needs: generate-lambda-release-note
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -607,7 +648,10 @@ jobs:
             --clobber
 
   sign-public-ecr-image:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: publish-github
     steps:
       - name: Configure AWS Credentials for public ECR

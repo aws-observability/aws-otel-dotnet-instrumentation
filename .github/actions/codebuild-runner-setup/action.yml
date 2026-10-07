@@ -1,0 +1,52 @@
+name: CodeBuild runner setup
+description: >
+  Gives CodeBuild-hosted runners the tools our workflows expect from GitHub-hosted images.
+  Only installs what is missing, so it is a no-op on GitHub-hosted runners.
+  Git long paths on Windows must already be enabled for checkout (see the GIT_CONFIG_* env in the
+  calling workflow), since this action is only available after checkout.
+runs:
+  using: composite
+  steps:
+    - name: Put Git Bash on PATH
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+          Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin"
+        }
+
+    - name: Install missing Windows CLIs
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $missing = @('gh', 'jq') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+        if ($missing) {
+          choco install @missing -y --no-progress
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # Chocolatey updates the machine PATH, which this runner process does not reload.
+          foreach ($dir in "$env:ProgramFiles\GitHub CLI", "$env:ProgramData\chocolatey\bin") {
+            if (Test-Path $dir) { Add-Content $env:GITHUB_PATH $dir }
+          }
+        }
+
+    - name: Install missing Linux CLIs
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        YQ_VERSION: v4.54.1
+      run: |
+        set -euo pipefail
+        if ! yq --version 2>/dev/null | grep -q mikefarah; then
+          arch=$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+          sudo curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${arch}"
+          sudo chmod +x /usr/local/bin/yq
+        fi
+        # GitHub's Ubuntu image ships GNU awk as `awk` (needed for `awk -i inplace`); CodeBuild's ships mawk.
+        # Installing gawk makes it the `awk` alternative.
+        if ! awk --version 2>/dev/null | grep -q "GNU Awk"; then
+          if command -v apt-get >/dev/null; then
+            sudo apt-get install -y -qq gawk >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gawk >/dev/null; }
+          else
+            sudo dnf install -y -q gawk
+          fi
+        fi

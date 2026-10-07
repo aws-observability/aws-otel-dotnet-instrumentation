@@ -25,7 +25,13 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     environment: ${{ inputs.environment }}
     strategy:
       matrix:
@@ -37,6 +43,9 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -91,7 +100,10 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
   
   build-x64-musl:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
@@ -114,7 +126,9 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
   
   build-arm64:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:arm-3.0
     environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -142,7 +156,9 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
 
   build-arm64-musl:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:arm-3.0
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
@@ -166,7 +182,13 @@ jobs:
 
   build-and-scan-images:
     needs: [build, build-arm64, build-x64-musl, build-arm64-musl]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     environment: ${{ inputs.environment }}
     strategy:
       fail-fast: false
@@ -176,6 +198,9 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Build and scan Linux images
         if: runner.os == 'Linux'
@@ -201,7 +226,10 @@ jobs:
   publish-main-build-status:
     name: "Publish Main Build Status"
     needs: [ build, application-signals-e2e-test ]
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     if: always() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v'))
     steps:
       - name: Configure AWS Credentials for emitting metrics

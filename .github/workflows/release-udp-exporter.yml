@@ -28,14 +28,39 @@ jobs:
     # Only release if previous e2e test succeeds
     needs: validate-udp-exporter-e2e-test
     environment: Release
-    runs-on: windows-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:windows-ec2-2022
+      - instance-size:large
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
 
     strategy:
       fail-fast: true
+    # CodeBuild runner labels don't tell actionlint this is Windows; pwsh is also the runner's default here.
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
+
+      # The exporter targets net8.0/net9.0/net10.0; CodeBuild's Windows image only preinstalls the .NET 10 SDK.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       - name: Install dependencies
         run: dotnet restore .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp /p:_IsPacking=true
