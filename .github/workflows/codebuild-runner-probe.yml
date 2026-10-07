@@ -1,184 +1,125 @@
-# TEMPORARY: probes CodeBuild-hosted runner images for the tools our workflows assume
-# GitHub-hosted runners provide. Delete this file once the runner migration is done.
-# Uses no secrets and assumes no AWS role; it only requests an OIDC token to prove one can be minted.
+# TEMPORARY: re-runs the steps that failed on CodeBuild runners in PR #474, with the setup-action fixes.
+# Delete this branch once the runner migration is done.
 name: CodeBuild Runner Probe
 on:
   push:
     branches:
       - codebuild-probe
-  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  linux:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Documented runner image labels.
-          - name: ubuntu-7.0
-            override: image:ubuntu-7.0
-          - name: linux-5.0
-            override: image:linux-5.0
-          # Ubuntu 24.04 (closest to ubuntu-latest); not in the runner label table, so this verifies whether it is accepted.
-          - name: ubuntu-8.0
-            override: image:ubuntu-8.0
-          # Project default image (ARM_CONTAINER, amazonlinux-aarch64-standard:3.0), as a baseline.
-          - name: project-default-arm
-            override: instance-size:medium
-    # The probe-<name> label keeps every job's label set unique so jobs cannot take each other's runners.
+  linux-actionlint:
     runs-on:
       - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - ${{ matrix.override }}
-      - probe-${{ matrix.name }}
+      - image:ubuntu-8.0
+      - instance-size:large
+      - probe-actionlint
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+      - uses: ./.github/actions/codebuild-runner-setup
+      - name: Validate GitHub Actions workflows (same as pr-build static-code-checks)
+        uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518 # v2.1.1
+        with:
+          files: .github/workflows/*.yml
+          flags: |
+            -ignore SC1001
+            -ignore SC2027
+            -ignore SC2086
+            -ignore SC2162
+            -ignore SC2206
+
+  linux-contract:
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
+      - probe-contract
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
-
-      - name: Machine
+      - uses: ./.github/actions/codebuild-runner-setup
+      - name: Network diagnostics
         run: |
-          uname -a; cat /etc/os-release | head -3; nproc; free -g; df -h "$GITHUB_WORKSPACE" /tmp
-          echo "user=$(id)"; sudo -n true && echo "sudo: yes" || echo "sudo: NO"
-
-      - name: Tools assumed by our workflows
+          ls -la /.dockerenv 2>&1 || true
+          ip route 2>/dev/null || cat /proc/net/route
+          docker network ls
+          docker run -d --name probe-web -p 80 public.ecr.aws/nginx/nginx:stable-alpine >/dev/null
+          port=$(docker port probe-web 80/tcp | head -1 | sed 's/.*://')
+          gw=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+          for h in localhost 127.0.0.1 "$gw"; do printf '%-12s %s\n' "$h" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$h:$port/" || echo FAIL)"; done
+          docker rm -f probe-web >/dev/null
+      - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v6.0.0
+        with:
+          python-version: '3.10'
+      - name: Set up cloudwatch-plugin-otel contract tests
+        env:
+          OTEL_VERSION: 1.17.0
+          OTEL_AUTO_INSTRUMENTATION_VERSION: 1.16.0
+          OTEL_INSTRUMENTATION_VERSION: 1.16.0
         run: |
-          for t in git bash jq yq shellcheck gh aws python3 pip3 unzip zip wget curl file gpg less shasum perl gawk dpkg pwsh dotnet docker java node terraform; do
-            if command -v "$t" >/dev/null 2>&1; then printf '%-10s %s\n' "$t" "$("$t" --version 2>&1 | head -1)"; else printf '%-10s MISSING\n' "$t"; fi
-          done
-          echo "--- yq flavor (we need mikefarah/yq)"; yq --version 2>&1 || true
-          echo "--- awk -i inplace (GNU awk)"; printf 'a\n' > /tmp/awk-probe && awk -i inplace '{print "b"}' /tmp/awk-probe && cat /tmp/awk-probe || echo "awk -i inplace: NO"
-          echo "--- dotnet SDKs"; dotnet --list-sdks 2>&1 || true
-
-      - name: Docker
+          cd test
+          bash ./set-up-contract-tests.sh cloudwatch-plugin-otel
+      - name: Run cloudwatch-plugin-otel/span_metrics contract tests with pytest
         run: |
-          docker info --format 'server={{.ServerVersion}} os={{.OperatingSystem}} arch={{.Architecture}} driver={{.Driver}}' || echo "docker daemon: NO"
-          docker buildx ls || echo "buildx: NO"
-          docker run --rm public.ecr.aws/docker/library/alpine:3.20 echo "docker run: ok"
-          mkdir -p /tmp/bind && echo hi > /tmp/bind/f && docker run --rm -v "$GITHUB_WORKSPACE":/w public.ecr.aws/docker/library/alpine:3.20 ls /w/build.sh && echo "bind mount of workspace: ok"
-          echo "--- docker hub anonymous pull (rate limit check)"; docker pull -q redis:7 && echo "docker hub pull: ok" || echo "docker hub pull: FAILED"
-          echo "--- privileged (expected to fail unless project has privilegedMode)"; docker run --rm --privileged public.ecr.aws/docker/library/alpine:3.20 true && echo "privileged: yes" || echo "privileged: NO"
-
-      - name: Network egress
-        run: |
-          for u in https://github.com https://api.nuget.org/v3/index.json https://dot.net https://public.ecr.aws https://registry-1.docker.io/v2/ http://keyserver.ubuntu.com; do
-            printf '%-45s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$u" || echo FAIL)"
-          done
-
-      - name: OIDC token can be minted
-        run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")
-          echo "OIDC token request: HTTP $code"
+          cd test
+          pytest contract-tests/tests/test/amazon/cloudwatch_plugin_otel
 
   windows:
     strategy:
       fail-fast: false
       matrix:
         include:
-          # On-demand Windows Server 2022 EC2 image (needed for nanoserver:ltsc2022 containers).
-          - name: windows-ec2-2022
-            override: image:windows-ec2-2022
-          # Existing reserved fleet (windows-base:2022-1.0, shared with windows-dotnet-e2e-ecr-build).
-          - name: windows-fleet
-            override: fleet:codebuild-adot-windows-builder-fleet
-          # On-demand Windows Server 2019 container image (no Docker expected).
-          - name: windows-3.0
-            override: image:windows-3.0
+          # Registry LongPathsEnabled only (from the setup action), workspace path unchanged.
+          - name: registry
+            workdir: .
+          # Fallback: also build from a short junction to the workspace.
+          - name: junction
+            workdir: C:\w
     runs-on:
       - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - ${{ matrix.override }}
-      - probe-${{ matrix.name }}
-    timeout-minutes: 30
+      - image:windows-ec2-2022
+      - instance-size:large
+      - probe-windows-${{ matrix.name }}
+    timeout-minutes: 40
     env:
-      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
-      # without them. Set through env because checkout runs before any setup step can.
       GIT_CONFIG_COUNT: 1
       GIT_CONFIG_KEY_0: core.longpaths
       GIT_CONFIG_VALUE_0: true
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
-
-      - uses: ./.github/actions/codebuild-windows-setup
-
-      - name: Machine
-        continue-on-error: true
-        shell: pwsh
+      - uses: ./.github/actions/codebuild-runner-setup
+      - name: Create junction
+        if: matrix.name == 'junction'
         run: |
-          systeminfo | Select-String "OS Name","OS Version"
-          [Environment]::ProcessorCount
-          Get-PSDrive C | Format-Table Used,Free
-          $rel = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full').Release; "NET Framework release key: $rel (>=461808 means 4.7.2+)"
-
-      - name: Tools assumed by our workflows
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          foreach ($t in 'git','bash','powershell','pwsh','dotnet','nuget','gh','aws','docker','jq','python','7z','tar') {
-            $c = Get-Command $t -ErrorAction SilentlyContinue
-            if ($c) { "{0,-10} {1}" -f $t, $c.Source } else { "{0,-10} MISSING" -f $t }
-          }
-          dotnet --list-sdks
-          bash -c 'echo "git bash: $BASH_VERSION"; uname -a' 2>&1
-
-      - name: Default shell works (pwsh)
-        continue-on-error: true
-        run: echo "default run shell ok - $($PSVersionTable.PSVersion)"
-
-      - name: Bash shell works
-        continue-on-error: true
-        shell: bash
-        run: echo "bash shell ok"
-
-      - name: Docker (Windows containers)
-        continue-on-error: true
-        shell: powershell
-        run: |
-          docker version
-          docker info --format "os={{.OSType}} isolation={{.Isolation}}"
-          "FROM mcr.microsoft.com/windows/nanoserver:ltsc2022`nCMD echo ok" | Out-File -Encoding ascii $env:RUNNER_TEMP\Dockerfile.probe
-          docker build -t probe-nano -f $env:RUNNER_TEMP\Dockerfile.probe $env:RUNNER_TEMP
-          docker run --rm probe-nano
-
-      - name: OIDC token can be minted
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $r = Invoke-WebRequest -UseBasicParsing -Headers @{Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN"} "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com"
-          "OIDC token request: HTTP $($r.StatusCode)"
-
-  # QEMU/buildx image build: on the privileged project, and on the regular (non-privileged) project
-  # to see whether the privileged project is needed at all.
-  linux-qemu:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: privileged-project
-            project: adot-dotnet-runner-privileged
-            override: probe-qemu-privileged
-          - name: regular-project
-            project: adot-dotnet-runner
-            override: image:ubuntu-7.0
-    runs-on:
-      - codebuild-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
-      - ${{ matrix.override }}
-      - probe-qemu-${{ matrix.name }}
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
-
-      - name: Machine
-        run: uname -a; nproc; free -g; df -h "$GITHUB_WORKSPACE"
-
-      - name: QEMU and multi-platform buildx (as used by build-and-scan-image)
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 #v4.4.0
-
-      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 #v3.11.1
-
-      - name: Build a two-arch image
-        run: |
-          printf 'FROM public.ecr.aws/docker/library/alpine:3.20\nRUN uname -m > /arch\n' > "$RUNNER_TEMP/Dockerfile.probe"
-          docker buildx build --platform linux/amd64,linux/arm64 -f "$RUNNER_TEMP/Dockerfile.probe" "$RUNNER_TEMP"
-          docker run --rm --platform linux/arm64 public.ecr.aws/docker/library/alpine:3.20 uname -m
+          cmd /c mklink /J C:\w "$env:GITHUB_WORKSPACE"
+          (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
+      - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - name: Build on Windows (same as pr-build build)
+        working-directory: ${{ matrix.workdir }}
+        run: .\build.cmd
+      - name: net472 unit tests (same as pr-build cloudwatch-plugin-tests)
+        if: always()
+        working-directory: ${{ matrix.workdir }}
+        run: >
+          dotnet test test/AWS.OpenTelemetry.CloudWatch.Plugin.Tests
+          --configuration Release
+          --framework net472
+          -p:OpenTelemetryVersion=1.15.3
+          -p:OpenTelemetryAutoInstrumentationVersion=1.15.0
