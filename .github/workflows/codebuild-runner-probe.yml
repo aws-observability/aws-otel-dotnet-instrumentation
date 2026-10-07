@@ -92,6 +92,11 @@ jobs:
       - probe-${{ matrix.name }}
     timeout-minutes: 30
     steps:
+      # CodeBuild Windows images do not enable long paths like GitHub's images do; checkout fails without this.
+      - name: Enable git long paths
+        shell: pwsh
+        run: git config --system core.longpaths true
+
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
       - name: Machine
@@ -134,11 +139,23 @@ jobs:
           $r = Invoke-WebRequest -UseBasicParsing -Headers @{Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN"} "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com"
           "OIDC token request: HTTP $($r.StatusCode)"
 
-  # Privileged project for the QEMU/buildx image builds.
-  linux-privileged:
+  # QEMU/buildx image build: on the privileged project, and on the regular (non-privileged) project
+  # to see whether the privileged project is needed at all.
+  linux-qemu:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: privileged-project
+            project: adot-dotnet-runner-privileged
+            override: probe-qemu-privileged
+          - name: regular-project
+            project: adot-dotnet-runner
+            override: image:ubuntu-7.0
     runs-on:
-      - codebuild-adot-dotnet-runner-privileged-${{ github.run_id }}-${{ github.run_attempt }}
-      - probe-privileged
+      - codebuild-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - ${{ matrix.override }}
+      - probe-qemu-${{ matrix.name }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
