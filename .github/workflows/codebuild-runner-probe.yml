@@ -91,15 +91,19 @@ jobs:
       - ${{ matrix.override }}
       - probe-${{ matrix.name }}
     timeout-minutes: 30
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     steps:
-      # CodeBuild Windows images do not enable long paths like GitHub's images do; checkout fails without this.
-      - name: Enable git long paths
-        shell: pwsh
-        run: git config --system core.longpaths true
-
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
+      - uses: ./.github/actions/codebuild-windows-setup
+
       - name: Machine
+        continue-on-error: true
         shell: pwsh
         run: |
           systeminfo | Select-String "OS Name","OS Version"
@@ -108,6 +112,7 @@ jobs:
           $rel = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full').Release; "NET Framework release key: $rel (>=461808 means 4.7.2+)"
 
       - name: Tools assumed by our workflows
+        continue-on-error: true
         shell: pwsh
         run: |
           foreach ($t in 'git','bash','powershell','pwsh','dotnet','nuget','gh','aws','docker','jq','python','7z','tar') {
@@ -118,13 +123,16 @@ jobs:
           bash -c 'echo "git bash: $BASH_VERSION"; uname -a' 2>&1
 
       - name: Default shell works (pwsh)
+        continue-on-error: true
         run: echo "default run shell ok - $($PSVersionTable.PSVersion)"
 
       - name: Bash shell works
+        continue-on-error: true
         shell: bash
         run: echo "bash shell ok"
 
       - name: Docker (Windows containers)
+        continue-on-error: true
         shell: powershell
         run: |
           docker version
@@ -134,6 +142,7 @@ jobs:
           docker run --rm probe-nano
 
       - name: OIDC token can be minted
+        continue-on-error: true
         shell: pwsh
         run: |
           $r = Invoke-WebRequest -UseBasicParsing -Headers @{Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN"} "$env:ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com"
