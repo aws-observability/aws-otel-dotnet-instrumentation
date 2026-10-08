@@ -99,7 +99,7 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpAws
         // Create the exporter after the test selects compression; reuse the same logger provider.
         if (this.loggerFactory == null)
         {
-            var exporter = new OtlpAwsLogRecordExporter(this.Options, this.Authenticator.Object, () => this.Transport);
+            var exporter = OtlpAwsLogRecordExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
             this.processor = new LogExportProcessor(exporter, this.timestamp);
             this.loggerFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
             {
@@ -192,7 +192,7 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpAws
     {
         private readonly DateTime timestamp;
 
-        public LogExportProcessor(OtlpAwsLogRecordExporter exporter, DateTime timestamp)
+        public LogExportProcessor(BaseExporter<LogRecord> exporter, DateTime timestamp)
             : base(exporter)
         {
             this.timestamp = timestamp;

@@ -415,7 +415,7 @@ public class Plugin
                     ? timeout
                     : 10000,
             };
-            var exporter = new OtlpAwsLogRecordExporter(exporterOptions);
+            var exporter = OtlpAwsLogRecordExporter.Create(exporterOptions);
             options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
             Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
         }

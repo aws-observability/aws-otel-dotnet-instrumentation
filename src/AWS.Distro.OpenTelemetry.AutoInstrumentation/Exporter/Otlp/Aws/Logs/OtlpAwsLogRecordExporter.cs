@@ -5,35 +5,27 @@ using System.Net.Http;
 using Amazon;
 using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
 
 /// <summary>
-/// Uses the upstream OTLP log exporter with AWS SigV4 signing over HTTP/protobuf.
+/// Creates the upstream OTLP log exporter with AWS SigV4 signing over HTTP/protobuf.
 /// </summary>
-public sealed class OtlpAwsLogRecordExporter : BaseOtlpAwsExporter<LogRecord>
+public static class OtlpAwsLogRecordExporter
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="OtlpAwsLogRecordExporter"/> class.
+    /// Creates an OTLP log exporter for the CloudWatch Logs endpoint.
     /// </summary>
     /// <param name="options">The OTLP endpoint, timeout, headers, and compression options. The protocol must be HTTP/protobuf.</param>
+    /// <returns>The upstream exporter configured with AWS request signing.</returns>
     /// <exception cref="ArgumentException">The protocol is not HTTP/protobuf.</exception>
-    public OtlpAwsLogRecordExporter(OtlpExporterOptions options)
-        : this(options, null, null)
-    {
-    }
+    public static BaseExporter<LogRecord> Create(OtlpExporterOptions options)
+        => Create(options, null, null);
 
-    internal OtlpAwsLogRecordExporter(
-        OtlpExporterOptions options,
-        IAwsAuthenticator? authenticator,
-        Func<HttpMessageHandler>? transportFactory)
-        : base(CreateExporter(options, authenticator, transportFactory))
-    {
-    }
-
-    private static OtlpLogExporter CreateExporter(
+    internal static BaseExporter<LogRecord> Create(
         OtlpExporterOptions options,
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
