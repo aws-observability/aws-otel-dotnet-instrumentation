@@ -22,14 +22,14 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws;
 /// </remarks>
 /// <typeparam name="TExpectedPayload">The signal's expected OTLP payload model.</typeparam>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public abstract class BaseOtlpAwsExporterTest<TExpectedPayload>
+public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
 {
     private readonly string region;
     private readonly string serviceName;
     private readonly ImmutableCredentials credentials = new("AKIDEXAMPLE", "test-secret", "session-token");
     private readonly List<byte[]> signedPayloads = new();
 
-    protected BaseOtlpAwsExporterTest(Uri endpoint, string region, string serviceName)
+    protected AbstractOtlpAwsExporterTest(Uri endpoint, string region, string serviceName)
     {
         this.region = region;
         this.serviceName = serviceName;

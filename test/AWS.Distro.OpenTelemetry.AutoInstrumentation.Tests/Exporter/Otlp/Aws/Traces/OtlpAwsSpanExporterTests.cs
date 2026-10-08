@@ -18,7 +18,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.T
 /// Creates spans and validates their OTLP content, resource attributes, and instrumentation scope.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public class OtlpAwsSpanExporterTests : BaseOtlpAwsExporterTest<OtlpSpan>, IDisposable
+public class OtlpAwsSpanExporterTests : AbstractOtlpAwsExporterTest<OtlpSpan>, IDisposable
 {
     private readonly DateTimeOffset startTime = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly OtlpSpan expectedSpan;
