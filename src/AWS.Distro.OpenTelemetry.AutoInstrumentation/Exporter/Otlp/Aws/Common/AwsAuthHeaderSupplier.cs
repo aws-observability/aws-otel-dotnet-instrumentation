@@ -14,6 +14,13 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 /// </summary>
 internal sealed class AwsAuthHeaderSupplier
 {
+    // SigV4 header reference:
+    // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+    internal const string AuthorizationHeader = "Authorization";
+    internal const string XAmzDateHeader = "x-amz-date";
+    internal const string XAmzSecurityTokenHeader = "x-amz-security-token";
+    internal const string XAmzContentSha256Header = "x-amz-content-sha256";
+
     private readonly string region;
     private readonly string serviceName;
     private readonly IAwsAuthenticator authenticator;
@@ -85,7 +92,7 @@ internal sealed class AwsAuthHeaderSupplier
         cancellationToken.ThrowIfCancellationRequested();
         if (credentials.UseToken && credentials.Token != null)
         {
-            request.Headers.Add("x-amz-security-token", credentials.Token);
+            request.Headers.Add(XAmzSecurityTokenHeader, credentials.Token);
         }
 
         // Resolve once per signing attempt and use the same snapshot for the token and signature.
@@ -95,10 +102,10 @@ internal sealed class AwsAuthHeaderSupplier
     }
 
     internal static bool IsSigningHeader(string name) =>
-        string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "x-amz-date", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "x-amz-security-token", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "x-amz-content-sha256", StringComparison.OrdinalIgnoreCase);
+        string.Equals(name, AuthorizationHeader, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, XAmzDateHeader, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, XAmzSecurityTokenHeader, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, XAmzContentSha256Header, StringComparison.OrdinalIgnoreCase);
 
     private sealed class EmptyAmazonWebServiceRequest : AmazonWebServiceRequest
     {

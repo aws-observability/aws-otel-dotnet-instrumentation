@@ -69,6 +69,6 @@ public class DefaultAwsAuthenticator : IAwsAuthenticator
         // even if the underlying credentials rotate between resolutions.
         var signingResult = new AWS4Signer().SignRequest(request, config, null, credentials.AccessKey, credentials.SecretKey);
         request.AWS4SignerResult = signingResult;
-        request.Headers["Authorization"] = signingResult.ForAuthorizationHeader;
+        request.Headers[AwsAuthHeaderSupplier.AuthorizationHeader] = signingResult.ForAuthorizationHeader;
     }
 }
