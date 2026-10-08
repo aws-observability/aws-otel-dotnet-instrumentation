@@ -29,7 +29,7 @@ public class AwsAuthHttpHandlerTest
         var authenticator = CreateAuthenticator(first);
         authenticator.SetupSequence(a => a.GetCredentialsAsync()).ReturnsAsync(first).ReturnsAsync(second);
         using var transport = new RequestSpyingHttpHandler();
-        var options = CreateOptions(authenticator.Object, transport, timeoutMilliseconds);
+        using var exporter = CreateExporter(authenticator.Object, transport, out var options, timeoutMilliseconds);
         using var client = options.HttpClientFactory();
         Assert.Equal(timeoutMilliseconds, options.TimeoutMilliseconds);
         Assert.Equal(TimeSpan.FromMilliseconds(timeoutMilliseconds), client.Timeout);
@@ -71,7 +71,7 @@ public class AwsAuthHttpHandlerTest
             return credentials.Task;
         });
         using var transport = new RequestSpyingHttpHandler();
-        var options = CreateOptions(authenticator.Object, transport);
+        using var exporter = CreateExporter(authenticator.Object, transport, out var options);
         using var client = options.HttpClientFactory();
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Endpoint);
@@ -86,16 +86,19 @@ public class AwsAuthHttpHandlerTest
         authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    private static OtlpExporterOptions CreateOptions(IAwsAuthenticator authenticator, HttpMessageHandler transport, int timeoutMilliseconds = 1234)
+    private static OtlpAwsSpanExporter CreateExporter(
+        IAwsAuthenticator authenticator,
+        HttpMessageHandler transport,
+        out OtlpExporterOptions options,
+        int timeoutMilliseconds = 1234)
     {
-        var options = new OtlpExporterOptions
+        options = new OtlpExporterOptions
         {
             Endpoint = new Uri("https://xray.us-west-2.amazonaws.com/v1/traces"),
             Protocol = OtlpExportProtocol.HttpProtobuf,
             TimeoutMilliseconds = timeoutMilliseconds,
         };
-        OtlpAwsSpanExporter.ConfigureOptions(options, authenticator, () => transport);
-        return options;
+        return new OtlpAwsSpanExporter(options, authenticator, () => transport);
     }
 
     private static Mock<IAwsAuthenticator> CreateAuthenticator(ImmutableCredentials credentials)

@@ -1,6 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using System.Net.Http;
 using Amazon;
 using Amazon.XRay;
@@ -12,7 +13,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 /// <summary>
 /// Uses the upstream OTLP trace exporter with AWS SigV4 signing over HTTP/protobuf.
 /// </summary>
-public class OtlpAwsSpanExporter : OtlpTraceExporter
+public sealed class OtlpAwsSpanExporter : BaseOtlpAwsExporter<Activity>
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="OtlpAwsSpanExporter"/> class.
@@ -28,14 +29,14 @@ public class OtlpAwsSpanExporter : OtlpTraceExporter
         OtlpExporterOptions options,
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
-        : base(ConfigureOptions(options, authenticator, transportFactory))
+        : base(CreateExporter(options, authenticator, transportFactory))
     {
     }
 
-    internal static OtlpExporterOptions ConfigureOptions(
+    private static OtlpTraceExporter CreateExporter(
         OtlpExporterOptions options,
-        IAwsAuthenticator? authenticator = null,
-        Func<HttpMessageHandler>? transportFactory = null)
+        IAwsAuthenticator? authenticator,
+        Func<HttpMessageHandler>? transportFactory)
     {
         if (options.Protocol != OtlpExportProtocol.HttpProtobuf)
         {
@@ -58,6 +59,6 @@ public class OtlpAwsSpanExporter : OtlpTraceExporter
         {
             Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
         };
-        return options;
+        return new OtlpTraceExporter(options);
     }
 }
