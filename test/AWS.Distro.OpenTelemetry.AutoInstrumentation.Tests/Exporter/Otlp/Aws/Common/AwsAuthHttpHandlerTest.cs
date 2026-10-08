@@ -1,12 +1,14 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using System.Net;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 using Moq;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Common;
@@ -86,7 +88,7 @@ public class AwsAuthHttpHandlerTest
         authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    private static OtlpAwsSpanExporter CreateExporter(
+    private static BaseExporter<Activity> CreateExporter(
         IAwsAuthenticator authenticator,
         HttpMessageHandler transport,
         out OtlpExporterOptions options,
@@ -98,7 +100,7 @@ public class AwsAuthHttpHandlerTest
             Protocol = OtlpExportProtocol.HttpProtobuf,
             TimeoutMilliseconds = timeoutMilliseconds,
         };
-        return new OtlpAwsSpanExporter(options, authenticator, () => transport);
+        return OtlpAwsSpanExporter.Create(options, authenticator, () => transport);
     }
 
     private static Mock<IAwsAuthenticator> CreateAuthenticator(ImmutableCredentials credentials)

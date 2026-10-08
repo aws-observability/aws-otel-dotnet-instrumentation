@@ -6,34 +6,26 @@ using System.Net.Http;
 using Amazon;
 using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 
 /// <summary>
-/// Uses the upstream OTLP trace exporter with AWS SigV4 signing over HTTP/protobuf.
+/// Creates the upstream OTLP trace exporter with AWS SigV4 signing over HTTP/protobuf.
 /// </summary>
-public sealed class OtlpAwsSpanExporter : BaseOtlpAwsExporter<Activity>
+public static class OtlpAwsSpanExporter
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="OtlpAwsSpanExporter"/> class.
+    /// Creates an OTLP trace exporter for the X-Ray endpoint.
     /// </summary>
     /// <param name="options">The OTLP endpoint, timeout, headers, and compression options. The protocol must be HTTP/protobuf.</param>
+    /// <returns>The upstream exporter configured with AWS request signing.</returns>
     /// <exception cref="ArgumentException">The protocol is not HTTP/protobuf.</exception>
-    public OtlpAwsSpanExporter(OtlpExporterOptions options)
-        : this(options, null, null)
-    {
-    }
+    public static BaseExporter<Activity> Create(OtlpExporterOptions options)
+        => Create(options, null, null);
 
-    internal OtlpAwsSpanExporter(
-        OtlpExporterOptions options,
-        IAwsAuthenticator? authenticator,
-        Func<HttpMessageHandler>? transportFactory)
-        : base(CreateExporter(options, authenticator, transportFactory))
-    {
-    }
-
-    private static OtlpTraceExporter CreateExporter(
+    internal static BaseExporter<Activity> Create(
         OtlpExporterOptions options,
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)

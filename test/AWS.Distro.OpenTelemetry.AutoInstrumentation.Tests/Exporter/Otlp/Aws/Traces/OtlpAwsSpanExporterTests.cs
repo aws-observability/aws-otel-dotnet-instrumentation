@@ -24,7 +24,7 @@ public class OtlpAwsSpanExporterTests : AbstractOtlpAwsExporterTest<OtlpSpan>, I
     private readonly OtlpSpan expectedSpan;
     private readonly InstrumentationScope expectedScope;
     private readonly Dictionary<string, AnyValue> expectedResourceAttributes;
-    private OtlpAwsSpanExporter? exporter;
+    private BaseExporter<Activity>? exporter;
     private TracerProvider? provider;
 
     public OtlpAwsSpanExporterTests()
@@ -95,7 +95,7 @@ public class OtlpAwsSpanExporterTests : AbstractOtlpAwsExporterTest<OtlpSpan>, I
         // Create the exporter after the test selects compression; reuse it across exports.
         if (this.exporter == null)
         {
-            this.exporter = new OtlpAwsSpanExporter(this.Options, this.Authenticator.Object, () => this.Transport);
+            this.exporter = OtlpAwsSpanExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
             this.provider = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(ResourceBuilder.CreateEmpty()
                     .AddService("test-aws-service")

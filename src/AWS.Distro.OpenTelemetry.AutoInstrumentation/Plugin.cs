@@ -218,7 +218,7 @@ public class Plugin
             options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
 #pragma warning restore CS8604 // Possible null reference argument.
             options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
-            var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options);
+            var otlpAwsSpanExporter = OtlpAwsSpanExporter.Create(options);
 
             tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
         }
