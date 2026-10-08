@@ -47,8 +47,23 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
+
+    // The optional "\.cn" suffix covers the AWS China partition (cn-north-1, cn-northwest-1), whose
+    // endpoints are *.amazonaws.com.cn. Both patterns stay anchored with ^...$ so the optional group
+    // does not loosen matching: a lookalike host such as
+    // "https://xray.cn-north-1.amazonaws.com.cn.evil/v1/traces" still fails to match and falls back
+    // to the unsigned exporter. The same optional-suffix form is already used by
+    // S3PresignedUrlAttributor.
+    //
+    // Region extraction is unaffected. Both call sites take the second dot-separated label
+    // (OtlpAwsSpanExporter.cs and ConfigureLogsOptions below), which yields "cn-north-1" for a China
+    // host just as it yields "us-east-1" for a commercial one. Signing uses that region plus an
+    // explicit ServiceURL, so the DNS suffix never reaches the signer.
+    //
+    // Internal rather than private so the patterns can be asserted directly in unit tests; the
+    // gating methods that consume them read process-wide environment state captured at class load.
+    internal static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/traces$";
+    internal static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
