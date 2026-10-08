@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Http;
+using Amazon;
+using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using OpenTelemetry.Exporter;
 
@@ -15,7 +17,8 @@ public class OtlpAwsSpanExporter : OtlpTraceExporter
     /// <summary>
     /// Initializes a new instance of the <see cref="OtlpAwsSpanExporter"/> class.
     /// </summary>
-    /// <param name="options">The OTLP endpoint, timeout, headers, and compression options.</param>
+    /// <param name="options">The OTLP endpoint, timeout, headers, and compression options. The protocol must be HTTP/protobuf.</param>
+    /// <exception cref="ArgumentException">The protocol is not HTTP/protobuf.</exception>
     public OtlpAwsSpanExporter(OtlpExporterOptions options)
         : this(options, null, null)
     {
@@ -34,8 +37,22 @@ public class OtlpAwsSpanExporter : OtlpTraceExporter
         IAwsAuthenticator? authenticator = null,
         Func<HttpMessageHandler>? transportFactory = null)
     {
-        var headerSupplier = new AwsAuthHeaderSupplier(options.Endpoint.Host.Split('.')[1], "xray", authenticator);
-        options.Protocol = OtlpExportProtocol.HttpProtobuf;
+        if (options.Protocol != OtlpExportProtocol.HttpProtobuf)
+        {
+            throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
+        }
+
+        var endpoint = options.Endpoint;
+        var region = endpoint.Host.Split('.')[1];
+        var config = new AmazonXRayConfig
+        {
+            AuthenticationRegion = region,
+            AuthenticationServiceName = "xray",
+            UseHttp = endpoint.Scheme == Uri.UriSchemeHttp,
+            ServiceURL = endpoint.AbsoluteUri,
+            RegionEndpoint = RegionEndpoint.GetBySystemName(region),
+        };
+        var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
         options.HttpClientFactory = () => new HttpClient(
             new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
         {

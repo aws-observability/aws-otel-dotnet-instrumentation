@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Http;
-using Amazon;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
-using Amazon.XRay;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 
@@ -21,14 +19,12 @@ internal sealed class AwsAuthHeaderSupplier
     private const string XAmzSecurityTokenHeader = "x-amz-security-token";
     private const string XAmzContentSha256Header = "x-amz-content-sha256";
 
-    private readonly string region;
-    private readonly string serviceName;
+    private readonly IClientConfig config;
     private readonly IAwsAuthenticator authenticator;
 
-    public AwsAuthHeaderSupplier(string region, string serviceName, IAwsAuthenticator? authenticator = null)
+    public AwsAuthHeaderSupplier(IClientConfig config, IAwsAuthenticator? authenticator = null)
     {
-        this.region = region;
-        this.serviceName = serviceName;
+        this.config = config ?? throw new ArgumentNullException(nameof(config));
         this.authenticator = authenticator ?? new DefaultAwsAuthenticator();
     }
 
@@ -48,7 +44,7 @@ internal sealed class AwsAuthHeaderSupplier
 #endif
             : Array.Empty<byte>();
         using var contentStream = new MemoryStream(payload, writable: false);
-        IRequest request = new DefaultRequest(new EmptyAmazonWebServiceRequest(), this.serviceName)
+        IRequest request = new DefaultRequest(new EmptyAmazonWebServiceRequest(), this.config.AuthenticationServiceName)
         {
             HttpMethod = httpRequest.Method.Method,
             ContentStream = contentStream,
@@ -74,15 +70,6 @@ internal sealed class AwsAuthHeaderSupplier
 
         request.Headers["Host"] = httpRequest.Headers.Host ?? endpoint.Authority;
 
-        var config = new AmazonXRayConfig
-        {
-            AuthenticationRegion = this.region,
-            AuthenticationServiceName = this.serviceName,
-            UseHttp = endpoint.Scheme == Uri.UriSchemeHttp,
-            ServiceURL = endpoint.AbsoluteUri,
-            RegionEndpoint = RegionEndpoint.GetBySystemName(this.region),
-        };
-
         cancellationToken.ThrowIfCancellationRequested();
 #if NET
         ImmutableCredentials credentials = await this.authenticator.GetCredentialsAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -97,7 +84,7 @@ internal sealed class AwsAuthHeaderSupplier
 
         // Resolve once per signing attempt and use the same snapshot for the token and signature.
         // Failures propagate to the exporter so an unsigned request is never sent.
-        this.authenticator.Sign(request, config, credentials);
+        this.authenticator.Sign(request, this.config, credentials);
         request.Headers[AuthorizationHeader] = request.AWS4SignerResult.ForAuthorizationHeader;
         return new Dictionary<string, string>(request.Headers, StringComparer.OrdinalIgnoreCase);
     }

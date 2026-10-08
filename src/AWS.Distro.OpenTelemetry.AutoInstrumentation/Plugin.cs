@@ -211,6 +211,7 @@ public class Plugin
         if (this.IsSigV4AuthEnabled())
         {
             OtlpExporterOptions options = new OtlpExporterOptions();
+            options.Protocol = OtlpExportProtocol.HttpProtobuf;
 #pragma warning disable CS8604 // Possible null reference argument.
 
             // This is already checked in isSigV4Enabled predicate

@@ -11,22 +11,28 @@ using OpenTelemetry.Exporter;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Common;
 
+/// <summary>
+/// Verifies request signing, credential refresh, and cancellation across HTTP delivery.
+/// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class AwsAuthHttpHandlerTest
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task BothHttpPathsRefreshCredentialsAndRemoveStaleSigningHeaders(bool synchronous)
+    [InlineData(false, 1234)]
+    [InlineData(true, 1234)]
+    [InlineData(false, 2345)]
+    [InlineData(true, 2345)]
+    public async Task ShouldRefreshCredentialsAndRemoveStaleSigningHeaders(bool synchronous, int timeoutMilliseconds)
     {
         var first = new ImmutableCredentials("FIRSTKEY", "first-secret", "first-token");
         var second = new ImmutableCredentials("SECONDKEY", "second-secret", null);
         var authenticator = CreateAuthenticator(first);
         authenticator.SetupSequence(a => a.GetCredentialsAsync()).ReturnsAsync(first).ReturnsAsync(second);
-        using var transport = new CapturingTransport();
-        var options = CreateOptions(authenticator.Object, transport);
+        using var transport = new RequestSpyingHttpHandler();
+        var options = CreateOptions(authenticator.Object, transport, timeoutMilliseconds);
         using var client = options.HttpClientFactory();
-        Assert.Equal(TimeSpan.FromMilliseconds(options.TimeoutMilliseconds), client.Timeout);
+        Assert.Equal(timeoutMilliseconds, options.TimeoutMilliseconds);
+        Assert.Equal(TimeSpan.FromMilliseconds(timeoutMilliseconds), client.Timeout);
 
         for (int i = 0; i < 2; i++)
         {
@@ -54,7 +60,7 @@ public class AwsAuthHttpHandlerTest
     }
 
     [Fact]
-    public async Task CancellationDuringCredentialLookupDoesNotSendAnUnsignedRequest()
+    public async Task ShouldNotSendAnUnsignedRequestWhenCredentialLookupIsCancelled()
     {
         var lookupStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var credentials = new TaskCompletionSource<ImmutableCredentials>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -64,7 +70,7 @@ public class AwsAuthHttpHandlerTest
             lookupStarted.SetResult(true);
             return credentials.Task;
         });
-        using var transport = new CapturingTransport();
+        using var transport = new RequestSpyingHttpHandler();
         var options = CreateOptions(authenticator.Object, transport);
         using var client = options.HttpClientFactory();
         using var cancellation = new CancellationTokenSource();
@@ -80,12 +86,13 @@ public class AwsAuthHttpHandlerTest
         authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    private static OtlpExporterOptions CreateOptions(IAwsAuthenticator authenticator, HttpMessageHandler transport)
+    private static OtlpExporterOptions CreateOptions(IAwsAuthenticator authenticator, HttpMessageHandler transport, int timeoutMilliseconds = 1234)
     {
         var options = new OtlpExporterOptions
         {
             Endpoint = new Uri("https://xray.us-west-2.amazonaws.com/v1/traces"),
-            TimeoutMilliseconds = 1234,
+            Protocol = OtlpExportProtocol.HttpProtobuf,
+            TimeoutMilliseconds = timeoutMilliseconds,
         };
         OtlpAwsSpanExporter.ConfigureOptions(options, authenticator, () => transport);
         return options;
