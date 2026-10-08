@@ -16,7 +16,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
 /// The upstream log exporter is sealed. Returning it directly lets the SDK bind the logger
 /// provider's resource and manage the exporter's lifecycle.
 /// </remarks>
-public static class OtlpAwsLogExporter
+public static class OtlpAwsLogRecordExporter
 {
     /// <summary>
     /// Creates an OTLP log exporter for the CloudWatch Logs endpoint.

@@ -20,7 +20,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.L
 /// Creates logs and validates their OTLP content, resource attributes, and instrumentation scope.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public class OtlpAwsLogExporterTests : AbstractOtlpAwsExporterTest<OtlpLogRecord>, IDisposable
+public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLogRecord>, IDisposable
 {
     private readonly DateTime timestamp = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private readonly OtlpLogRecord expectedLog;
@@ -30,7 +30,7 @@ public class OtlpAwsLogExporterTests : AbstractOtlpAwsExporterTest<OtlpLogRecord
     private ILogger? logger;
     private LogExportProcessor? processor;
 
-    public OtlpAwsLogExporterTests()
+    public OtlpAwsLogRecordExporterTests()
         : base(new Uri("https://logs.us-west-2.amazonaws.com/v1/logs"), "us-west-2", "logs")
     {
         var timestampUnixNano = (ulong)new DateTimeOffset(this.timestamp).ToUnixTimeMilliseconds() * 1_000_000;
@@ -99,7 +99,7 @@ public class OtlpAwsLogExporterTests : AbstractOtlpAwsExporterTest<OtlpLogRecord
         // Create the exporter after the test selects compression; reuse the same logger provider.
         if (this.loggerFactory == null)
         {
-            var exporter = OtlpAwsLogExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
+            var exporter = OtlpAwsLogRecordExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
             this.processor = new LogExportProcessor(exporter, this.timestamp);
             this.loggerFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
             {
