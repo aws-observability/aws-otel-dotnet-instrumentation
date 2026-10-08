@@ -39,6 +39,7 @@ public static class OtlpAwsLogRecordExporter
         var config = new AmazonCloudWatchLogsConfig
         {
             AuthenticationRegion = region,
+            AuthenticationServiceName = "logs",
             UseHttp = endpoint.Scheme == Uri.UriSchemeHttp,
             ServiceURL = endpoint.AbsoluteUri,
         };
