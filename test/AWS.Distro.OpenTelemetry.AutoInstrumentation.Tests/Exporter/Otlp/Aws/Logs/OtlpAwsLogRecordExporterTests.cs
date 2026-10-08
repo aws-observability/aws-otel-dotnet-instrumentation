@@ -6,13 +6,10 @@ using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
-using OpenTelemetry.Proto.Collector.Logs.V1;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Resources;
-using OtlpLogRecord = OpenTelemetry.Proto.Logs.V1.LogRecord;
-using OtlpSeverityNumber = OpenTelemetry.Proto.Logs.V1.SeverityNumber;
+using OtlpResource = OpenTelemetry.Proto.Resource.V1.Resource;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Logs;
 
@@ -20,10 +17,10 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.L
 /// Creates logs and validates their OTLP content, resource attributes, and instrumentation scope.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLogRecord>, IDisposable
+public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpAwsLogRecordExporterTests.ExpectedLogRecord>, IDisposable
 {
     private readonly DateTime timestamp = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private readonly OtlpLogRecord expectedLog;
+    private readonly Dictionary<string, AnyValue> expectedLogAttributes;
     private readonly InstrumentationScope expectedScope;
     private readonly Dictionary<string, AnyValue> expectedResourceAttributes;
     private ILoggerFactory? loggerFactory;
@@ -33,24 +30,12 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLog
     public OtlpAwsLogRecordExporterTests()
         : base(new Uri("https://logs.us-west-2.amazonaws.com/v1/logs"), "us-west-2", "logs")
     {
-        var timestampUnixNano = (ulong)new DateTimeOffset(this.timestamp).ToUnixTimeMilliseconds() * 1_000_000;
-        this.expectedLog = new OtlpLogRecord
+        this.expectedLogAttributes = new Dictionary<string, AnyValue>
         {
-            TimeUnixNano = timestampUnixNano,
-            ObservedTimeUnixNano = timestampUnixNano,
-            SeverityNumber = OtlpSeverityNumber.Error,
-            SeverityText = "Error",
-            Body = new AnyValue { StringValue = "test log" },
-            TraceId = ByteString.CopyFrom(Convert.FromHexString("0123456789abcdef0123456789abcdef")),
-            SpanId = ByteString.CopyFrom(Convert.FromHexString("0123456789abcdef")),
-            Flags = (uint)ActivityTraceFlags.Recorded,
-            Attributes =
-            {
-                new KeyValue { Key = "test.log.name", Value = new AnyValue { StringValue = "test" } },
-                new KeyValue { Key = "test.log.count", Value = new AnyValue { IntValue = 3 } },
-                new KeyValue { Key = "test.log.enabled", Value = new AnyValue { BoolValue = true } },
-                new KeyValue { Key = "test.scope.name", Value = new AnyValue { StringValue = "test scope" } },
-            },
+            ["test.log.name"] = new() { StringValue = "test" },
+            ["test.log.count"] = new() { IntValue = 3 },
+            ["test.log.enabled"] = new() { BoolValue = true },
+            ["test.scope.name"] = new() { StringValue = "test scope" },
         };
         this.expectedScope = new InstrumentationScope { Name = $"SigV4.Logs.Tests.{Guid.NewGuid()}" };
         this.expectedResourceAttributes = new Dictionary<string, AnyValue>
@@ -74,16 +59,31 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLog
     }
 
     /// <inheritdoc/>
-    protected override void ValidateOtlpPayload(byte[] payload, OtlpLogRecord expectedPayload)
+    protected override void ValidateOtlpPayload(byte[] payload, ExpectedLogRecord expectedPayload)
     {
-        var exported = ExportLogsServiceRequest.Parser.ParseFrom(payload);
-        var resourceLogs = Assert.Single(exported.ResourceLogs);
-        var resourceAttributes = resourceLogs.Resource.Attributes.ToDictionary(attribute => attribute.Key, attribute => attribute.Value);
+        // Decode the OTLP logs envelope with the existing protobuf reader and common message types.
+        var exported = ReadFields(payload);
+        var resourceLogs = ReadFields(((ByteString)Assert.Single(exported[1])).ToByteArray());
+        var resource = OtlpResource.Parser.ParseFrom((ByteString)Assert.Single(resourceLogs[1]));
+        var resourceAttributes = resource.Attributes.ToDictionary(attribute => attribute.Key, attribute => attribute.Value);
         Assert.Equal(this.expectedResourceAttributes.OrderBy(attribute => attribute.Key), resourceAttributes.OrderBy(attribute => attribute.Key));
 
-        var scopeLogs = Assert.Single(resourceLogs.ScopeLogs);
-        Assert.Equal(this.expectedScope, scopeLogs.Scope);
-        Assert.Equal(expectedPayload, Assert.Single(scopeLogs.LogRecords));
+        var scopeLogs = ReadFields(((ByteString)Assert.Single(resourceLogs[2])).ToByteArray());
+        Assert.Equal(this.expectedScope, InstrumentationScope.Parser.ParseFrom((ByteString)Assert.Single(scopeLogs[1])));
+        var logRecord = ReadFields(((ByteString)Assert.Single(scopeLogs[2])).ToByteArray());
+        Assert.Equal(new[] { 1, 2, 3, 5, 6, 8, 9, 10, 11 }, logRecord.Keys.OrderBy(field => field));
+        Assert.Equal(expectedPayload.TimestampUnixNano, (ulong)Assert.Single(logRecord[1]));
+        Assert.Equal(expectedPayload.TimestampUnixNano, (ulong)Assert.Single(logRecord[11]));
+        Assert.Equal(17UL, (ulong)Assert.Single(logRecord[2])); // OTLP severity ERROR.
+        Assert.Equal("Error", ((ByteString)Assert.Single(logRecord[3])).ToStringUtf8());
+        Assert.Equal(new AnyValue { StringValue = expectedPayload.Body }, AnyValue.Parser.ParseFrom((ByteString)Assert.Single(logRecord[5])));
+        Assert.Equal((uint)ActivityTraceFlags.Recorded, (uint)Assert.Single(logRecord[8]));
+        Assert.Equal(expectedPayload.TraceId, (ByteString)Assert.Single(logRecord[9]));
+        Assert.Equal(expectedPayload.SpanId, (ByteString)Assert.Single(logRecord[10]));
+        var attributes = logRecord[6].Cast<ByteString>()
+            .Select(attribute => KeyValue.Parser.ParseFrom(attribute))
+            .ToDictionary(attribute => attribute.Key, attribute => attribute.Value);
+        Assert.Equal(this.expectedLogAttributes.OrderBy(attribute => attribute.Key), attributes.OrderBy(attribute => attribute.Key));
         Assert.All(this.Transport.Requests, request =>
         {
             Assert.Equal("test-log-group", request.Headers["x-aws-log-group"]);
@@ -94,12 +94,12 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLog
     }
 
     /// <inheritdoc/>
-    protected override ExportResult Export(OtlpLogRecord expectedPayload)
+    protected override ExportResult Export(ExpectedLogRecord expectedPayload)
     {
         // Create the exporter after the test selects compression; reuse the same logger provider.
         if (this.loggerFactory == null)
         {
-            var exporter = OtlpAwsLogRecordExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
+            var exporter = new OtlpAwsLogRecordExporter(this.Options, this.Authenticator.Object, () => this.Transport);
             this.processor = new LogExportProcessor(exporter, this.timestamp);
             this.loggerFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
             {
@@ -136,12 +136,54 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLog
                 new("test.log.enabled", true),
             },
             exception: null,
-            formatter: (_, _) => expectedPayload.Body.StringValue);
+            formatter: (_, _) => expectedPayload.Body);
         return this.processor!.Result;
     }
 
     /// <inheritdoc/>
-    protected override OtlpLogRecord CreateExpectedPayload() => this.expectedLog.Clone();
+    protected override ExpectedLogRecord CreateExpectedPayload()
+        => new((ulong)new DateTimeOffset(this.timestamp).ToUnixTimeMilliseconds() * 1_000_000, $"test log {Guid.NewGuid()}");
+
+    /// <summary>
+    /// Reads protobuf fields while preserving repeated values, without generated logs message types.
+    /// </summary>
+    private static Dictionary<int, List<object>> ReadFields(byte[] payload)
+    {
+        using var reader = new CodedInputStream(payload);
+        var fields = new Dictionary<int, List<object>>();
+        uint tag;
+        while ((tag = reader.ReadTag()) != 0)
+        {
+            object value = WireFormat.GetTagWireType(tag) switch
+            {
+                WireFormat.WireType.Varint => reader.ReadUInt64(),
+                WireFormat.WireType.Fixed64 => reader.ReadFixed64(),
+                WireFormat.WireType.LengthDelimited => reader.ReadBytes(),
+                WireFormat.WireType.Fixed32 => reader.ReadFixed32(),
+                _ => throw new InvalidOperationException($"Unexpected protobuf wire type for tag {tag}."),
+            };
+            var field = WireFormat.GetTagFieldNumber(tag);
+            if (!fields.TryGetValue(field, out var values))
+            {
+                values = new List<object>();
+                fields.Add(field, values);
+            }
+
+            values.Add(value);
+        }
+
+        return fields;
+    }
+
+    /// <summary>
+    /// Defines the independent expected log content and trace identifiers captured before export.
+    /// </summary>
+    public sealed record ExpectedLogRecord(ulong TimestampUnixNano, string Body)
+    {
+        public ByteString TraceId { get; set; } = ByteString.Empty;
+
+        public ByteString SpanId { get; set; } = ByteString.Empty;
+    }
 
     /// <summary>
     /// Exports real SDK log records synchronously and records the export result for the common assertions.
@@ -150,7 +192,7 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpLog
     {
         private readonly DateTime timestamp;
 
-        public LogExportProcessor(OtlpLogExporter exporter, DateTime timestamp)
+        public LogExportProcessor(OtlpAwsLogRecordExporter exporter, DateTime timestamp)
             : base(exporter)
         {
             this.timestamp = timestamp;
