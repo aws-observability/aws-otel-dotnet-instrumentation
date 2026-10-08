@@ -216,7 +216,7 @@ public class Plugin
             options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
 #pragma warning restore CS8604 // Possible null reference argument.
             options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
-            var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options, tracerProvider.GetResource());
+            var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options);
 
             tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
         }
@@ -387,8 +387,19 @@ public class Plugin
             logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
         {
             string region = new Uri(logsEndpoint).Host.Split('.')[1];
-            var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
-            var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
+            var exporterOptions = new OtlpExporterOptions
+            {
+                Endpoint = new Uri(logsEndpoint),
+                Headers = System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS") ?? string.Empty,
+                TimeoutMilliseconds = 10000,
+            };
+            if (int.TryParse(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"), out int timeout))
+            {
+                exporterOptions.TimeoutMilliseconds = timeout;
+            }
+
+            OtlpAwsSpanExporter.ConfigureOptions(exporterOptions, region, "logs");
+            var exporter = new OtlpLogExporter(exporterOptions);
             options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
             Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
         }
@@ -659,26 +670,6 @@ public class Plugin
             LogLevel.Debug, "AWS Application Signals export protocol: %{0}", options.Protocol);
         Logger.Log(
             LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
-    }
-
-    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
-    {
-        var headers = new Dictionary<string, string>();
-        if (string.IsNullOrEmpty(headersString))
-        {
-            return headers;
-        }
-
-        foreach (var pair in headersString!.Split(','))
-        {
-            var parts = pair.Split(new[] { '=' }, 2);
-            if (parts.Length == 2)
-            {
-                headers[parts[0].Trim()] = parts[1].Trim();
-            }
-        }
-
-        return headers;
     }
 
     // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,

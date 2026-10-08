@@ -12,6 +12,11 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+- Use upstream OTLP trace and log exporters with SigV4 signing through
+  `OtlpExporterOptions.HttpClientFactory`, removing custom serialization and delivery logic.
+  Trace retries now follow upstream settings; enable in-memory retries with
+  `OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY=in_memory`.
+
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
