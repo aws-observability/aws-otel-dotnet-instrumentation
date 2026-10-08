@@ -19,7 +19,6 @@ using System.Web;
 using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
@@ -47,10 +46,21 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
+#if !NETFRAMEWORK
+
+    // Collector-less OTLP metrics export is net8.0+ only, so these are declared under the same
+    // condition as the code that reads them. Left unguarded they are unused fields on net472, and
+    // CS0414 is an error in this build.
+    private static readonly string AuthorizationHeaderName = "Authorization";
+    private static readonly string OtelExporterOtlpMetricsEndpointConfig = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT";
+    private static readonly string OtelExporterOtlpMetricsHeadersConfig = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
+    private static readonly string OtelExporterOtlpMetricsProtocolConfig = "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL";
+    private static readonly string OtelExporterOtlpMetricsTimeoutConfig = "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT";
+    private static readonly string OtelExporterOtlpMetricsTemporalityConfig = "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE";
+    private static readonly string AwsLambdaFunctionNameConfig = "AWS_LAMBDA_FUNCTION_NAME";
+#endif
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
     private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
     private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
@@ -339,29 +349,98 @@ public class Plugin
     /// <returns>The configured metric provider builder</returns>
     public MeterProviderBuilder AfterConfigureMeterProvider(MeterProviderBuilder builder)
     {
-        if (!this.IsApplicationSignalsRuntimeEnabled())
+#if !NETFRAMEWORK
+        CollectorlessMetricsAuthMode metricsAuthMode = this.DetermineCollectorlessMetricsAuthMode();
+        bool collectorlessMetricsEnabled = metricsAuthMode != CollectorlessMetricsAuthMode.Disabled;
+#else
+        bool collectorlessMetricsEnabled = false;
+#endif
+
+        if (!this.IsApplicationSignalsRuntimeEnabled() && !collectorlessMetricsEnabled)
         {
             return builder;
         }
 
-        var exporters = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
-        if (!string.IsNullOrEmpty(exporters) && exporters.Contains("none"))
+        if (this.IsApplicationSignalsRuntimeEnabled())
         {
-            Logger.Log(LogLevel.Information, "Install runtime metric filter in metrics collection.");
-            builder.AddView(instrument => instrument.Meter.Name == RuntimeMetricMeterName
-                ? null
-                : MetricStreamConfiguration.Drop);
+            var exporters = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
+            if (!string.IsNullOrEmpty(exporters) && exporters.Contains("none"))
+            {
+                // This view drops every meter except the runtime one, and views apply to the whole
+                // provider. Collector-less export requires OTEL_METRICS_EXPORTER=none as well, so
+                // installing the view in that case would silence the very customer metrics the
+                // signed reader exists to export. Runtime metrics keep working regardless: their
+                // reader uses ScopeBasedOtlpMetricExporter, which filters to the runtime meter at
+                // export time rather than relying on this view.
+                if (collectorlessMetricsEnabled)
+                {
+                    Logger.Log(
+                        LogLevel.Information,
+                        "Skipping the runtime metric filter view because collector-less OTLP metrics export is enabled; the runtime reader filters by scope on its own.");
+                }
+                else
+                {
+                    Logger.Log(LogLevel.Information, "Install runtime metric filter in metrics collection.");
+                    builder.AddView(instrument => instrument.Meter.Name == RuntimeMetricMeterName
+                        ? null
+                        : MetricStreamConfiguration.Drop);
+                }
+            }
+
+            var runtimeScopeName = new HashSet<string>() { RuntimeMetricMeterName };
+            var metricReader = new PeriodicExportingMetricReader(
+                this.CreateScopeBasedOtlpMetricExporter(runtimeScopeName), GetMetricExportInterval())
+            {
+                TemporalityPreference = MetricReaderTemporalityPreference.Delta,
+            };
+
+            builder.AddReader(metricReader);
+            Logger.Log(LogLevel.Information, "AWS Application Signals runtime metrics enabled.");
         }
 
-        var runtimeScopeName = new HashSet<string>() { RuntimeMetricMeterName };
-        var metricReader = new PeriodicExportingMetricReader(
-            this.CreateScopeBasedOtlpMetricExporter(runtimeScopeName), GetMetricExportInterval())
+#if !NETFRAMEWORK
+        if (collectorlessMetricsEnabled)
         {
-            TemporalityPreference = MetricReaderTemporalityPreference.Delta,
-        };
+            string endpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsEndpointConfig)!;
 
-        builder.AddReader(metricReader);
-        Logger.Log(LogLevel.Information, "AWS Application Signals runtime metrics enabled.");
+            // Attached to the provider upstream configured, not a provider of our own: upstream
+            // registers the instrumentation and customer meters there, so a separate provider would
+            // see almost nothing to export.
+            var reader = new PeriodicExportingMetricReader(
+                CreateCollectorlessMetricExporter(endpoint, metricsAuthMode), GetCollectorlessMetricExportInterval())
+            {
+                TemporalityPreference = GetMetricsTemporalityPreference(),
+            };
+
+            builder.AddReader(reader);
+
+            if (this.IsApplicationSignalsEnabled())
+            {
+                Logger.Log(
+                    LogLevel.Warning,
+                    "AWS Application Signals metrics continue to be exported to the CloudWatch Agent endpoint; only application metrics are sent to {0}.",
+                    endpoint);
+            }
+
+            if (metricsAuthMode == CollectorlessMetricsAuthMode.BearerToken)
+            {
+                Logger.Log(
+                    LogLevel.Information,
+                    "Exporting OTLP metrics to {0} using the Authorization header configured in {1}; SigV4 authentication is not applied.",
+                    endpoint,
+                    OtelExporterOtlpMetricsHeadersConfig);
+            }
+            else
+            {
+                Logger.Log(
+                    LogLevel.Information,
+                    "Exporting OTLP metrics to {0} with SigV4 authentication, service {1} in region {2}.",
+                    endpoint,
+                    AwsOtlpEndpoint.MetricsSigningServiceName,
+                    AwsOtlpEndpoint.GetRegion(endpoint));
+            }
+        }
+#endif
 
         return builder;
     }
@@ -383,10 +462,14 @@ public class Plugin
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
 
         string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+
+        // The IsNullOrEmpty check is redundant with IsLogsEndpoint, which rejects null and empty.
+        // It is kept so the compiler can see logsEndpoint is non-null below; the nullability
+        // attribute that would express this on the helper is unavailable on the net472 target.
+        if (!string.IsNullOrEmpty(logsEndpoint) && AwsOtlpEndpoint.IsLogsEndpoint(logsEndpoint))
         {
-            string region = new Uri(logsEndpoint).Host.Split('.')[1];
+            // Non-null: the endpoint just matched the logs pattern, whose capture group is the region.
+            string region = AwsOtlpEndpoint.GetRegion(logsEndpoint)!;
             var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
             var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
             options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
@@ -681,6 +764,147 @@ public class Plugin
         return headers;
     }
 
+#if !NETFRAMEWORK
+    // Builds upstream's own OtlpMetricExporter and, for SigV4, only replaces its transport, so
+    // upstream keeps ownership of serialization, compression, TLS and retry. Signing happens in the
+    // handler, per HTTP attempt, which is also what makes credential rotation work.
+    //
+    // Note the handler removes any Authorization already present before setting its own, so a
+    // global OTEL_EXPORTER_OTLP_HEADERS bearer token is replaced rather than duplicated. A
+    // signal-specific bearer selects BearerToken mode instead, which still exports: see
+    // CollectorlessMetricsAuthMode.
+    private static OtlpMetricExporter CreateCollectorlessMetricExporter(string endpoint, CollectorlessMetricsAuthMode authMode)
+        => new OtlpMetricExporter(CreateCollectorlessExporterOptions(endpoint, authMode));
+
+    // Separated from exporter construction so tests can assert on the resolved options and drive
+    // the real handler chain, rather than reimplementing this wiring. Reimplementing it in tests is
+    // what previously hid two defects: the exporter's synchronous send path going unsigned, and the
+    // configured timeout being dropped when the client factory was replaced.
+    //
+    // innerHandler and authenticator are test seams, following the same pattern as
+    // OtlpAwsSpanExporter's internal constructor. In production both are null.
+    private static OtlpExporterOptions CreateCollectorlessExporterOptions(
+        string endpoint,
+        CollectorlessMetricsAuthMode authMode,
+        HttpMessageHandler? innerHandler = null,
+        IAwsAuthenticator? authenticator = null)
+    {
+        int timeoutMilliseconds = GetCollectorlessMetricTimeout();
+
+        var options = new OtlpExporterOptions
+        {
+            Endpoint = new Uri(endpoint),
+            Protocol = OtlpExportProtocol.HttpProtobuf,
+            TimeoutMilliseconds = timeoutMilliseconds,
+        };
+
+        // new OtlpExporterOptions() resolves the generic OTEL_EXPORTER_OTLP_* variables only; the
+        // overload that reads the signal-specific ones is internal to upstream. So any headers the
+        // customer set in OTEL_EXPORTER_OTLP_METRICS_HEADERS have to be applied here or they are
+        // silently dropped. Assigning replaces the global value, which is the precedence the OTLP
+        // specification defines (selected, not merged).
+        string? metricsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig);
+        if (!string.IsNullOrEmpty(metricsHeaders))
+        {
+            options.Headers = metricsHeaders;
+        }
+
+        if (authMode == CollectorlessMetricsAuthMode.SigV4)
+        {
+            string region = AwsOtlpEndpoint.GetRegion(endpoint)!;
+
+            // Replacing the factory also replaces upstream's default one, which is where
+            // TimeoutMilliseconds is turned into HttpClient.Timeout. Setting it here keeps the
+            // configured timeout effective; without it the client silently falls back to 100s.
+            //
+            // Setting this explicitly also opts out of upstream's IHttpClientFactory integration,
+            // which only substitutes its own factory while HttpClientFactory is still the default.
+            options.HttpClientFactory = () => new HttpClient(
+                new SigV4SigningHandler(AwsOtlpEndpoint.MetricsSigningServiceName, region, authenticator)
+                {
+                    InnerHandler = innerHandler ?? new HttpClientHandler(),
+                })
+            {
+                Timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds),
+            };
+        }
+        else if (innerHandler != null)
+        {
+            // Bearer mode in production leaves HttpClientFactory alone, so upstream's default
+            // factory applies the timeout and installs no signing handler. A test transport still
+            // has to be reachable, hence this branch.
+            options.HttpClientFactory = () => new HttpClient(innerHandler)
+            {
+                Timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds),
+            };
+        }
+
+        return options;
+    }
+
+    // Deliberately not GetMetricExportInterval(): that one silently caps anything above 60s back
+    // down to 60s, which is an Application Signals rule. Overriding an explicit customer value on
+    // the collector-less path would be surprising, so the configured interval is used as given.
+    private static int GetCollectorlessMetricExportInterval()
+    {
+        string? configured = System.Environment.GetEnvironmentVariable(MetricExportIntervalConfig);
+        if (int.TryParse(configured, out int interval) && interval > 0)
+        {
+            return interval;
+        }
+
+        return DefaultMetricExportInterval;
+    }
+
+    private static int GetCollectorlessMetricTimeout()
+    {
+        string? signalSpecific = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsTimeoutConfig);
+        if (int.TryParse(signalSpecific, out int timeout) && timeout > 0)
+        {
+            return timeout;
+        }
+
+        string? global = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesTimeout);
+        if (int.TryParse(global, out timeout) && timeout > 0)
+        {
+            return timeout;
+        }
+
+        return DefaultOtlpTracesTimeoutMilli;
+    }
+
+    // Temporality is honored rather than forced. The Application Signals readers pin Delta because
+    // the CloudWatch Agent expects it; on the collector-less path the customer's configuration (and
+    // otherwise upstream's default) decides, so metric meaning is not changed on their behalf.
+    private static MetricReaderTemporalityPreference GetMetricsTemporalityPreference()
+    {
+        string? configured = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsTemporalityConfig);
+
+        if (string.Equals(configured, "delta", StringComparison.OrdinalIgnoreCase))
+        {
+            return MetricReaderTemporalityPreference.Delta;
+        }
+
+        if (string.Equals(configured, "lowmemory", StringComparison.OrdinalIgnoreCase))
+        {
+            return MetricReaderTemporalityPreference.LowMemory;
+        }
+
+        if (!string.IsNullOrEmpty(configured)
+            && !string.Equals(configured, "cumulative", StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Log(
+                LogLevel.Warning,
+                "Unrecognized {0} value '{1}'; using cumulative.",
+                OtelExporterOtlpMetricsTemporalityConfig,
+                configured);
+        }
+
+        return MetricReaderTemporalityPreference.Cumulative;
+    }
+
+#endif
+
     // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
     // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
     // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
@@ -900,7 +1124,7 @@ public class Plugin
     // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
     private bool IsSigV4AuthEnabled()
     {
-        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
+        bool isXrayOtlpEndpoint = AwsOtlpEndpoint.IsTracesEndpoint(OtelExporterOtlpTracesEndpoint);
 
         if (isXrayOtlpEndpoint)
         {
@@ -930,6 +1154,104 @@ public class Plugin
 
         return false;
     }
+
+#if !NETFRAMEWORK
+
+    // Decides whether collector-less OTLP metrics export runs, and how it authenticates.
+    //
+    // OTEL_METRICS_EXPORTER=none is required for the same reason the traces gate requires it: the
+    // plugin can add a reader to the meter provider but cannot remove the exporter upstream already
+    // configured, so without it metrics would be exported twice, once unsigned.
+    //
+    // That requirement is also why a bearer-token configuration returns BearerToken rather than
+    // Disabled. With no upstream reader left to fall back on, refusing to register one would export
+    // nothing at all while appearing to honor the customer's header.
+    //
+    // Every rejection logs why. A customer who sets the endpoint but misses a prerequisite
+    // otherwise sees no metrics and no explanation.
+    private CollectorlessMetricsAuthMode DetermineCollectorlessMetricsAuthMode()
+    {
+        string? endpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsEndpointConfig);
+
+        if (!AwsOtlpEndpoint.IsMetricsEndpoint(endpoint))
+        {
+            return CollectorlessMetricsAuthMode.Disabled;
+        }
+
+        Logger.Log(LogLevel.Information, "Detected using AWS OTLP CloudWatch Metrics Endpoint.");
+
+        // Lambda freezes the execution environment once an invocation returns, so a periodic reader
+        // on a 60s interval would flush late, not at all, or on the invocation's latency path. The
+        // Application Signals metrics pipeline is disabled there for the same reason.
+        //
+        // Read live rather than through AwsSpanProcessingUtil.IsLambdaEnvironment(), which captures
+        // the variable in a static field at class load. That is correct in production, where Lambda
+        // sets the variable before the process starts, but it leaves this branch impossible to
+        // cover in a test. The null check matches that helper's semantics exactly.
+        if (System.Environment.GetEnvironmentVariable(AwsLambdaFunctionNameConfig) != null)
+        {
+            Logger.Log(
+                LogLevel.Information,
+                "Collector-less OTLP metrics export is not supported in AWS Lambda; metrics will not be exported to the CloudWatch endpoint.");
+            return CollectorlessMetricsAuthMode.Disabled;
+        }
+
+        // Compared exactly, not with Contains: "none,otlp" would otherwise satisfy this gate while
+        // upstream also loads its own unsigned OTLP exporter against the same CloudWatch endpoint,
+        // producing a duplicate export and a permanent 403 loop. The traces gate above compares
+        // exactly for the same reason.
+        string? metricsExporter = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
+        if (!string.Equals(metricsExporter?.Trim(), "none", StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Log(
+                LogLevel.Information,
+                $"Please disable other metric exporters by setting {MetricExporterConfig}=none to avoid exporting metrics twice");
+            return CollectorlessMetricsAuthMode.Disabled;
+        }
+
+        // CloudWatch's OTLP endpoints accept HTTP, not gRPC. Leave the exporter untouched rather
+        // than signing a request the service cannot accept.
+        string? protocol = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsProtocolConfig)
+            ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+        if (protocol != null && protocol.Contains("grpc"))
+        {
+            Logger.Log(
+                LogLevel.Warning,
+                "The CloudWatch Metrics OTLP endpoint does not support gRPC. Set {0}=http/protobuf to export metrics with SigV4 authentication.",
+                OtelExporterOtlpMetricsProtocolConfig);
+            return CollectorlessMetricsAuthMode.Disabled;
+        }
+
+        // Bearer detection comes BEFORE the SigV4 flag check below, and the order is the point.
+        // Bearer-token authentication does not involve SigV4 at all, so requiring a customer to set
+        // OTEL_AWS_SIG_V4_ENABLED=true to use a bearer token would be contradictory. Worse, because
+        // collector-less export requires OTEL_METRICS_EXPORTER=none, failing the flag check leaves
+        // no upstream reader to fall back on: a bearer user without the flag would export nothing
+        // while being told to enable SigV4.
+        //
+        // Only the signal-specific variable is consulted, matching the cross-SDK contract; a global
+        // OTEL_EXPORTER_OTLP_HEADERS Authorization does not suppress SigV4.
+        var metricsHeaders = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig));
+        if (metricsHeaders.Keys.Any(key => string.Equals(key, AuthorizationHeaderName, StringComparison.OrdinalIgnoreCase)))
+        {
+            Logger.Log(
+                LogLevel.Information,
+                "An explicit Authorization header is configured in {0}; exporting metrics with that header and not applying SigV4 authentication.",
+                OtelExporterOtlpMetricsHeadersConfig);
+            return CollectorlessMetricsAuthMode.BearerToken;
+        }
+
+        if (!IsEnvFlagTrue(SigV4EnabledConfig))
+        {
+            Logger.Log(
+                LogLevel.Information,
+                $"Please enable SigV4 authentication when exporting metrics to the OTLP CloudWatch Metrics Endpoint by setting {SigV4EnabledConfig}=true");
+            return CollectorlessMetricsAuthMode.Disabled;
+        }
+
+        return CollectorlessMetricsAuthMode.SigV4;
+    }
+#endif
 
     // https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_timeout:~:text=traces%20in%20milliseconds.-,Default%20value%3A%2010000%20(10s),-Example%3A%20export
     private int GetTracesOtlpTimeout()
