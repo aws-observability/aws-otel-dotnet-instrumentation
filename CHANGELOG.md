@@ -12,8 +12,10 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Use upstream OTLP trace and log exporters with SigV4 signing through
+- Use the upstream OTLP trace exporter with SigV4 signing through
   `OtlpExporterOptions.HttpClientFactory`, removing custom serialization and delivery logic.
+  Organize exporter and authentication types under `Exporter.Otlp.Aws.Traces` and
+  `Exporter.Otlp.Aws.Common`, matching ADOT Java.
   Trace retries now follow upstream settings; enable in-memory retries with
   `OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY=in_memory`
   ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).

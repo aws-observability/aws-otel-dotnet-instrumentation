@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Http;
-using AWS.Distro.OpenTelemetry.AutoInstrumentation;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using OpenTelemetry.Exporter;
+
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 
 /// <summary>
 /// Uses the upstream OTLP trace exporter with AWS SigV4 signing over HTTP/protobuf.
@@ -23,18 +25,16 @@ public class OtlpAwsSpanExporter : OtlpTraceExporter
         OtlpExporterOptions options,
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
-        : base(ConfigureOptions(options, options.Endpoint.Host.Split('.')[1], "xray", authenticator, transportFactory))
+        : base(ConfigureOptions(options, authenticator, transportFactory))
     {
     }
 
     internal static OtlpExporterOptions ConfigureOptions(
         OtlpExporterOptions options,
-        string region,
-        string serviceName,
         IAwsAuthenticator? authenticator = null,
         Func<HttpMessageHandler>? transportFactory = null)
     {
-        var headerSupplier = new AwsAuthHeaderSupplier(region, serviceName, authenticator);
+        var headerSupplier = new AwsAuthHeaderSupplier(options.Endpoint.Host.Split('.')[1], "xray", authenticator);
         options.Protocol = OtlpExportProtocol.HttpProtobuf;
         options.HttpClientFactory = () => new HttpClient(
             new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))

@@ -5,6 +5,8 @@ using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
 
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+
 /// <summary>
 /// Provides AWS authentication and signing capabilities for AWS service requests.
 /// </summary>

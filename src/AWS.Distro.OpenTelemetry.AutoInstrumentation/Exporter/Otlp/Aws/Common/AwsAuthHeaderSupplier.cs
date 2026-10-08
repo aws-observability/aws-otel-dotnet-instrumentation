@@ -7,7 +7,7 @@ using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.XRay;
 
-namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 
 /// <summary>
 /// Supplies AWS Signature Version 4 headers for an OTLP HTTP request.

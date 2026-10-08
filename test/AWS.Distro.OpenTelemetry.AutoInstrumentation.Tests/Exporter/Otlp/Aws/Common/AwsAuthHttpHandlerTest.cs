@@ -7,25 +7,23 @@ using System.Net;
 using System.Text;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
-using Microsoft.Extensions.Logging;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 using Moq;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Common;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class AwsAuthHttpHandlerTest
 {
     [Theory]
-    [InlineData("xray", "traces", false)]
-    [InlineData("xray", "traces", true)]
-    [InlineData("logs", "logs", false)]
-    [InlineData("logs", "logs", true)]
-    public void UpstreamExportersSignTheDeliveredPayloadAndPreserveProviderResources(string serviceName, string signal, bool compress)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UpstreamTraceExporterSignsTheDeliveredPayloadAndPreservesProviderResources(bool compress)
     {
         var credentials = new ImmutableCredentials("AKIDEXAMPLE", "test-secret", "session-token");
         byte[]? signedPayload = null;
@@ -37,13 +35,12 @@ public class AwsAuthHttpHandlerTest
             signedPayload = buffer.ToArray();
         });
         using var transport = new CapturingTransport();
-        var options = CreateOptions(serviceName, signal, authenticator.Object, transport);
+        var options = CreateOptions(authenticator.Object, transport);
         options.Compression = compress ? OtlpExportCompression.GZip : OtlpExportCompression.None;
-        options.Headers = "x-aws-log-group=test-log-group,x-aws-log-stream=test-log-stream";
+        options.Headers = "x-test-header=test-value";
 
-        if (signal == "traces")
+        using (var source = new ActivitySource($"SigV4.Tests.{Guid.NewGuid()}"))
         {
-            using var source = new ActivitySource($"SigV4.Tests.{Guid.NewGuid()}");
             using var provider = Sdk.CreateTracerProviderBuilder()
                 .AddSource(source.Name)
                 .SetSampler(new AlwaysOnSampler())
@@ -54,15 +51,6 @@ public class AwsAuthHttpHandlerTest
             Assert.NotNull(activity);
             activity.Dispose();
         }
-        else
-        {
-            using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(logging =>
-            {
-                logging.SetResourceBuilder(ResourceBuilder.CreateEmpty().AddService("test-aws-service"));
-                logging.AddProcessor(new SimpleLogRecordExportProcessor(new OtlpLogExporter(options)));
-            }));
-            factory.CreateLogger("test-category").LogInformation("test log body");
-        }
 
         var delivered = Assert.Single(transport.Requests);
         Assert.Equal(1, transport.SynchronousSendCount);
@@ -71,11 +59,9 @@ public class AwsAuthHttpHandlerTest
         Assert.Equal("application/x-protobuf", delivered.ContentType);
         Assert.Equal(signedPayload, delivered.Payload);
         Assert.Equal("session-token", delivered.Headers["x-amz-security-token"]);
-        Assert.Equal("test-log-group", delivered.Headers["x-aws-log-group"]);
-        Assert.Equal("test-log-stream", delivered.Headers["x-aws-log-stream"]);
-        Assert.Contains($"/us-west-2/{serviceName}/aws4_request", delivered.Headers["Authorization"]);
-        Assert.Contains("x-aws-log-group", delivered.Headers["Authorization"]);
-        Assert.Contains("x-aws-log-stream", delivered.Headers["Authorization"]);
+        Assert.Equal("test-value", delivered.Headers["x-test-header"]);
+        Assert.Contains("/us-west-2/xray/aws4_request", delivered.Headers["Authorization"]);
+        Assert.Contains("x-test-header", delivered.Headers["Authorization"]);
         Assert.Matches("Signature=[0-9a-f]{64}", delivered.Headers["Authorization"]);
         Assert.Equal(compress ? "gzip" : string.Empty, delivered.ContentEncoding);
         Assert.True(delivered.InstrumentationSuppressed);
@@ -94,7 +80,7 @@ public class AwsAuthHttpHandlerTest
         var encodedPayload = Encoding.UTF8.GetString(payload);
         Assert.Contains("service.name", encodedPayload);
         Assert.Contains("test-aws-service", encodedPayload);
-        Assert.Contains(signal == "traces" ? "test span" : "test log body", encodedPayload);
+        Assert.Contains("test span", encodedPayload);
         authenticator.Verify(a => a.GetCredentialsAsync(), Times.Once());
     }
 
@@ -108,7 +94,7 @@ public class AwsAuthHttpHandlerTest
         var authenticator = CreateAuthenticator(first);
         authenticator.SetupSequence(a => a.GetCredentialsAsync()).ReturnsAsync(first).ReturnsAsync(second);
         using var transport = new CapturingTransport();
-        var options = CreateOptions("logs", "logs", authenticator.Object, transport);
+        var options = CreateOptions(authenticator.Object, transport);
         using var client = options.HttpClientFactory();
         Assert.Equal(TimeSpan.FromMilliseconds(options.TimeoutMilliseconds), client.Timeout);
 
@@ -138,11 +124,9 @@ public class AwsAuthHttpHandlerTest
     }
 
     [Theory]
-    [InlineData("traces", false)]
-    [InlineData("traces", true)]
-    [InlineData("logs", false)]
-    [InlineData("logs", true)]
-    public void UpstreamExportersReportAuthenticationFailureWithoutSending(string signal, bool failSigning)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UpstreamTraceExporterReportsAuthenticationFailureWithoutSending(bool failSigning)
     {
         var authenticator = CreateAuthenticator(new ImmutableCredentials("AKIDEXAMPLE", "test-secret", null));
         if (failSigning)
@@ -156,21 +140,10 @@ public class AwsAuthHttpHandlerTest
         }
 
         using var transport = new CapturingTransport();
-        var options = CreateOptions(signal == "traces" ? "xray" : "logs", signal, authenticator.Object, transport);
-        ExportResult result;
-        if (signal == "traces")
-        {
-            using var exporter = new OtlpAwsSpanExporter(options, authenticator.Object, () => transport);
-            using var provider = Sdk.CreateTracerProviderBuilder().AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
-            result = exporter.Export(default);
-        }
-        else
-        {
-            using var exporter = new OtlpLogExporter(options);
-            using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(logging =>
-                logging.AddProcessor(new SimpleLogRecordExportProcessor(exporter))));
-            result = exporter.Export(default);
-        }
+        var options = CreateOptions(authenticator.Object, transport);
+        using var exporter = new OtlpAwsSpanExporter(options, authenticator.Object, () => transport);
+        using var provider = Sdk.CreateTracerProviderBuilder().AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
+        var result = exporter.Export(default);
 
         Assert.Equal(ExportResult.Failure, result);
         Assert.Empty(transport.Requests);
@@ -189,7 +162,7 @@ public class AwsAuthHttpHandlerTest
             return credentials.Task;
         });
         using var transport = new CapturingTransport();
-        var options = CreateOptions("logs", "logs", authenticator.Object, transport);
+        var options = CreateOptions(authenticator.Object, transport);
         using var client = options.HttpClientFactory();
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Endpoint);
@@ -204,14 +177,14 @@ public class AwsAuthHttpHandlerTest
         authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    private static OtlpExporterOptions CreateOptions(string serviceName, string signal, IAwsAuthenticator authenticator, HttpMessageHandler transport)
+    private static OtlpExporterOptions CreateOptions(IAwsAuthenticator authenticator, HttpMessageHandler transport)
     {
         var options = new OtlpExporterOptions
         {
-            Endpoint = new Uri($"https://{serviceName}.us-west-2.amazonaws.com/v1/{signal}"),
+            Endpoint = new Uri("https://xray.us-west-2.amazonaws.com/v1/traces"),
             TimeoutMilliseconds = 1234,
         };
-        OtlpAwsSpanExporter.ConfigureOptions(options, "us-west-2", serviceName, authenticator, () => transport);
+        OtlpAwsSpanExporter.ConfigureOptions(options, authenticator, () => transport);
         return options;
     }
 

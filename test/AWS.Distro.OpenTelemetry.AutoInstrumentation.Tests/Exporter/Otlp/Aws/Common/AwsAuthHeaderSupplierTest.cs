@@ -6,17 +6,16 @@ using System.Net.Http.Headers;
 using System.Text;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using Moq;
 
-namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Common;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class AwsAuthHeaderSupplierTest
 {
-    [Theory]
-    [InlineData("xray", "traces")]
-    [InlineData("logs", "logs")]
-    public async Task SuppliesServiceScopedHeadersForTheExactPayload(string serviceName, string signal)
+    [Fact]
+    public async Task SuppliesXrayScopedHeadersForTheExactPayload()
     {
         var credentials = new ImmutableCredentials("AKIDEXAMPLE", "test-secret", "session-token");
         byte[] payload = { 0, 1, 127, 128, 255 };
@@ -25,12 +24,12 @@ public class AwsAuthHeaderSupplierTest
         {
             Assert.Same(credentials, snapshot);
             Assert.Equal("us-west-2", config.AuthenticationRegion);
-            Assert.Equal(serviceName, config.AuthenticationServiceName);
+            Assert.Equal("xray", config.AuthenticationServiceName);
             signedPayload = ReadPayload(request);
         });
-        var supplier = new AwsAuthHeaderSupplier("us-west-2", serviceName, authenticator.Object);
-        using var httpRequest = CreateRequest(serviceName, signal, payload);
-        httpRequest.Headers.Add("x-aws-log-group", "test-log-group");
+        var supplier = new AwsAuthHeaderSupplier("us-west-2", "xray", authenticator.Object);
+        using var httpRequest = CreateRequest(payload);
+        httpRequest.Headers.Add("x-test-header", "test-value");
 
         var headers = await supplier.GetAsync(httpRequest);
 
@@ -38,9 +37,9 @@ public class AwsAuthHeaderSupplierTest
         Assert.Equal(payload, await httpRequest.Content!.ReadAsByteArrayAsync());
         Assert.Equal("session-token", headers["x-amz-security-token"]);
         Assert.Equal("application/x-protobuf", headers["content-type"]);
-        Assert.Equal("test-log-group", headers["x-aws-log-group"]);
-        Assert.Contains($"/us-west-2/{serviceName}/aws4_request", headers["Authorization"]);
-        Assert.Contains("x-aws-log-group", headers["Authorization"]);
+        Assert.Equal("test-value", headers["x-test-header"]);
+        Assert.Contains("/us-west-2/xray/aws4_request", headers["Authorization"]);
+        Assert.Contains("x-test-header", headers["Authorization"]);
         Assert.Matches("Signature=[0-9a-f]{64}", headers["Authorization"]);
         authenticator.Verify(a => a.GetCredentialsAsync(), Times.Once());
     }
@@ -60,8 +59,8 @@ public class AwsAuthHeaderSupplierTest
         var authenticator = CreateAuthenticator(
             new ImmutableCredentials("AKIDEXAMPLE", "test-secret", null),
             (request, _, _) => signedPayload = ReadPayload(request));
-        var supplier = new AwsAuthHeaderSupplier("us-west-2", "logs", authenticator.Object);
-        using var httpRequest = CreateRequest("logs", "logs", compressedPayload);
+        var supplier = new AwsAuthHeaderSupplier("us-west-2", "xray", authenticator.Object);
+        using var httpRequest = CreateRequest(compressedPayload);
         httpRequest.Content!.Headers.ContentEncoding.Add("gzip");
 
         var headers = await supplier.GetAsync(httpRequest);
@@ -81,8 +80,8 @@ public class AwsAuthHeaderSupplierTest
         authenticator.SetupSequence(a => a.GetCredentialsAsync())
             .ReturnsAsync(first)
             .ReturnsAsync(second);
-        var supplier = new AwsAuthHeaderSupplier("us-west-2", "logs", authenticator.Object);
-        using var httpRequest = CreateRequest("logs", "logs", new byte[] { 1, 2, 3 });
+        var supplier = new AwsAuthHeaderSupplier("us-west-2", "xray", authenticator.Object);
+        using var httpRequest = CreateRequest(new byte[] { 1, 2, 3 });
         httpRequest.Headers.TryAddWithoutValidation("Authorization", "stale-authorization");
         httpRequest.Headers.Add("x-amz-security-token", "stale-token");
         httpRequest.Headers.Add("x-amz-date", "stale-date");
@@ -107,8 +106,8 @@ public class AwsAuthHeaderSupplierTest
         var authenticator = new Mock<IAwsAuthenticator>();
         authenticator.Setup(a => a.GetCredentialsAsync())
             .ThrowsAsync(new AmazonClientException("Credentials unavailable."));
-        var supplier = new AwsAuthHeaderSupplier("us-west-2", "logs", authenticator.Object);
-        using var httpRequest = CreateRequest("logs", "logs", new byte[] { 1 });
+        var supplier = new AwsAuthHeaderSupplier("us-west-2", "xray", authenticator.Object);
+        using var httpRequest = CreateRequest(new byte[] { 1 });
 
         await Assert.ThrowsAsync<AmazonClientException>(() => supplier.GetAsync(httpRequest));
 
@@ -117,10 +116,10 @@ public class AwsAuthHeaderSupplierTest
             Times.Never());
     }
 
-    private static HttpRequestMessage CreateRequest(string serviceName, string signal, byte[] payload)
+    private static HttpRequestMessage CreateRequest(byte[] payload)
     {
         var request = new HttpRequestMessage(
-            HttpMethod.Post, $"https://{serviceName}.us-west-2.amazonaws.com/v1/{signal}")
+            HttpMethod.Post, "https://xray.us-west-2.amazonaws.com/v1/traces")
         {
             Content = new ByteArrayContent(payload),
         };

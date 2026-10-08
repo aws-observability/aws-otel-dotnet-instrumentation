@@ -3,7 +3,7 @@
 
 using System.Net.Http;
 
-namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 
 /// <summary>
 /// Signs the serialized HTTP request before delivering it to the AWS OTLP endpoint.
