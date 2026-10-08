@@ -16,10 +16,17 @@ permissions:
 
 jobs:
   build-release-nuget:
-    runs-on: windows-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:windows-ec2-2022
+      - instance-size:large
 
     strategy:
         fail-fast: true
+    # CodeBuild runner labels don't tell actionlint this is Windows; pwsh is also the runner's default here.
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
       - name: Assume nuget role

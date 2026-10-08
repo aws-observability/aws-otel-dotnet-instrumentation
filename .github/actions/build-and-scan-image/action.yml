@@ -97,7 +97,9 @@ runs:
           local arch="$1" elf_arch="$2"
           local image="${{ inputs.image-name }}-${arch}"
           local dest
-          dest="$(mktemp -d)"
+          # Under RUNNER_TEMP so the path is the same for this job and the Docker daemon on self-hosted runners
+          # (CodeBuild runs the job in a container beside the daemon; its /tmp is not the daemon's /tmp).
+          dest="$(mktemp -d -p "${RUNNER_TEMP}")"
           docker run --rm --platform "linux/${arch}" -v "${dest}:/otel-auto-instrumentation-dotnet" \
             --entrypoint /bin/cp "${image}" -r /autoinstrumentation/. /otel-auto-instrumentation-dotnet
           for dir in linux linux-musl linux-x64 linux-musl-x64; do

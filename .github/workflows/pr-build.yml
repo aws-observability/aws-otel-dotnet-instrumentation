@@ -27,11 +27,17 @@ env:
 
 jobs:
   static-code-checks:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           fetch-depth: 0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       # This action wrapper by raven-actions provides cross-platform support and caching
       # Catches the same issues as GitHub's web editor: syntax errors, type mismatches,
@@ -129,7 +135,13 @@ jobs:
           echo "No github.event usage found in run steps"
 
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
       matrix:
         include:
@@ -138,6 +150,9 @@ jobs:
           - os: macos-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -187,7 +202,13 @@ jobs:
 
   cloudwatch-plugin-tests:
     name: CloudWatch | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }} | ${{ matrix.platform.tfm }} | ${{ matrix.platform.os }}
-    runs-on: ${{ matrix.platform.os }}
+    runs-on: ${{ matrix.platform.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.platform.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
       fail-fast: false
       matrix:
@@ -208,6 +229,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
+
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
@@ -225,7 +249,9 @@ jobs:
           -p:OpenTelemetryAutoInstrumentationVersion=${{ matrix.dependency.auto }}
 
   build-arm:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:arm-3.0
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
@@ -250,7 +276,10 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
 
   build-x64-musl:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -271,7 +300,9 @@ jobs:
           path: bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
 
   build-arm-musl:
-    runs-on: codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:arm-3.0
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -293,7 +324,13 @@ jobs:
 
   build-and-scan-images:
     needs: [build, build-arm, build-x64-musl, build-arm-musl]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
       fail-fast: false
       matrix:
@@ -302,6 +339,9 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Build and scan Linux images
         if: runner.os == 'Linux'
@@ -318,10 +358,16 @@ jobs:
           trivyignore-file: .github/trivy/pr-build.trivyignore.yaml
 
   contract-test:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -353,7 +399,10 @@ jobs:
 
   cloudwatch-plugin-otel-contract-tests:
     name: CloudWatch contract | OTel ${{ matrix.dependency.otel }} | Auto ${{ matrix.dependency.auto }}
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     strategy:
       fail-fast: false
       matrix:
@@ -367,6 +416,9 @@ jobs:
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -396,12 +448,18 @@ jobs:
 
 
   all-pr-checks-pass:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: [static-code-checks, build, cloudwatch-plugin-tests, build-arm, build-x64-musl, build-arm-musl, build-and-scan-images, contract-test, cloudwatch-plugin-otel-contract-tests]
     if: always()
     steps:
       - name: Checkout to get workflow file
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Check all jobs succeeded and none missing
         run: |
