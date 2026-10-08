@@ -16,10 +16,10 @@ internal sealed class AwsAuthHeaderSupplier
 {
     // SigV4 header reference:
     // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
-    internal const string AuthorizationHeader = "Authorization";
-    internal const string XAmzDateHeader = "x-amz-date";
-    internal const string XAmzSecurityTokenHeader = "x-amz-security-token";
-    internal const string XAmzContentSha256Header = "x-amz-content-sha256";
+    private const string AuthorizationHeader = "Authorization";
+    private const string XAmzDateHeader = "x-amz-date";
+    private const string XAmzSecurityTokenHeader = "x-amz-security-token";
+    private const string XAmzContentSha256Header = "x-amz-content-sha256";
 
     private readonly string region;
     private readonly string serviceName;
@@ -98,6 +98,7 @@ internal sealed class AwsAuthHeaderSupplier
         // Resolve once per signing attempt and use the same snapshot for the token and signature.
         // Failures propagate to the exporter so an unsigned request is never sent.
         this.authenticator.Sign(request, config, credentials);
+        request.Headers[AuthorizationHeader] = request.AWS4SignerResult.ForAuthorizationHeader;
         return new Dictionary<string, string>(request.Headers, StringComparer.OrdinalIgnoreCase);
     }
 
