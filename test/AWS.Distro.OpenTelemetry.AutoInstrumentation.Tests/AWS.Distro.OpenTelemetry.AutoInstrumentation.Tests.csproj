@@ -20,6 +20,9 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="fluentassertions" Version="6.12.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.0" PrivateAssets="all" />
+    <!-- Generate OTLP message types so tests can decode and validate delivered HTTP payloads. -->
+    <PackageReference Include="Grpc.Tools" Version="2.63.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
     <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
@@ -43,6 +46,15 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="../images/MockCollector/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto"
+              ProtoRoot="../images/MockCollector/opentelemetry-proto"
+              GrpcServices="None" />
   </ItemGroup>
 
   <ItemGroup>

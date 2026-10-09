@@ -12,6 +12,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+- Reuse the upstream OTLP trace exporter for SigV4
+  ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).
+
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
