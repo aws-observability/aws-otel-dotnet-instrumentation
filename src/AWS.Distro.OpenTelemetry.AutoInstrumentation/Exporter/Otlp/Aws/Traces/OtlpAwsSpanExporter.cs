@@ -30,6 +30,21 @@ public static class OtlpAwsSpanExporter
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
     {
+        Configure(options, authenticator, transportFactory);
+        return new OtlpTraceExporter(options);
+    }
+
+    /// <summary>
+    /// Adds AWS request signing to the options used to construct the upstream trace exporter.
+    /// </summary>
+    /// <param name="options">The configured upstream exporter options.</param>
+    /// <param name="authenticator">The AWS authenticator, or null to use the default credential provider.</param>
+    /// <param name="transportFactory">The HTTP transport factory, or null to use the default transport.</param>
+    internal static void Configure(
+        OtlpExporterOptions options,
+        IAwsAuthenticator? authenticator = null,
+        Func<HttpMessageHandler>? transportFactory = null)
+    {
         if (options.Protocol != OtlpExportProtocol.HttpProtobuf)
         {
             throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
@@ -45,12 +60,14 @@ public static class OtlpAwsSpanExporter
             ServiceURL = endpoint.AbsoluteUri,
             RegionEndpoint = RegionEndpoint.GetBySystemName(region),
         };
+
+        // TODO: In a follow-up PR, detect an existing Authorization header in options.Headers
+        // and warn once during exporter setup that SigV4 authentication overrides it.
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
         options.HttpClientFactory = () => new HttpClient(
             new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
         {
             Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
         };
-        return new OtlpTraceExporter(options);
     }
 }

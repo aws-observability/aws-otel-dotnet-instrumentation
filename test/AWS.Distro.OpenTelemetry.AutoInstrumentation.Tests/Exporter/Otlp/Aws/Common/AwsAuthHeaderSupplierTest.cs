@@ -50,23 +50,53 @@ public class AwsAuthHeaderSupplierTest
             Assert.Equal(region, signingConfig.AuthenticationRegion);
             Assert.Equal(serviceName, signingConfig.AuthenticationServiceName);
             Assert.Equal(serviceName, request.ServiceName);
+            Assert.False(request.Headers.ContainsKey("Content-Length"));
+            Assert.False(request.Headers.ContainsKey("User-Agent"));
+            Assert.False(request.Headers.ContainsKey("x-test-header"));
             signedPayload = ReadPayload(request);
         });
         var supplier = new AwsAuthHeaderSupplier(config, authenticator.Object);
         using var httpRequest = CreateRequest(payload);
         httpRequest.Headers.Add("x-test-header", "test-value");
+        httpRequest.Headers.UserAgent.ParseAdd("test-agent/1.0");
+        httpRequest.Content!.Headers.ContentLength = payload.Length;
 
         var headers = await supplier.GetAsync(httpRequest);
 
         Assert.Equal(payload, signedPayload);
         Assert.Equal(payload, await httpRequest.Content!.ReadAsByteArrayAsync());
         Assert.Equal("session-token", headers["x-amz-security-token"]);
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant(), headers["x-amz-content-sha256"]);
         Assert.Equal("application/x-protobuf", headers["content-type"]);
-        Assert.Equal("test-value", headers["x-test-header"]);
+        Assert.False(headers.ContainsKey("x-test-header"));
+        Assert.Equal("test-value", Assert.Single(httpRequest.Headers.GetValues("x-test-header")));
+        Assert.Equal("test-agent/1.0", httpRequest.Headers.UserAgent.ToString());
+        Assert.Equal(payload.Length, httpRequest.Content.Headers.ContentLength);
         Assert.Contains($"/{region}/{serviceName}/aws4_request", headers["Authorization"]);
-        Assert.Contains("x-test-header", headers["Authorization"]);
+        Assert.Contains(
+            "SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-security-token,",
+            headers["Authorization"]);
         Assert.Matches("Signature=[0-9a-f]{64}", headers["Authorization"]);
         authenticator.Verify(a => a.GetCredentialsAsync(), Times.Once());
+    }
+
+    [Theory]
+    [InlineData("x-amz-test-header")]
+    [InlineData("X-AmZ-Test-Header")]
+    public async Task ShouldSignAwsHeadersRegardlessOfCasing(string headerName)
+    {
+        var authenticator = CreateAuthenticator(new ImmutableCredentials("AKIDEXAMPLE", "test-secret", null));
+        var supplier = new AwsAuthHeaderSupplier(CreateConfig(), authenticator.Object);
+        using var httpRequest = CreateRequest();
+        httpRequest.Headers.Add(headerName, "aws-value");
+
+        var headers = await supplier.GetAsync(httpRequest);
+
+        Assert.Equal("aws-value", headers[headerName]);
+        Assert.Contains(
+            "SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-test-header,",
+            headers["Authorization"]);
+        Assert.Equal("aws-value", Assert.Single(httpRequest.Headers.GetValues(headerName)));
     }
 
     [Fact]
@@ -92,8 +122,9 @@ public class AwsAuthHeaderSupplierTest
 
         Assert.Equal(compressedPayload, signedPayload);
         Assert.Equal(compressedPayload, await httpRequest.Content.ReadAsByteArrayAsync());
-        Assert.Equal("gzip", headers["Content-Encoding"]);
-        Assert.Contains("content-encoding", headers["Authorization"]);
+        Assert.Equal("gzip", Assert.Single(httpRequest.Content.Headers.ContentEncoding));
+        Assert.False(headers.ContainsKey("Content-Encoding"));
+        Assert.DoesNotContain("content-encoding", headers["Authorization"]);
     }
 
     [Fact]

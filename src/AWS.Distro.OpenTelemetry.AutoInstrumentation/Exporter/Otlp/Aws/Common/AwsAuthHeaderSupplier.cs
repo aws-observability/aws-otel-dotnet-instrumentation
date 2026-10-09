@@ -52,9 +52,11 @@ internal sealed class AwsAuthHeaderSupplier
             SignatureVersion = SignatureVersion.SigV4,
         };
 
+        // Leave transport and custom OTLP headers on the outgoing request without signing
+        // values that a proxy or HTTP handler may rewrite.
         foreach (var header in httpRequest.Headers)
         {
-            if (!IsSigningHeader(header.Key))
+            if (ShouldIncludeInSignature(header.Key))
             {
                 request.Headers.Add(header.Key, string.Join(",", header.Value));
             }
@@ -64,7 +66,10 @@ internal sealed class AwsAuthHeaderSupplier
         {
             foreach (var header in httpRequest.Content.Headers)
             {
-                request.Headers.Add(header.Key, string.Join(",", header.Value));
+                if (ShouldIncludeInSignature(header.Key))
+                {
+                    request.Headers.Add(header.Key, string.Join(",", header.Value));
+                }
             }
         }
 
@@ -94,6 +99,12 @@ internal sealed class AwsAuthHeaderSupplier
         || string.Equals(name, XAmzDateHeader, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, XAmzSecurityTokenHeader, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, XAmzContentSha256Header, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldIncludeInSignature(string name) =>
+        !IsSigningHeader(name)
+        && (string.Equals(name, "Host", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("x-amz-", StringComparison.OrdinalIgnoreCase));
 
     private sealed class EmptyAmazonWebServiceRequest : AmazonWebServiceRequest
     {

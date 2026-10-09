@@ -61,6 +61,43 @@ public class AwsAuthHttpHandlerTest
         authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), second), Times.Once());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ShouldPreserveUnsignedHeadersDuringDelivery(bool synchronous)
+    {
+        var authenticator = CreateAuthenticator(new ImmutableCredentials("AKIDEXAMPLE", "test-secret", "session-token"));
+        using var transport = new RequestSpyingHttpHandler();
+        using var exporter = CreateExporter(authenticator.Object, transport, out var options);
+        using var client = options.HttpClientFactory();
+        using var request = new HttpRequestMessage(HttpMethod.Post, options.Endpoint)
+        {
+            Content = new ByteArrayContent(new byte[] { 1, 2, 3 }),
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-protobuf");
+        request.Content.Headers.ContentLength = 3;
+        request.Headers.UserAgent.ParseAdd("test-agent/1.0");
+        request.Headers.Add("x-test-header", "custom-value");
+        request.Headers.Add("x-aws-log-group", "/test/group");
+        request.Headers.Add("x-aws-log-stream", "test-stream");
+        request.Headers.Add("x-amz-test-header", "aws-value");
+
+        using var response = synchronous ? client.Send(request) : await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var delivered = Assert.Single(transport.Requests);
+        Assert.Equal("test-agent/1.0", delivered.Headers["User-Agent"]);
+        Assert.Equal("custom-value", delivered.Headers["x-test-header"]);
+        Assert.Equal("/test/group", delivered.Headers["x-aws-log-group"]);
+        Assert.Equal("test-stream", delivered.Headers["x-aws-log-stream"]);
+        Assert.Equal("aws-value", delivered.Headers["x-amz-test-header"]);
+        Assert.Equal("application/x-protobuf", delivered.ContentType);
+        Assert.Equal(3, request.Content.Headers.ContentLength);
+        Assert.Contains(
+            "SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-security-token;x-amz-test-header,",
+            delivered.Headers["Authorization"]);
+    }
+
     [Fact]
     public async Task ShouldNotSendAnUnsignedRequestWhenCredentialLookupIsCancelled()
     {

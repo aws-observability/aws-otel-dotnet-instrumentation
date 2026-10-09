@@ -52,9 +52,7 @@ public class Plugin
     private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
-    private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
     private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
-    private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
 #pragma warning restore CS0436 // Type conflicts with imported type
@@ -65,6 +63,7 @@ public class Plugin
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
+    private static readonly string TracesProtocolEnvVarName = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
@@ -98,7 +97,7 @@ public class Plugin
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
-    /// </summary>public void Initializing()
+    /// </summary>
     public void Initializing()
     {
 #if !NETFRAMEWORK
@@ -208,25 +207,43 @@ public class Plugin
             }
         }
 
-        if (this.IsSigV4AuthEnabled())
+        var tracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
+        if (tracesEndpoint != null
+            && this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath)
+            && isLegacyPath)
         {
-            OtlpExporterOptions options = new OtlpExporterOptions();
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
-#pragma warning disable CS8604 // Possible null reference argument.
-
-            // This is already checked in isSigV4Enabled predicate
-            options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
-#pragma warning restore CS8604 // Possible null reference argument.
-            options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
-            var otlpAwsSpanExporter = OtlpAwsSpanExporter.Create(options);
-
-            tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
+            var options = new OtlpExporterOptions
+            {
+                Endpoint = new Uri(tracesEndpoint),
+                Protocol = OtlpExportProtocol.HttpProtobuf,
+            };
+            Logger.LogWarning(
+                "OTEL_AWS_SIG_V4_ENABLED is deprecated and will be ignored in future releases. Both configurations remain supported: OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true, or the recommended OTEL_TRACES_EXPORTER=otlp with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set to an X-Ray OTLP endpoint.");
+            tracerProvider.AddProcessor(new BatchActivityExportProcessor(OtlpAwsSpanExporter.Create(options)));
         }
 
 #if !NETFRAMEWORK
         // No-op unless Dynamic Instrumentation was initialized in Initializing().
         DynamicInstrumentationManager.OnTracerProviderInitialized(tracerProvider);
 #endif
+    }
+
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP trace exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP trace exporter options.</param>
+    public void ConfigureTracesOptions(OtlpExporterOptions options)
+    {
+        if (this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath))
+        {
+            if (isLegacyPath)
+            {
+                Logger.LogWarning(
+                    "OTEL_AWS_SIG_V4_ENABLED is deprecated and will be ignored in future releases. Both configurations remain supported: OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true, or the recommended OTEL_TRACES_EXPORTER=otlp with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set to an X-Ray OTLP endpoint.");
+            }
+
+            OtlpAwsSpanExporter.Configure(options);
+        }
     }
 
     /// <summary>
@@ -897,61 +914,35 @@ public class Plugin
         return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 
-    // The setup here requires OTEL_TRACES_EXPORTER to be set to none in order to avoid exporting the spans twice.
-    // However that introduces the problem of overriding the default behavior of when OTEL_TRACES_EXPORTER is set to none which is
-    // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
-    private bool IsSigV4AuthEnabled()
+    private bool ShouldConfigureOtlpAwsExporter(string signal, out bool isLegacyPath)
     {
-        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
-
-        if (isXrayOtlpEndpoint)
+        isLegacyPath = false;
+        if (signal == "traces")
         {
-            Logger.Log(LogLevel.Information, "Detected using AWS OTLP XRay Endpoint.");
-            string? sigV4EnabledConfig = System.Environment.GetEnvironmentVariable(Plugin.SigV4EnabledConfig);
+            var tracesExporter = System.Environment.GetEnvironmentVariable(TracesExporterConfig);
+            var tracesProtocol = System.Environment.GetEnvironmentVariable(TracesProtocolEnvVarName)
+                ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+            var isHttpProtobuf = tracesProtocol == null || tracesProtocol == "http/protobuf";
+            var isXRayOtlpEndpoint = this.IsXRayOtlpEndpoint(
+                System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig));
+            var isLegacySigV4TracesExporterEnabled = tracesExporter == "none"
+                && System.Environment.GetEnvironmentVariable(SigV4EnabledConfig) == "true"
+                && isXRayOtlpEndpoint
+                && isHttpProtobuf;
+            var isSigV4TracesExporterEnabled = isXRayOtlpEndpoint
+                && isHttpProtobuf
+                && (tracesExporter == null || tracesExporter.Split(',').Any(exporter => exporter.Trim() == "otlp"));
 
-            if (sigV4EnabledConfig == null || !sigV4EnabledConfig.Equals("true"))
-            {
-                Logger.Log(LogLevel.Information, $"Please enable SigV4 authentication when exporting traces to OTLP XRay Endpoint by setting {SigV4EnabledConfig}=true");
-                return false;
-            }
-
-            Logger.Log(LogLevel.Information, $"SigV4 authentication is enabled");
-
-            string? tracesExporter = System.Environment.GetEnvironmentVariable(Plugin.TracesExporterConfig);
-
-            if (tracesExporter == null || tracesExporter != "none")
-            {
-                Logger.Log(LogLevel.Information, $"Please disable other tracing exporters by setting {TracesExporterConfig}=none");
-                return false;
-            }
-
-            Logger.Log(LogLevel.Information, $"Proper configuration has been detected, now exporting spans to {OtelExporterOtlpTracesEndpoint}");
-
-            return true;
+            isLegacyPath = isLegacySigV4TracesExporterEnabled;
+            return isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
         }
 
         return false;
     }
 
-    // https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_timeout:~:text=traces%20in%20milliseconds.-,Default%20value%3A%2010000%20(10s),-Example%3A%20export
-    private int GetTracesOtlpTimeout()
-    {
-        string? timeout = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesTimeout);
-
-        if (timeout != null)
-        {
-            try
-            {
-                return int.Parse(timeout);
-            }
-            catch (Exception)
-            {
-                return DefaultOtlpTracesTimeoutMilli;
-            }
-        }
-
-        return DefaultOtlpTracesTimeoutMilli;
-    }
+    private bool IsXRayOtlpEndpoint(string? endpoint)
+        => endpoint != null
+            && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).IsMatch(endpoint);
 
     private string GetFallbackServiceName()
     {

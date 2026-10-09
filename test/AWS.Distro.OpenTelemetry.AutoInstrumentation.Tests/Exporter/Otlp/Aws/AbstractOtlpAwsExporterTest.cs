@@ -262,7 +262,9 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
         Assert.Equal("test-value", delivered.Headers["x-test-header"]);
         Assert.Contains($"Credential={expectedCredentials.AccessKey}/", delivered.Headers["Authorization"]);
         Assert.Contains($"/{this.region}/{this.serviceName}/aws4_request", delivered.Headers["Authorization"]);
-        Assert.Contains("x-test-header", delivered.Headers["Authorization"]);
+        Assert.DoesNotContain("x-test-header", delivered.Headers["Authorization"]);
+        Assert.DoesNotContain("content-length", delivered.Headers["Authorization"]);
+        Assert.DoesNotContain("content-encoding", delivered.Headers["Authorization"]);
         Assert.Matches("Signature=[0-9a-f]{64}", delivered.Headers["Authorization"]);
         Assert.Equal(compression == OtlpExportCompression.GZip ? "gzip" : string.Empty, delivered.ContentEncoding);
         Assert.True(delivered.InstrumentationSuppressed);
