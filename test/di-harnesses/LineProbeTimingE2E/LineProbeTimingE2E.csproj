@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- TIMING harness for Approach A (forked profiler + ReJIT). Measures apply cost, first-hit
+       de-opt, and steady-state per-hit overhead. Same build shape as the proven Phase-2 harnesses:
+       Debug, portable PDB, net8.0, NOT ReadyToRun, Optimize=false, so the interior statement
+       boundary lands at the hardcoded IL offset 5 in every target body. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LineProbeTimingE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Optimize>false</Optimize>
+    <TieredPGO>false</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LineProbeSink/LineProbeSink.csproj" />
+  </ItemGroup>
+</Project>

@@ -262,11 +262,25 @@ Copyright The OpenTelemetry Authors under Apache License Version 2.0
         .DependsOn(this.BuildInstallationScripts)
         .DependsOn(this.DownloadAutoInstrumentationDistribution)
         .DependsOn(this.UnpackAutoInstrumentationDistribution)
+        // Both native-profiler guards run on EVERY build, not just native ones. Each catches a defect
+        // whose only other symptom appears at customer runtime: an unlisted source file links into a
+        // library with an undefined symbol, and a stale version pin silently instruments nothing.
+        // AssertManagedAssemblyVersionMatchesNativePin orders itself after the unpack (it reads an
+        // assembly out of the distribution); the source-list check has no inputs from other targets.
+        .DependsOn(this.AssertNativeSourceListsAreComplete)
+        .DependsOn(this.AssertManagedAssemblyVersionMatchesNativePin)
         .DependsOn(this.Compile)
         .DependsOn(this.AddAWSPlugins)
         .DependsOn(this.CopyInstrumentScripts)
         .DependsOn(this.CopyConfiguration)
         .DependsOn(this.ExtendLicenseFile)
+        // Swap our vendored native profiler into the distribution, then prove the SHIPPED file loads.
+        // Both are conditional on a native binary actually being present, because only the RID whose CI
+        // job builds one has it — every other job legitimately ships the stock upstream binary. The two
+        // are separate targets because they answer different questions: "did the swap happen" and "does
+        // what we are about to zip actually load".
+        .DependsOn(this.ReplaceNativeProfilerInDistribution)
+        .DependsOn(this.AssertShippedNativeProfilerLoads)
         // .DependsOn(RunUnitTests)
         // .DependsOn(RunIntegrationTests)
         .DependsOn(this.PackAWSDistribution);

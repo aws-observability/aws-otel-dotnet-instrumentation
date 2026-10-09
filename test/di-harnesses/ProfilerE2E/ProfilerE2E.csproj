@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Web SDK for the in-proc mock backend + OTLP/HTTP receiver (WebApplication). AssemblyName stays
+       "ProfilerE2E" so the profiler resolves the target type and the InternalsVisibleTo grant still applies. -->
+  <!-- Throwaway E2E spike: drives the FULL Dynamic Instrumentation loop through the EXACT GA path —
+       DynamicInstrumentationConfig.FromEnvironment() + DynamicInstrumentationManager.Initialize() — under
+       the real native profiler (ReJIT weave), with only the backend HTTP mocked (swappable via the
+       OTEL_AWS_DYNAMIC_INSTRUMENTATION_API_URL env var). Snapshots are received over real OTLP/HTTP and
+       decoded from protobuf. Not part of the build/solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ProfilerE2E</AssemblyName>
+    <!-- Match the target-type assembly name the harness registers (see Program.cs). -->
+    <!-- Signed with the same key as the DI assembly so the POC-only InternalsVisibleTo
+         entry can grant this throwaway harness access to the internal engine types. -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Reference the REAL DI assembly so the profiler can resolve
+         AWS.Distro.OpenTelemetry.DynamicInstrumentation.Instrumentation.FunctionLevel.DiIntegration2. -->
+    <ProjectReference Include="../../src/AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Decode the real OTLP/HTTP LogRecords the DI OTLP exporter posts to our in-proc receiver.
+         Message-only codegen (GrpcServices=None): we parse ExportLogsServiceRequest, no gRPC service.
+         Version pinned to 3.35.1 to MATCH the Google.Protobuf.dll the OTel distribution loads at runtime
+         (via DOTNET_SHARED_STORE / net/Google.Protobuf.dll) — a mismatched version fails assembly load. -->
+    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.68.1">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <Protobuf Include="proto/opentelemetry/proto/**/*.proto" ProtoRoot="proto" GrpcServices="None" Access="internal" />
+  </ItemGroup>
+</Project>

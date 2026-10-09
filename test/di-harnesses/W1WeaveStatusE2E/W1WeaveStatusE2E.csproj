@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- W1: per-probe WEAVE STATUS E2E (AWS Distro DI). Clone of N2MultiProbeE2E's project shape and
+       exit-code contract (exit = failed assertions). What it adds is a readback of the profiler's
+       GetLineProbeWeaveResults export, which is the only way to prove that the native rewriter's
+       per-probe verdicts are real — a managed unit test can only ever exercise the seam. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Same assembly name as the other harnesses: the probe definitions name the TARGET ASSEMBLY,
+         and reusing the name keeps Mk() identical to the proven harnesses. -->
+    <AssemblyName>LineProbeE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LineProbeSink/LineProbeSink.csproj" />
+  </ItemGroup>
+</Project>

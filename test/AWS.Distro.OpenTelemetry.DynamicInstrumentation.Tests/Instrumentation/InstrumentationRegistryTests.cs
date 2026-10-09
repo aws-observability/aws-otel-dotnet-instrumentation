@@ -188,7 +188,7 @@ public class InstrumentationRegistryTests
     public void TryResolveKeyByType_MultipleMethodsSameType_ReturnsNull_ThenResolvesWhenUnambiguous()
     {
         // Type-only resolution must NOT guess among multiple configs on one type: guessing wrong
-        // misattributes a capture to the wrong probe (worse than dropping it, see #3). So while two
+        // misattributes a capture to the wrong probe (worse than dropping it). So while two
         // methods are registered it returns null; once only one remains it's unambiguous and resolves.
         var registry = new InstrumentationRegistry();
         var a = CreateConfig(locationHash: "ha", method: "A");
@@ -207,7 +207,7 @@ public class InstrumentationRegistryTests
     [Fact]
     public void TryResolveKeyByTypeAndArity_DifferentArities_DisambiguatesCoLocatedMethods()
     {
-        // The core #3 fix: two methods on one type, one arg-count each. A woven call resolves to the
+        // Arity resolution: two methods on one type, one arg-count each. A woven call resolves to the
         // config whose method has the matching parameter count — not "first key wins".
         var registry = new InstrumentationRegistry();
         var oneArg = CreateConfig(locationHash: "h1", method: "Process");
@@ -252,7 +252,7 @@ public class InstrumentationRegistryTests
     [Fact]
     public void IndexArities_SameArityTwoMethods_ReturnsBothCollidingKeys()
     {
-        // The documented #3 residual: two methods on one type sharing a parameter count are
+        // The documented residual: two methods on one type sharing a parameter count are
         // indistinguishable at capture time (args.Length can't separate them). IndexArities returns the
         // FULL colliding set so the caller can report ERROR on every ambiguous config, not just the last.
         var registry = new InstrumentationRegistry();

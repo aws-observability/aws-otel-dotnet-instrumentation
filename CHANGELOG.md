@@ -11,6 +11,15 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Add line-level Dynamic Instrumentation: capture local variables at a specific source line without
+  redeploying. Requires the target assembly's portable or embedded PDB to be deployed alongside it, and
+  a native profiler built from the vendored source (currently linux-x64 only; other runtime identifiers
+  ship the upstream profiler, on which line-level probes report an error and function-level probes are
+  unaffected). A probe reports READY once its location resolves and changes to ERROR if the profiler later
+  refuses that location, so a probe can move from READY to ERROR up to a minute after it was created. See
+  [docs/dynamic-instrumentation.md](docs/dynamic-instrumentation.md) for the supported targets and limits.
+  ([#TBD](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/TBD))
+
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,

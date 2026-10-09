@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Reuses the existing LOCAL-ONLY InternalsVisibleTo("ProfilerE2E") grant in
+         src/.../AssemblyInfo.cs, so this harness needs NO new edit to shipping source. -->
+    <AssemblyName>ProfilerE2E</AssemblyName>
+    <!-- Must be signed with the SAME key as the DI assembly, otherwise the strong-named
+         InternalsVisibleTo grant does not apply (CS0281). Mirrors poc/ProfilerE2E. -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../../buildtools/awsoteldotnet.snk</AssemblyOriginatorKeyFile>
+    <!-- Server GC + tiered PGO off: we are measuring the capture path, not GC-mode noise. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <NoWarn>SA0001;SA1600;CS8618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" />
+  </ItemGroup>
+
+  <!-- CallTargetState/CallTargetReturn live in the base agent assembly, same HintPath the DI
+       project uses. Requires ./build.sh to have unpacked OpenTelemetryDistribution/. -->
+  <ItemGroup>
+    <Reference Include="OpenTelemetry.AutoInstrumentation">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\OpenTelemetryDistribution\net\OpenTelemetry.AutoInstrumentation.dll</HintPath>
+      <!-- Private=true: must be copied to output, we run standalone (no profiler/shared store
+           to resolve it at runtime as the real agent would). -->
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

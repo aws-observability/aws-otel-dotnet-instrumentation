@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BOX-GATE spike harness (DECISION A). Clones the poc/LineProbeE2E exit-code contract
+       (exit = failed assertions). Runs two hot targets under the FORKED native profiler: one woven
+       with the GATED two-call sequence (ldc;call ShouldCapture;brfalse SKIP;ldc;ldc;box;call Capture)
+       and one with the UNGATED always-box sequence, then measures per-call allocation on the discard
+       path. DEBUG build, portable PDB, net8.0, NOT ReadyToRun (matches Phase-2 offset inspection). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LineProbeGatedE2E</AssemblyName>
+    <Configuration>Debug</Configuration>
+    <DebugType>portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Callback sink is a SEPARATE assembly, forcing a genuine cross-assembly AssemblyRef+MemberRef
+         for BOTH the ShouldCapture gate and the boxing Capture (Q3, extended to two members). -->
+    <ProjectReference Include="../LineProbeSink/LineProbeSink.csproj" />
+  </ItemGroup>
+</Project>

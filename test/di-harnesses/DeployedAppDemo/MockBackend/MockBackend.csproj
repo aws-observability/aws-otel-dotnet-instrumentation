@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MockBackend</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Decode the real OTLP/HTTP LogRecords the DI OTLP exporter posts to /v1/logs, so the mock
+         doubles as the telemetry sink and can assert on the exported snapshot. Message-only codegen.
+         Google.Protobuf pinned to 3.35.1 to match the version the OTel distribution loads at runtime. -->
+    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.68.1">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- SigV4 signing for the config-leg beta forwarder (DI_BETA_ENDPOINT). Same AWS4Signer/AmazonXRayConfig
+         idiom the production distro uses (SigV4OtlpLogExporter); versions match the base distro. Test-observer
+         only — production DI in src/ has no AWS-SDK dependency and posts unsigned to the local CW Agent. -->
+    <PackageReference Include="AWSSDK.Core" Version="3.7.400" />
+    <PackageReference Include="AWSSDK.XRay" Version="3.7.300" />
+    <Protobuf Include="proto/opentelemetry/proto/**/*.proto" ProtoRoot="proto" GrpcServices="None" Access="internal" />
+  </ItemGroup>
+</Project>
