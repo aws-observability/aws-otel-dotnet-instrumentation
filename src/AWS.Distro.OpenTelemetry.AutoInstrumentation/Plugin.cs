@@ -47,8 +47,11 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
+
+    // The optional ".cn" suffix also matches the AWS China partition (cn-north-1, cn-northwest-1), whose
+    // endpoints use the amazonaws.com.cn DNS suffix, so those endpoints are exported with SigV4 signing too.
+    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/traces$";
+    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
     private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
@@ -383,8 +386,7 @@ public class Plugin
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
 
         string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+        if (!string.IsNullOrEmpty(logsEndpoint) && IsCloudWatchLogsOtlpEndpoint(logsEndpoint))
         {
             string region = new Uri(logsEndpoint).Host.Split('.')[1];
             var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
@@ -603,6 +605,26 @@ public class Plugin
             System.Environment.GetEnvironmentVariable(envVar),
             "false",
             StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether an endpoint is an AWS X-Ray OTLP traces endpoint, i.e. one that requires SigV4-signed
+    /// requests (see <see cref="OtlpAwsSpanExporter"/>). Recognizes both <c>amazonaws.com</c> endpoints and
+    /// the AWS China partition's <c>amazonaws.com.cn</c> endpoints.
+    /// </summary>
+    /// <param name="endpoint">The configured OTLP traces endpoint, or <c>null</c> when none is set.</param>
+    /// <returns><c>true</c> when the endpoint is an X-Ray OTLP traces endpoint.</returns>
+    internal static bool IsXrayOtlpEndpoint(string? endpoint) =>
+        endpoint != null && Regex.IsMatch(endpoint, XRayOtlpEndpointPattern, RegexOptions.Compiled);
+
+    /// <summary>
+    /// Whether an endpoint is a CloudWatch Logs OTLP endpoint, i.e. one that requires SigV4-signed
+    /// requests (see <see cref="SigV4OtlpLogExporter"/>). Recognizes both <c>amazonaws.com</c> endpoints and
+    /// the AWS China partition's <c>amazonaws.com.cn</c> endpoints.
+    /// </summary>
+    /// <param name="endpoint">The configured OTLP logs endpoint, or <c>null</c> when none is set.</param>
+    /// <returns><c>true</c> when the endpoint is a CloudWatch Logs OTLP endpoint.</returns>
+    internal static bool IsCloudWatchLogsOtlpEndpoint(string? endpoint) =>
+        endpoint != null && Regex.IsMatch(endpoint, CloudWatchLogsOtlpEndpointPattern);
 
     private static int GetMetricExportInterval()
     {
@@ -900,7 +922,7 @@ public class Plugin
     // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
     private bool IsSigV4AuthEnabled()
     {
-        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
+        bool isXrayOtlpEndpoint = IsXrayOtlpEndpoint(OtelExporterOtlpTracesEndpoint);
 
         if (isXrayOtlpEndpoint)
         {
