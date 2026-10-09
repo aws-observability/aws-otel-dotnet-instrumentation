@@ -5,7 +5,8 @@
 * Fix unbounded span metrics cardinality on SERVER spans: the legacy fallback for
   `server.address`/`server.port` now uses `net.host.name`/`net.host.port` on SERVER
   spans instead of `net.peer.name`/`net.peer.port`, which describe the client
-  (including its ephemeral port).
+  (including its ephemeral port)
+  ([#476](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/476))
 
 ## 0.1.1 - 2026-09-18
 
