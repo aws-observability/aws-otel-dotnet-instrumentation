@@ -604,33 +604,147 @@ public class SpanMetricsConnectorTests
     }
 
     [Fact]
-    public void SpanMetricsConnectorPrefersNetPeerNameOverNetHostNameWhenBothPresentAndServerAddressAbsent()
+    public void SpanMetricsConnectorLegacyServerSpanPrefersHostOverClientPeer()
     {
-        // net.peer.name (client-span spelling) and net.host.name (server-span spelling) are
-        // mutually exclusive in practice, so instrumentation sets one or the other. This test
-        // locks in the deliberate fallback precedence for the theoretical both-present case:
-        // net.peer.name is checked first, so it wins when server.address is absent.
+        // On a SERVER span the legacy net.peer.* keys describe the client; net.peer.port is the
+        // client's ephemeral port and would make every connection a new metric series.
         using var pipeline = new TestPipeline(new AlwaysOnSampler());
         pipeline.Record(
-            "legacy-peer-host",
+            "legacy-server-with-client",
             ActivityKind.Server,
             activity =>
             {
-                activity.SetTag("net.peer.name", "peer.example.com");
-                activity.SetTag("net.host.name", "host.example.com");
-                activity.SetTag("net.peer.port", 9000);
+                activity.SetTag("net.peer.name", "client.example.com");
+                activity.SetTag("net.peer.port", 54321);
+                activity.SetTag("net.host.name", "payments.example.com");
                 activity.SetTag("net.host.port", 8443);
             });
         pipeline.Flush();
 
-        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-peer-host"));
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-server-with-client"));
 
-        Assert.Equal("peer.example.com", tags["net.peer.name"]);
-        Assert.Equal(9000, tags["net.peer.port"]);
+        Assert.Equal("payments.example.com", tags["net.host.name"]);
+        Assert.Equal(8443, tags["net.host.port"]);
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
         Assert.DoesNotContain("server.address", tags.Keys);
         Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorLegacyServerSpanWithOnlyClientPeerEmitsNoPeerDimension()
+    {
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            "legacy-server-client-only",
+            ActivityKind.Server,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "client.example.com");
+                activity.SetTag("net.peer.port", 54321);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "legacy-server-client-only"));
+
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
         Assert.DoesNotContain("net.host.name", tags.Keys);
         Assert.DoesNotContain("net.host.port", tags.Keys);
+        Assert.DoesNotContain("server.address", tags.Keys);
+        Assert.DoesNotContain("server.port", tags.Keys);
+    }
+
+    [Theory]
+    [InlineData(ActivityKind.Client)]
+    [InlineData(ActivityKind.Producer)]
+    [InlineData(ActivityKind.Consumer)]
+    [InlineData(ActivityKind.Internal)]
+    public void SpanMetricsConnectorKeepsLegacyPeerAttributesForNonServerKinds(ActivityKind kind)
+    {
+        // On CLIENT/PRODUCER/CONSUMER spans net.peer.* is the remote server or broker, so it is kept.
+        var spanName = "legacy-peer-" + kind;
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            spanName,
+            kind,
+            activity =>
+            {
+                activity.SetTag("net.peer.name", "payments.example.com");
+                activity.SetTag("net.peer.port", 8443);
+                activity.SetTag("net.host.name", "local.example.com");
+                activity.SetTag("net.host.port", 54321);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", spanName));
+
+        Assert.Equal("payments.example.com", tags["net.peer.name"]);
+        Assert.Equal(8443, tags["net.peer.port"]);
+        Assert.DoesNotContain("net.host.name", tags.Keys);
+        Assert.DoesNotContain("net.host.port", tags.Keys);
+    }
+
+    [Theory]
+    [InlineData(ActivityKind.Server)]
+    [InlineData(ActivityKind.Client)]
+    public void SpanMetricsConnectorStableServerAttributesWinForAllKinds(ActivityKind kind)
+    {
+        var spanName = "stable-server-" + kind;
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        pipeline.Record(
+            spanName,
+            kind,
+            activity =>
+            {
+                activity.SetTag("server.address", "payments.example.com");
+                activity.SetTag("server.port", 8443);
+                activity.SetTag("net.peer.name", "other.example.com");
+                activity.SetTag("net.peer.port", 54321);
+                activity.SetTag("net.host.name", "local.example.com");
+                activity.SetTag("net.host.port", 8080);
+            });
+        pipeline.Flush();
+
+        var tags = GetTags(GetPoint(pipeline.Metrics, "traces.span.metrics.calls", spanName));
+
+        Assert.Equal("payments.example.com", tags["server.address"]);
+        Assert.Equal(8443, tags["server.port"]);
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
+        Assert.DoesNotContain("net.host.name", tags.Keys);
+        Assert.DoesNotContain("net.host.port", tags.Keys);
+    }
+
+    [Fact]
+    public void SpanMetricsConnectorClientPortIsNotADimensionOnServerSpans()
+    {
+        // Requests from different client ports must aggregate into one series on the server span.
+        using var pipeline = new TestPipeline(new AlwaysOnSampler());
+        foreach (var clientPort in new[] { 50001, 50002, 50003 })
+        {
+            pipeline.Record(
+                "GET /items/{id}",
+                ActivityKind.Server,
+                activity =>
+                {
+                    activity.SetTag("http.method", "GET");
+                    activity.SetTag("http.route", "/items/{id}");
+                    activity.SetTag("net.host.name", "payments.example.com");
+                    activity.SetTag("net.host.port", 8443);
+                    activity.SetTag("net.peer.name", "client.example.com");
+                    activity.SetTag("net.peer.port", clientPort);
+                });
+        }
+
+        pipeline.Flush();
+
+        var calls = GetPoint(pipeline.Metrics, "traces.span.metrics.calls", "GET /items/{id}");
+        var tags = GetTags(calls);
+
+        Assert.Equal(3, calls.GetSumLong());
+        Assert.DoesNotContain("net.peer.name", tags.Keys);
+        Assert.DoesNotContain("net.peer.port", tags.Keys);
     }
 
     [Fact]
