@@ -321,9 +321,21 @@ internal sealed class SpanMetricsConnector : BaseProcessor<Activity>
 
         // Peer (https://opentelemetry.io/docs/specs/semconv/registry/attributes/server/)
         // server.port is an int per semconv, so it is copied through as its native long value.
-        // net.peer.* is the client-span spelling and net.host.* is the server-span spelling.
-        Copy(ref tags, activity, AttributeServerAddress, AttributeNetPeerName, AttributeNetHostName);
-        Copy(ref tags, activity, AttributeServerPort, AttributeNetPeerPort, AttributeNetHostPort);
+        // server.* always describes the server, but the legacy net.* fallback depends on span kind:
+        // net.peer.* is the remote end of the connection and net.host.* the local end. On SERVER spans
+        // the server is therefore net.host.*, while net.peer.* is the client (net.peer.port is its
+        // ephemeral port), which must never become a dimension. See the HTTP semconv migration guide:
+        // https://opentelemetry.io/docs/specs/semconv/non-normative/http-migration/
+        if (activity.Kind == ActivityKind.Server)
+        {
+            Copy(ref tags, activity, AttributeServerAddress, AttributeNetHostName);
+            Copy(ref tags, activity, AttributeServerPort, AttributeNetHostPort);
+        }
+        else
+        {
+            Copy(ref tags, activity, AttributeServerAddress, AttributeNetPeerName, AttributeNetHostName);
+            Copy(ref tags, activity, AttributeServerPort, AttributeNetPeerPort, AttributeNetHostPort);
+        }
 
         // GenAI (https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/)
         Copy(ref tags, activity, AttributeGenAiRequestModel);
