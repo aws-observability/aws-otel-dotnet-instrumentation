@@ -53,6 +53,7 @@ public class Plugin
     private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
     private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
+    private static readonly string LogsExporterConfig = "OTEL_LOGS_EXPORTER";
     private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
@@ -65,6 +66,7 @@ public class Plugin
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private static readonly string TracesProtocolEnvVarName = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL";
+    private static readonly string LogsProtocolEnvVarName = "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
@@ -387,9 +389,7 @@ public class Plugin
     }
 
     /// <summary>
-    /// To configure logs SDK. In Lambda, registers CompactConsoleLogRecordExporter for console
-    /// output and a SigV4-signed OTLP exporter (via SimpleLogRecordExportProcessor for
-    /// synchronous flush before Lambda freezes the container).
+    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
@@ -401,23 +401,17 @@ public class Plugin
 
         options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+    }
 
-        string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP log exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP log exporter options.</param>
+    public void ConfigureLogsOptions(OtlpExporterOptions options)
+    {
+        if (this.ShouldConfigureOtlpAwsExporter("logs", out _))
         {
-            var exporterOptions = new OtlpExporterOptions
-            {
-                Endpoint = new Uri(logsEndpoint),
-                Protocol = OtlpExportProtocol.HttpProtobuf,
-                Headers = System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"),
-                TimeoutMilliseconds = int.TryParse(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"), out int timeout)
-                    ? timeout
-                    : 10000,
-            };
-            var exporter = OtlpAwsLogRecordExporter.Create(exporterOptions);
-            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
-            Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
+            OtlpAwsLogRecordExporter.Configure(options);
         }
     }
 
@@ -923,6 +917,21 @@ public class Plugin
 
             isLegacyPath = isLegacySigV4TracesExporterEnabled;
             return isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
+        }
+
+        if (signal == "logs")
+        {
+            var logsExporter = System.Environment.GetEnvironmentVariable(LogsExporterConfig);
+            var logsProtocol = System.Environment.GetEnvironmentVariable(LogsProtocolEnvVarName)
+                ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+            var isHttpProtobuf = logsProtocol == null || logsProtocol == "http/protobuf";
+            var logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
+            var isCloudWatchLogsOtlpEndpoint = logsEndpoint != null
+                && new Regex(CloudWatchLogsOtlpEndpointPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).IsMatch(logsEndpoint);
+
+            return isCloudWatchLogsOtlpEndpoint
+                && isHttpProtobuf
+                && (logsExporter == null || logsExporter.Split(',').Any(exporter => exporter.Trim() == "otlp"));
         }
 
         return false;

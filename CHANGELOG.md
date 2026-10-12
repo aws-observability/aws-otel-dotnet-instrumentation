@@ -12,6 +12,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
+- Reuse the upstream OTLP log exporter for SigV4
+  ([#477](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/477)).
+
 - Reuse the upstream OTLP trace exporter for SigV4
   ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).
 

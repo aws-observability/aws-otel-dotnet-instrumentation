@@ -29,6 +29,21 @@ public static class OtlpAwsLogRecordExporter
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
     {
+        Configure(options, authenticator, transportFactory);
+        return new OtlpLogExporter(options);
+    }
+
+    /// <summary>
+    /// Adds AWS request signing to the options used to construct the upstream log exporter.
+    /// </summary>
+    /// <param name="options">The configured upstream exporter options.</param>
+    /// <param name="authenticator">The AWS authenticator, or null to use the default credential provider.</param>
+    /// <param name="transportFactory">The HTTP transport factory, or null to use the default transport.</param>
+    internal static void Configure(
+        OtlpExporterOptions options,
+        IAwsAuthenticator? authenticator = null,
+        Func<HttpMessageHandler>? transportFactory = null)
+    {
         if (options.Protocol != OtlpExportProtocol.HttpProtobuf)
         {
             throw new ArgumentException("The AWS OTLP log exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
@@ -49,6 +64,5 @@ public static class OtlpAwsLogRecordExporter
         {
             Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
         };
-        return new OtlpLogExporter(options);
     }
 }
