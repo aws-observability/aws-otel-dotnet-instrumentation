@@ -155,9 +155,11 @@ jobs:
   #
   default-v8:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@codebuild-runner-input
     secrets: inherit
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
@@ -165,7 +167,7 @@ jobs:
 
   default-v9:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       aws-region: us-east-1
@@ -175,7 +177,7 @@ jobs:
 
   default-v10:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       aws-region: us-east-1
@@ -185,16 +187,18 @@ jobs:
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@codebuild-runner-input
     secrets: inherit
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-windows-image-name }}
 
   dotnet-ec2-adot-sigv4-test:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-adot-sigv4-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-adot-sigv4-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       caller-workflow-name: 'main-build'
@@ -202,7 +206,7 @@ jobs:
   
   dotnet-asg-linux-test:
     needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-asg-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-asg-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       aws-region: us-east-1
@@ -211,9 +215,11 @@ jobs:
 
   dotnet-eks-linux-test:
     needs: [ upload-main-build, upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@codebuild-runner-input
     secrets: inherit
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-adot-test'
@@ -221,7 +227,7 @@ jobs:
 
   dotnet-eks-windows-test:
     needs: [ upload-main-build, upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
@@ -231,9 +237,11 @@ jobs:
 
   dotnet-k8s-test:
     needs: [ upload-main-build, upload-main-build-image ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-k8s-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-k8s-test.yml@codebuild-runner-input
     secrets: inherit
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
@@ -249,7 +257,7 @@ jobs:
   # cluster, or once the framework's namespace cleanup is scoped to its own run.
   dotnet-eks-service-events-test:
     needs: [ upload-main-build-image, dotnet-eks-linux-test ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-service-events-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-service-events-test.yml@codebuild-runner-input
     secrets: inherit
     with:
       aws-region: us-east-1
@@ -308,9 +316,11 @@ jobs:
       fail-fast: false
       matrix:
         runtime: [ dotnet8, dotnet10 ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@codebuild-runner-input
     secrets: inherit
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       runtime: ${{ matrix.runtime }}
       caller-workflow-name: 'main-build'
@@ -329,8 +339,10 @@ jobs:
   # - Update the `validate-e2e-tests-are-accounted-for` job to change which "workflow files are expected to be used by this repo"
   #   (see: https://github.com/aws-observability/aws-application-signals-test-framework/blob/main/.github/workflows/validate-e2e-tests-are-accounted-for.yml)
   validate-all-tests-are-accounted-for:
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@main
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@codebuild-runner-input
     with:
+      # TEMP test: run this E2E job on CodeBuild
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       # dotnet-ec2-service-events-test.yml is temporarily excluded: the test framework added this
       # .NET EC2 service-events e2e test, but it is not yet wired into this workflow. Remove this
       # exclusion once the corresponding job is added here.
