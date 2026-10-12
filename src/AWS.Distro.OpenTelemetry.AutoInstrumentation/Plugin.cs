@@ -52,9 +52,6 @@ public class Plugin
     private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
     private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
-    private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
-    private static readonly string LogsExporterConfig = "OTEL_LOGS_EXPORTER";
-    private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
 #pragma warning restore CS0436 // Type conflicts with imported type
@@ -65,8 +62,6 @@ public class Plugin
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
-    private static readonly string TracesProtocolEnvVarName = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL";
-    private static readonly string LogsProtocolEnvVarName = "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
@@ -97,6 +92,13 @@ public class Plugin
         };
 
     private Sampler? sampler;
+
+    private enum OtlpSignal
+    {
+        Traces,
+        Logs,
+        Metrics,
+    }
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -212,7 +214,7 @@ public class Plugin
 
         var tracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
         if (tracesEndpoint != null
-            && this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath)
+            && this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath)
             && isLegacyPath)
         {
             var options = new OtlpExporterOptions
@@ -237,7 +239,7 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP trace exporter options.</param>
     public void ConfigureTracesOptions(OtlpExporterOptions options)
     {
-        if (this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath))
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath))
         {
             if (isLegacyPath)
             {
@@ -409,7 +411,7 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        if (this.ShouldConfigureOtlpAwsExporter("logs", out _))
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
         {
             OtlpAwsLogRecordExporter.Configure(options);
         }
@@ -896,50 +898,47 @@ public class Plugin
         return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 
-    private bool ShouldConfigureOtlpAwsExporter(string signal, out bool isLegacyPath)
+    private bool ShouldConfigureOtlpAwsExporter(OtlpSignal signal, out bool isLegacyPath)
     {
-        isLegacyPath = false;
-        if (signal == "traces")
+        var signalName = signal.ToString().ToUpperInvariant();
+        var exporter = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
+        var protocol = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_PROTOCOL")
+            ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+        var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
+        var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
+        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
+        var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
+        if (signal == OtlpSignal.Traces)
         {
-            var tracesExporter = System.Environment.GetEnvironmentVariable(TracesExporterConfig);
-            var tracesProtocol = System.Environment.GetEnvironmentVariable(TracesProtocolEnvVarName)
-                ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
-            var isHttpProtobuf = tracesProtocol == null || tracesProtocol == "http/protobuf";
-            var isXRayOtlpEndpoint = this.IsXRayOtlpEndpoint(
-                System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig));
-            var isLegacySigV4TracesExporterEnabled = tracesExporter == "none"
+            var isXRayOtlpEndpoint = endpoint != null
+                && new Regex(XRayOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+            var isLegacySigV4TracesExporterEnabled = exporter == "none"
                 && System.Environment.GetEnvironmentVariable(SigV4EnabledConfig) == "true"
                 && isXRayOtlpEndpoint
                 && isHttpProtobuf;
             var isSigV4TracesExporterEnabled = isXRayOtlpEndpoint
                 && isHttpProtobuf
-                && (tracesExporter == null || tracesExporter.Split(',').Any(exporter => exporter.Trim() == "otlp"));
+                && isOtlpExporterEnabled;
 
             isLegacyPath = isLegacySigV4TracesExporterEnabled;
             return isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
         }
 
-        if (signal == "logs")
+        if (signal == OtlpSignal.Logs)
         {
-            var logsExporter = System.Environment.GetEnvironmentVariable(LogsExporterConfig);
-            var logsProtocol = System.Environment.GetEnvironmentVariable(LogsProtocolEnvVarName)
-                ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
-            var isHttpProtobuf = logsProtocol == null || logsProtocol == "http/protobuf";
-            var logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-            var isCloudWatchLogsOtlpEndpoint = logsEndpoint != null
-                && new Regex(CloudWatchLogsOtlpEndpointPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).IsMatch(logsEndpoint);
+            var isCloudWatchLogsOtlpEndpoint = endpoint != null
+                && new Regex(CloudWatchLogsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
 
+            isLegacyPath = false;
             return isCloudWatchLogsOtlpEndpoint
                 && isHttpProtobuf
-                && (logsExporter == null || logsExporter.Split(',').Any(exporter => exporter.Trim() == "otlp"));
+                && isOtlpExporterEnabled;
         }
 
+        isLegacyPath = false;
         return false;
     }
-
-    private bool IsXRayOtlpEndpoint(string? endpoint)
-        => endpoint != null
-            && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).IsMatch(endpoint);
 
     private string GetFallbackServiceName()
     {
