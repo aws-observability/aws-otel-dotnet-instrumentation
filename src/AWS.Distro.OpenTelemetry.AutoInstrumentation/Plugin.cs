@@ -21,6 +21,7 @@ using OpenTelemetry.Instrumentation.AspNet;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Metrics;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
@@ -51,6 +52,7 @@ public class Plugin
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
     private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
     private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
+    private static readonly string CloudWatchMetricsOtlpEndpointPattern = "^https://monitoring\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/metrics$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
@@ -354,6 +356,18 @@ public class Plugin
 #endif
 
         return builder;
+    }
+
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP metric exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP metric exporter options.</param>
+    public void ConfigureMetricsOptions(OtlpExporterOptions options)
+    {
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Metrics, out _))
+        {
+            OtlpAwsMetricExporter.Configure(options);
+        }
     }
 
     /// <summary>
@@ -940,6 +954,17 @@ public class Plugin
 
             isLegacyPath = false;
             return isCloudWatchLogsOtlpEndpoint
+                && isHttpProtobuf
+                && isOtlpExporterEnabled;
+        }
+
+        if (signal == OtlpSignal.Metrics)
+        {
+            var isCloudWatchMetricsOtlpEndpoint = endpoint != null
+                && new Regex(CloudWatchMetricsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+
+            isLegacyPath = false;
+            return isCloudWatchMetricsOtlpEndpoint
                 && isHttpProtobuf
                 && isOtlpExporterEnabled;
         }

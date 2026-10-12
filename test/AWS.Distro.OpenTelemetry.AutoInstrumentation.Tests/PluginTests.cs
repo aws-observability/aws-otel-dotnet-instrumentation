@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
@@ -619,6 +620,237 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         environment["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = null;
         environment["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = null;
         environment["OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"] = null;
+        environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
+        return environment;
+    }
+}
+
+/// <summary>
+/// Validates SigV4 metric exporter customization and preservation of upstream metric reader settings.
+/// </summary>
+[Collection("AWS credential providers")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+public class OtlpAwsMetricExporterConfigurationTests : PluginTests
+{
+    private const string CloudWatchMetricsEndpoint = "https://monitoring.us-east-1.amazonaws.com/v1/metrics";
+    private static readonly Uri Endpoint = new(CloudWatchMetricsEndpoint);
+
+    public OtlpAwsMetricExporterConfigurationTests()
+        : base(CreateEnvironment())
+    {
+    }
+
+    public static IEnumerable<object[]> ValidSigV4MetricsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            CloudWatchMetricsEndpoint,
+            "https://MONITORING.US-EAST-1.AMAZONAWS.COM/V1/METRICS",
+            "https://MONITORING.US-EAST-1.amazonaws.com/v1/metrics",
+            "https://monitoring.US-EAST-1.AMAZONAWS.com/v1/metrics",
+            "https://Monitoring.Us-East-1.amazonaws.com/v1/metrics",
+            "https://MoNiToRiNg.Us-EaSt-1.AmAzOnAwS.cOm/V1/MeTrIcS",
+        })
+        {
+            yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
+        }
+
+        foreach (var exporter in new string?[] { null, "otlp,console" })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_METRICS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Metrics, string? Global)[]
+        {
+            ("http/protobuf", null),
+            (null, "http/protobuf"),
+            ("http/protobuf", "grpc"),
+        })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = protocols.Metrics;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+    }
+
+    public static IEnumerable<object[]> InvalidSigV4MetricsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            "http://localhost:4318/v1/metrics",
+            "http://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "ftp://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https://metric.us-east-1.amazonaws.com/v1/metrics",
+            "https://metrics.us-east-1.amazonaws.com/v1/metrics",
+            "https://cloud-metrics.us-east-1.amazonaws.com/v1/metrics",
+            "https://monitoring.amazonaws.com/v1/metrics",
+            "https://monitoring.us-east-1.amazon.com/v1/metrics",
+            "https://monitoring.us-east-1.aws.com/v1/metrics",
+            "https://monitoring.us_east_1.amazonaws.com/v1/metrics",
+            "https://monitoring.us.east.1.amazonaws.com/v1/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v2/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metric",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics/",
+            "https://monitoring.us-east-1.amazonaws.com//v1/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1//metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics?param=value",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics#fragment",
+            "https://monitoring.us-east-1.amazonaws.com:443/v1/metrics",
+            "https:/monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https:://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https://xray.us-east-1.amazonaws.com/v1/traces",
+            "https://logs.us-east-1.amazonaws.com/v1/logs",
+        })
+        {
+            yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
+        }
+
+        foreach (var exporter in new[] { "console", "none", "prometheus" })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_METRICS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Metrics, string? Global)[]
+        {
+            ("grpc", null),
+            (null, "grpc"),
+            ("grpc", "http/protobuf"),
+            ("http/json", null),
+        })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = protocols.Metrics;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+
+        yield return new object[] { CreateSigV4MetricsConfig(null) };
+    }
+
+    [Theory]
+    [MemberData(nameof(ValidSigV4MetricsConfigs))]
+    public void ShouldEnableSigV4MetricExporterIfConfigIsCorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: true);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidSigV4MetricsConfigs))]
+    public void ShouldNotUseSigV4MetricExporterIfConfigIsIncorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: false);
+    }
+
+    [Theory]
+    [InlineData(MetricReaderTemporalityPreference.Cumulative)]
+    [InlineData(MetricReaderTemporalityPreference.Delta)]
+    public void ShouldPreserveUpstreamMetricAndReaderSettings(MetricReaderTemporalityPreference temporality)
+    {
+        var plugin = new Plugin();
+        var clientCount = 0;
+        OtlpExporterOptions? configuredOptions = null;
+        MetricReaderOptions? configuredReaderOptions = null;
+        PeriodicExportingMetricReaderOptions? periodicReaderOptions = null;
+
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_HEADERS", "x-environment-header=environment-value");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT", "5432");
+        using var provider = Sdk.CreateMeterProviderBuilder()
+            .AddOtlpExporter((exporterOptions, readerOptions) =>
+            {
+                exporterOptions.Endpoint = Endpoint;
+                exporterOptions.Protocol = OtlpExportProtocol.HttpProtobuf;
+                exporterOptions.Headers = "x-metric-header=metric-value";
+                exporterOptions.TimeoutMilliseconds = 4321;
+                exporterOptions.Compression = OtlpExportCompression.GZip;
+                readerOptions.TemporalityPreference = temporality;
+                readerOptions.PeriodicExportingMetricReaderOptions = new PeriodicExportingMetricReaderOptions
+                {
+                    ExportIntervalMilliseconds = 12345,
+                    ExportTimeoutMilliseconds = 6789,
+                };
+                periodicReaderOptions = readerOptions.PeriodicExportingMetricReaderOptions;
+                var originalFactory = exporterOptions.HttpClientFactory;
+
+                plugin.ConfigureMetricsOptions(exporterOptions);
+
+                Assert.NotSame(originalFactory, exporterOptions.HttpClientFactory);
+                var signingFactory = exporterOptions.HttpClientFactory;
+                exporterOptions.HttpClientFactory = () =>
+                {
+                    clientCount++;
+                    var client = signingFactory();
+                    Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
+                    return client;
+                };
+                configuredOptions = exporterOptions;
+                configuredReaderOptions = readerOptions;
+            })
+            .Build();
+
+        Assert.NotNull(configuredOptions);
+        Assert.Equal(Endpoint, configuredOptions.Endpoint);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, configuredOptions.Protocol);
+        Assert.Equal("x-metric-header=metric-value", configuredOptions.Headers);
+        Assert.Equal(4321, configuredOptions.TimeoutMilliseconds);
+        Assert.Equal(OtlpExportCompression.GZip, configuredOptions.Compression);
+        Assert.NotNull(configuredReaderOptions);
+        Assert.Equal(temporality, configuredReaderOptions.TemporalityPreference);
+        Assert.Same(periodicReaderOptions, configuredReaderOptions.PeriodicExportingMetricReaderOptions);
+        Assert.NotNull(periodicReaderOptions);
+        Assert.Equal(12345, periodicReaderOptions.ExportIntervalMilliseconds);
+        Assert.Equal(6789, periodicReaderOptions.ExportTimeoutMilliseconds);
+        Assert.Equal(1, clientCount);
+        Assert.Equal("otlp", Environment.GetEnvironmentVariable("OTEL_METRICS_EXPORTER"));
+        Assert.Equal("x-environment-header=environment-value", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_HEADERS"));
+        Assert.Equal("5432", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"));
+    }
+
+    [Theory]
+    [InlineData(OtlpExportProtocol.Grpc)]
+    [InlineData((OtlpExportProtocol)byte.MaxValue)]
+    public void ShouldThrowIfMetricExporterProtocolIsIncorrect(OtlpExportProtocol protocol)
+    {
+        var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
+        var originalFactory = options.HttpClientFactory;
+
+        Assert.Throws<ArgumentException>(() => new Plugin().ConfigureMetricsOptions(options));
+
+        Assert.Equal(protocol, options.Protocol);
+        Assert.Same(originalFactory, options.HttpClientFactory);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("false")]
+    [InlineData("true")]
+    public void ShouldSignCloudWatchMetricsExportsBasedOnTheEndpoint(string? sigV4Enabled)
+    {
+        var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+        config["OTEL_AWS_SIG_V4_ENABLED"] = sigV4Enabled;
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: true);
+    }
+
+    private static Dictionary<string, string?> CreateSigV4MetricsConfig(string? endpoint) => new()
+    {
+        ["OTEL_AWS_SIG_V4_ENABLED"] = null,
+        ["OTEL_METRICS_EXPORTER"] = "otlp",
+        ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = endpoint,
+    };
+
+    private static Dictionary<string, string?> CreateEnvironment()
+    {
+        var environment = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+        environment["OTEL_EXPORTER_OTLP_ENDPOINT"] = null;
+        environment["OTEL_EXPORTER_OTLP_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"] = null;
         environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
         return environment;
     }
