@@ -26,18 +26,36 @@ runs:
           Add-Content $env:GITHUB_PATH "$env:ProgramFiles\Git\bin"
         }
 
+    # Downloaded directly from GitHub releases (pinned) rather than via Chocolatey, whose community feed
+    # can stall the job indefinitely. Each download has a timeout and retries.
     - name: Install missing Windows CLIs
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        GH_VERSION: '2.102.0'
+        JQ_VERSION: '1.8.2'
       run: |
-        $missing = @('gh', 'jq') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
-        if ($missing) {
-          choco install @missing -y --no-progress
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          # Chocolatey updates the machine PATH, which this runner process does not reload.
-          foreach ($dir in "$env:ProgramFiles\GitHub CLI", "$env:ProgramData\chocolatey\bin") {
-            if (Test-Path $dir) { Add-Content $env:GITHUB_PATH $dir }
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+        function Get-WithRetry([string]$Url, [string]$OutFile) {
+          for ($i = 1; $i -le 3; $i++) {
+            try { Invoke-WebRequest -Uri $Url -OutFile $OutFile -TimeoutSec 120 -UseBasicParsing; return }
+            catch { if ($i -eq 3) { throw }; Write-Host "Download failed (attempt $i): $_"; Start-Sleep -Seconds (10 * $i) }
           }
+        }
+        $tools = Join-Path $env:RUNNER_TOOL_CACHE 'codebuild-runner-setup'
+        New-Item -ItemType Directory -Force -Path $tools | Out-Null
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+          $zip = Join-Path $env:RUNNER_TEMP 'gh.zip'
+          Get-WithRetry "https://github.com/cli/cli/releases/download/v$env:GH_VERSION/gh_$($env:GH_VERSION)_windows_amd64.zip" $zip
+          Expand-Archive -Path $zip -DestinationPath (Join-Path $tools 'gh') -Force
+          Add-Content $env:GITHUB_PATH (Join-Path $tools 'gh\bin')
+        }
+        if (-not (Get-Command jq -ErrorAction SilentlyContinue)) {
+          $jqDir = Join-Path $tools 'jq'
+          New-Item -ItemType Directory -Force -Path $jqDir | Out-Null
+          Get-WithRetry "https://github.com/jqlang/jq/releases/download/jq-$env:JQ_VERSION/jq-windows-amd64.exe" (Join-Path $jqDir 'jq.exe')
+          Add-Content $env:GITHUB_PATH $jqDir
         }
 
     - name: Install missing Linux CLIs
