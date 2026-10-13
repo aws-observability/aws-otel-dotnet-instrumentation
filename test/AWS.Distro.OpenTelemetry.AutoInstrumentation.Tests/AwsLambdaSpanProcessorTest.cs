@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
-using System.Reflection;
 using Amazon.Lambda.Core;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -99,20 +98,8 @@ public class AwsLambdaSpanProcessorTest
     public async Task FlushesLogsFromTheExistingLambdaStopPath(bool sampled)
     {
         using var logProcessor = new FlushRecordingProcessor();
-        using var otherLogProcessor = new FlushRecordingProcessor();
-        var processorsField = typeof(AwsLambdaSpanProcessor).GetField("LogRecordProcessors", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var processors = (List<WeakReference<BaseProcessor<LogRecord>>>)processorsField.GetValue(null)!;
-        var deadProcessor = new WeakReference<BaseProcessor<LogRecord>>(null!);
-        WeakReference<BaseProcessor<LogRecord>>[] originalProcessors;
-        lock (processors)
-        {
-            originalProcessors = processors.ToArray();
-            processors.Clear();
-            processors.Add(new WeakReference<BaseProcessor<LogRecord>>(otherLogProcessor));
-            processors.Add(new WeakReference<BaseProcessor<LogRecord>>(logProcessor));
-            processors.Add(new WeakReference<BaseProcessor<LogRecord>>(logProcessor));
-            processors.Add(deadProcessor);
-        }
+        var originalProcessor = AwsLambdaSpanProcessor.LogRecordProcessor;
+        AwsLambdaSpanProcessor.LogRecordProcessor = logProcessor;
 
         try
         {
@@ -122,7 +109,6 @@ public class AwsLambdaSpanProcessorTest
                 .AddProcessor(new AwsLambdaSpanProcessor())
                 .Build();
             using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options => options.AddProcessor(logProcessor)));
-            using var otherFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options => options.AddProcessor(otherLogProcessor)));
             var context = Mock.Of<ILambdaContext>(value =>
                 value.FunctionName == "test-function" &&
                 value.InvokedFunctionArn == "arn:aws:lambda:us-east-1:123456789012:function:test-function");
@@ -131,10 +117,7 @@ public class AwsLambdaSpanProcessorTest
             // A first invocation without logging must not construct a logger provider.
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
             Assert.Null(logProcessor.ParentProvider);
-            Assert.Null(otherLogProcessor.ParentProvider);
             Assert.Equal(0, logProcessor.FlushCount);
-            Assert.Equal(0, otherLogProcessor.FlushCount);
-            Assert.DoesNotContain(deadProcessor, processors);
 
             // Logging can initialize during the handler, before the existing OnFunctionStop runs.
             var actualResult = await AWSLambdaWrapper.TraceAsync(
@@ -142,7 +125,6 @@ public class AwsLambdaSpanProcessorTest
                 async (_, _) =>
                 {
                     factory.CreateLogger("Lambda.Flush.Tests").LogInformation("last invocation log");
-                    otherFactory.CreateLogger("Lambda.Flush.Other").LogInformation("another invocation log");
                     await Task.Yield();
                     return expectedResult;
                 },
@@ -150,16 +132,11 @@ public class AwsLambdaSpanProcessorTest
                 context);
             Assert.Equal(expectedResult, actualResult);
             Assert.Equal(1, logProcessor.FlushCount);
-            Assert.Equal(1, otherLogProcessor.FlushCount);
             Assert.Equal(0, logProcessor.TimeoutMilliseconds);
-            Assert.Equal(0, otherLogProcessor.TimeoutMilliseconds);
-            Assert.Contains(AwsLambdaSpanProcessor.GetLoggerProviders(), provider => ReferenceEquals(provider, logProcessor.ParentProvider));
-            Assert.Contains(AwsLambdaSpanProcessor.GetLoggerProviders(), provider => ReferenceEquals(provider, otherLogProcessor.ParentProvider));
 
             Assert.Equal(expectedResult, AWSLambdaWrapper.Trace(
                 tracerProvider, (_, _) => expectedResult, "input", context));
             Assert.Equal(2, logProcessor.FlushCount);
-            Assert.Equal(2, otherLogProcessor.FlushCount);
 
             // A false logger flush result must not fail the original tracing flush.
             Assert.True(tracerProvider.ForceFlush());
@@ -171,30 +148,18 @@ public class AwsLambdaSpanProcessorTest
                 tracerProvider, (_, _) => Task.FromException<string>(expectedException), "input", context));
             Assert.Same(expectedException, actualException);
             Assert.Equal(5, logProcessor.FlushCount);
-            Assert.Equal(5, otherLogProcessor.FlushCount);
             Assert.Equal(0, logProcessor.TimeoutMilliseconds);
-            Assert.Equal(0, otherLogProcessor.TimeoutMilliseconds);
 
             factory.Dispose();
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
             Assert.Equal(5, logProcessor.FlushCount);
-            Assert.Equal(6, otherLogProcessor.FlushCount);
 
-            lock (processors)
-            {
-                processors.Clear();
-            }
-
+            AwsLambdaSpanProcessor.LogRecordProcessor = null;
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
-            Assert.Equal(6, otherLogProcessor.FlushCount);
         }
         finally
         {
-            lock (processors)
-            {
-                processors.Clear();
-                processors.AddRange(originalProcessors);
-            }
+            AwsLambdaSpanProcessor.LogRecordProcessor = originalProcessor;
         }
     }
 
