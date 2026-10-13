@@ -134,16 +134,15 @@ public class AwsLambdaSpanProcessorTest
                 context);
             Assert.Equal(expectedResult, actualResult);
             Assert.Equal(1, logProcessor.FlushCount);
-            Assert.Equal(Timeout.Infinite, logProcessor.TimeoutMilliseconds);
+            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
 
             Assert.Equal(expectedResult, AWSLambdaWrapper.Trace(
                 tracerProvider, (_, _) => expectedResult, "input", context));
             Assert.Equal(2, logProcessor.FlushCount);
 
             // A false logger flush result must not fail the original tracing flush.
-            const int flushTimeoutMilliseconds = 250;
-            Assert.True(tracerProvider.ForceFlush(flushTimeoutMilliseconds));
-            Assert.Equal(flushTimeoutMilliseconds, logProcessor.TimeoutMilliseconds);
+            Assert.True(tracerProvider.ForceFlush());
+            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
             logProcessor.ThrowOnFlush = true;
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
             var expectedException = new InvalidOperationException("handler failed");
@@ -151,7 +150,7 @@ public class AwsLambdaSpanProcessorTest
                 tracerProvider, (_, _) => Task.FromException<string>(expectedException), "input", context));
             Assert.Same(expectedException, actualException);
             Assert.Equal(5, logProcessor.FlushCount);
-            Assert.Equal(Timeout.Infinite, logProcessor.TimeoutMilliseconds);
+            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
 
             factory.Dispose();
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));

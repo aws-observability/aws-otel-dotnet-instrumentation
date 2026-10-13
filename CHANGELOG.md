@@ -12,8 +12,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Flush the application's logger provider when Lambda invocations complete, using
-  tracing's flush timeout, which defaults to waiting indefinitely
+- Request a flush of the application's logger provider when Lambda invocations complete,
+  using a zero timeout to avoid waiting for batch export completion
   ([#478](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/478)).
 
 - Reuse the upstream OTLP trace exporter for SigV4
