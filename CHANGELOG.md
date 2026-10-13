@@ -12,8 +12,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Request a flush of the application's logger provider when Lambda invocations complete,
-  using a zero timeout to avoid waiting for batch export completion
+- Request flushes of existing OpenTelemetry logger providers when Lambda invocations
+  complete, including ILogger and enabled NLog/log4net bridges. Use a zero timeout to
+  avoid waiting for batch export completion
   ([#478](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/478)).
 
 - Reuse the upstream OTLP trace exporter for SigV4
