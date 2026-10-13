@@ -16,9 +16,14 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
     private Activity? lambdaActivity;
 
     /// <summary>
-    /// Gets or sets an existing processor owned by the application's logger provider.
+    /// Gets or sets the no-op processor registered with the application's logger provider.
     /// </summary>
-    internal static BaseProcessor<LogRecord>? LogRecordProcessor { get; set; }
+    internal static NoOpLogRecordProcessor? LogRecordProcessor { get; set; }
+
+    /// <summary>
+    /// Gets the logger provider assigned to the no-op processor by the SDK.
+    /// </summary>
+    internal static LoggerProvider? LoggerProvider => LogRecordProcessor?.ParentProvider as LoggerProvider;
 
     /// <summary>
     /// OnStart caches a reference to the lambda activity if it exists and adds
@@ -54,7 +59,7 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
         {
             // AWSLambdaWrapper.OnFunctionStop flushes tracing, which invokes this processor.
             // Zero requests a batch export without waiting for completion or confirming delivery.
-            (LogRecordProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(0);
+            LoggerProvider?.ForceFlush(0);
         }
         catch (Exception)
         {
@@ -62,5 +67,12 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
         }
 
         return base.OnForceFlush(timeoutMilliseconds);
+    }
+
+    /// <summary>
+    /// No-op log processor used to access its SDK-assigned logger provider.
+    /// </summary>
+    internal sealed class NoOpLogRecordProcessor : BaseProcessor<LogRecord>
+    {
     }
 }

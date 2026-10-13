@@ -398,12 +398,11 @@ public class Plugin
             return;
         }
 
-        var processor = new global::OpenTelemetry.SimpleLogRecordExportProcessor(
-            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter());
+        var processor = new AwsLambdaSpanProcessor.NoOpLogRecordProcessor();
         options.AddProcessor(processor);
-        // TODO: Revisit provider capture with the SigV4 logs refactor (#477).
-        // If this console processor is removed, replace this reference to preserve Lambda log flushing.
         AwsLambdaSpanProcessor.LogRecordProcessor ??= processor;
+        options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
+            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
 
         string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
         if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(

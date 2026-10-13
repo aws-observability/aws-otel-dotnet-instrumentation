@@ -5,6 +5,7 @@ using System.Diagnostics;
 using Amazon.Lambda.Core;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Moq.Protected;
 using OpenTelemetry;
 using OpenTelemetry.Instrumentation.AWSLambda;
 using OpenTelemetry.Logs;
@@ -97,9 +98,12 @@ public class AwsLambdaSpanProcessorTest
     [InlineData(true)]
     public async Task FlushesLogsFromTheExistingLambdaStopPath(bool sampled)
     {
-        using var logProcessor = new FlushRecordingProcessor();
+        var logProcessorMock = new Mock<BaseProcessor<LogRecord>> { CallBase = true };
+        logProcessorMock.Protected().Setup<bool>("OnForceFlush", ItExpr.IsAny<int>()).Returns(false);
+        using var logProcessor = logProcessorMock.Object;
+        using var noOpProcessor = new AwsLambdaSpanProcessor.NoOpLogRecordProcessor();
         var originalProcessor = AwsLambdaSpanProcessor.LogRecordProcessor;
-        AwsLambdaSpanProcessor.LogRecordProcessor = logProcessor;
+        AwsLambdaSpanProcessor.LogRecordProcessor = noOpProcessor;
 
         try
         {
@@ -108,7 +112,9 @@ public class AwsLambdaSpanProcessorTest
                 .SetSampler(sampled ? new AlwaysOnSampler() : new AlwaysOffSampler())
                 .AddProcessor(new AwsLambdaSpanProcessor())
                 .Build();
-            using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options => options.AddProcessor(logProcessor)));
+            using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options => options
+                .AddProcessor(noOpProcessor)
+                .AddProcessor(logProcessor)));
             var context = Mock.Of<ILambdaContext>(value =>
                 value.FunctionName == "test-function" &&
                 value.InvokedFunctionArn == "arn:aws:lambda:us-east-1:123456789012:function:test-function");
@@ -117,65 +123,53 @@ public class AwsLambdaSpanProcessorTest
             // A first invocation without logging must not construct a logger provider.
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
             Assert.Null(logProcessor.ParentProvider);
-            Assert.Equal(0, logProcessor.FlushCount);
+            Assert.Null(AwsLambdaSpanProcessor.LoggerProvider);
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Never(), ItExpr.IsAny<int>());
 
             // Logging can initialize during the handler, before the existing OnFunctionStop runs.
             var actualResult = await AWSLambdaWrapper.TraceAsync(
                 tracerProvider,
                 async (_, _) =>
                 {
-                    factory.CreateLogger("Lambda.Flush.Tests").LogInformation("last invocation log");
+                    var logger = factory.CreateLogger("Lambda.Flush.Tests");
+                    Assert.IsAssignableFrom<LoggerProvider>(AwsLambdaSpanProcessor.LoggerProvider);
+                    Assert.Same(logProcessor.ParentProvider, AwsLambdaSpanProcessor.LoggerProvider);
+                    logger.LogInformation("last invocation log");
                     await Task.Yield();
                     return expectedResult;
                 },
                 "input",
                 context);
             Assert.Equal(expectedResult, actualResult);
-            Assert.Equal(1, logProcessor.FlushCount);
-            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Once(), ItExpr.Is<int>(timeout => timeout == 0));
 
             Assert.Equal(expectedResult, AWSLambdaWrapper.Trace(
                 tracerProvider, (_, _) => expectedResult, "input", context));
-            Assert.Equal(2, logProcessor.FlushCount);
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Exactly(2), ItExpr.Is<int>(timeout => timeout == 0));
 
             // A false logger flush result must not fail the original tracing flush.
             Assert.True(tracerProvider.ForceFlush());
-            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
-            logProcessor.ThrowOnFlush = true;
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Exactly(3), ItExpr.Is<int>(timeout => timeout == 0));
+            logProcessorMock.Protected().Setup<bool>("OnForceFlush", ItExpr.IsAny<int>())
+                .Throws(new InvalidOperationException("flush failed"));
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
             var expectedException = new InvalidOperationException("handler failed");
             var actualException = await Assert.ThrowsAsync<InvalidOperationException>(() => AWSLambdaWrapper.TraceAsync(
                 tracerProvider, (_, _) => Task.FromException<string>(expectedException), "input", context));
             Assert.Same(expectedException, actualException);
-            Assert.Equal(5, logProcessor.FlushCount);
-            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Exactly(5), ItExpr.Is<int>(timeout => timeout == 0));
 
             factory.Dispose();
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
-            Assert.Equal(5, logProcessor.FlushCount);
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Exactly(5), ItExpr.Is<int>(timeout => timeout == 0));
 
             AwsLambdaSpanProcessor.LogRecordProcessor = null;
             Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
+            logProcessorMock.Protected().Verify("OnForceFlush", Times.Exactly(5), ItExpr.Is<int>(timeout => timeout == 0));
         }
         finally
         {
             AwsLambdaSpanProcessor.LogRecordProcessor = originalProcessor;
-        }
-    }
-
-    private sealed class FlushRecordingProcessor : BaseProcessor<LogRecord>
-    {
-        public bool ThrowOnFlush { get; set; }
-
-        public int FlushCount { get; private set; }
-
-        public int TimeoutMilliseconds { get; private set; }
-
-        protected override bool OnForceFlush(int timeoutMilliseconds)
-        {
-            this.FlushCount++;
-            this.TimeoutMilliseconds = timeoutMilliseconds;
-            return this.ThrowOnFlush ? throw new InvalidOperationException("flush failed") : false;
         }
     }
 }
