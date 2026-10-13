@@ -50,7 +50,7 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
         {
             // AWSLambdaWrapper.OnFunctionStop flushes tracing, which invokes this processor.
             // Use the tracing flush timeout for the application's logger provider.
-            (Plugin.LogProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(timeoutMilliseconds);
+            (Plugin.LogRecordProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(timeoutMilliseconds);
         }
         catch (Exception)
         {

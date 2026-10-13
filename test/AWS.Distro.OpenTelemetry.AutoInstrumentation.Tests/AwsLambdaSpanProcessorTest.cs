@@ -99,7 +99,7 @@ public class AwsLambdaSpanProcessorTest
     public async Task FlushesLogsFromTheExistingLambdaStopPath(bool sampled)
     {
         using var logProcessor = new FlushRecordingProcessor();
-        var processorProperty = typeof(Plugin).GetProperty("LogProcessor", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var processorProperty = typeof(Plugin).GetProperty("LogRecordProcessor", BindingFlags.NonPublic | BindingFlags.Static)!;
         var originalProcessor = processorProperty.GetValue(null);
         processorProperty.SetValue(null, logProcessor);
 
