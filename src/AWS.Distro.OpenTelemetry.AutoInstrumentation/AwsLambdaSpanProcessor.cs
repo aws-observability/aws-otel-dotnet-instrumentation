@@ -49,8 +49,8 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
         try
         {
             // AWSLambdaWrapper.OnFunctionStop flushes tracing, which invokes this processor.
-            // Zero signals the SDK batch log worker without waiting or confirming delivery.
-            (Plugin.LogProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(0);
+            // Use the tracing flush timeout for the application's logger provider.
+            (Plugin.LogProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(timeoutMilliseconds);
         }
         catch (Exception)
         {
