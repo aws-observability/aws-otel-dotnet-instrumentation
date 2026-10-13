@@ -3,8 +3,13 @@
 
 using System.Diagnostics;
 using System.Reflection;
+using Amazon.Lambda.Core;
+using Microsoft.Extensions.Logging;
 using Moq;
 using OpenTelemetry;
+using OpenTelemetry.Instrumentation.AWSLambda;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Trace;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
@@ -13,6 +18,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 /// AwsBatchUnsampledSpanExportProcessor test class
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+[Collection("AWS credential providers")]
 public class AwsLambdaSpanProcessorTest
 {
     private ActivitySource lambdaActivitySource = new ActivitySource("OpenTelemetry.Instrumentation.AWSLambda");
@@ -85,5 +91,92 @@ public class AwsLambdaSpanProcessorTest
         processor.Shutdown();
 
         Assert.Null(lambdaActivity.GetTagItem(AttributeAWSTraceLambdaFlagMultipleServer));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FlushesLogsFromTheExistingLambdaStopPath(bool sampled)
+    {
+        using var logProcessor = new FlushRecordingProcessor();
+        var processorProperty = typeof(Plugin).GetProperty("LogProcessor", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var originalProcessor = processorProperty.GetValue(null);
+        processorProperty.SetValue(null, logProcessor);
+
+        try
+        {
+            using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                .AddAWSLambdaConfigurations()
+                .SetSampler(sampled ? new AlwaysOnSampler() : new AlwaysOffSampler())
+                .AddProcessor(new AwsLambdaSpanProcessor())
+                .Build();
+            using var factory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options => options.AddProcessor(logProcessor)));
+            var context = Mock.Of<ILambdaContext>(value =>
+                value.FunctionName == "test-function" &&
+                value.InvokedFunctionArn == "arn:aws:lambda:us-east-1:123456789012:function:test-function");
+            const string expectedResult = "handler result";
+
+            // A first invocation without logging must not construct a logger provider.
+            Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
+            Assert.Null(logProcessor.ParentProvider);
+            Assert.Equal(0, logProcessor.FlushCount);
+
+            // Logging can initialize during the handler, before the existing OnFunctionStop runs.
+            var actualResult = await AWSLambdaWrapper.TraceAsync(
+                tracerProvider,
+                async (_, _) =>
+                {
+                    factory.CreateLogger("Lambda.Flush.Tests").LogInformation("last invocation log");
+                    await Task.Yield();
+                    return expectedResult;
+                },
+                "input",
+                context);
+            Assert.Equal(expectedResult, actualResult);
+            Assert.Equal(1, logProcessor.FlushCount);
+            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
+
+            Assert.Equal(expectedResult, AWSLambdaWrapper.Trace(
+                tracerProvider, (_, _) => expectedResult, "input", context));
+            Assert.Equal(2, logProcessor.FlushCount);
+
+            // A false logger flush result must not fail the original tracing flush.
+            Assert.True(tracerProvider.ForceFlush());
+            logProcessor.ThrowOnFlush = true;
+            Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
+            var expectedException = new InvalidOperationException("handler failed");
+            var actualException = await Assert.ThrowsAsync<InvalidOperationException>(() => AWSLambdaWrapper.TraceAsync(
+                tracerProvider, (_, _) => Task.FromException<string>(expectedException), "input", context));
+            Assert.Same(expectedException, actualException);
+            Assert.Equal(5, logProcessor.FlushCount);
+            Assert.Equal(0, logProcessor.TimeoutMilliseconds);
+
+            factory.Dispose();
+            Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
+            Assert.Equal(5, logProcessor.FlushCount);
+
+            processorProperty.SetValue(null, null);
+            Assert.Equal(expectedResult, await AWSLambdaWrapper.TraceAsync(tracerProvider, (_, _) => Task.FromResult(expectedResult), "input", context));
+        }
+        finally
+        {
+            processorProperty.SetValue(null, originalProcessor);
+        }
+    }
+
+    private sealed class FlushRecordingProcessor : BaseProcessor<LogRecord>
+    {
+        public bool ThrowOnFlush { get; set; }
+
+        public int FlushCount { get; private set; }
+
+        public int TimeoutMilliseconds { get; private set; }
+
+        protected override bool OnForceFlush(int timeoutMilliseconds)
+        {
+            this.FlushCount++;
+            this.TimeoutMilliseconds = timeoutMilliseconds;
+            return this.ThrowOnFlush ? throw new InvalidOperationException("flush failed") : false;
+        }
     }
 }

@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using OpenTelemetry;
+using OpenTelemetry.Logs;
 using static AWS.Distro.OpenTelemetry.AutoInstrumentation.AwsAttributeKeys;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
@@ -40,5 +41,22 @@ public class AwsLambdaSpanProcessor : BaseProcessor<Activity>
     /// <param name="activity"><see cref="Activity"/> to configure</param>
     public override void OnEnd(Activity activity)
     {
+    }
+
+    /// <inheritdoc/>
+    protected override bool OnForceFlush(int timeoutMilliseconds)
+    {
+        try
+        {
+            // AWSLambdaWrapper.OnFunctionStop flushes tracing, which invokes this processor.
+            // Zero signals the SDK batch log worker without waiting or confirming delivery.
+            (Plugin.LogProcessor?.ParentProvider as LoggerProvider)?.ForceFlush(0);
+        }
+        catch (Exception)
+        {
+            // Optional logging must preserve the invocation's result and tracing flush behavior.
+        }
+
+        return base.OnForceFlush(timeoutMilliseconds);
     }
 }

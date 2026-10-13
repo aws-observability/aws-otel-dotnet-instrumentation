@@ -96,6 +96,11 @@ public class Plugin
     private Sampler? sampler;
 
     /// <summary>
+    /// Gets the existing log processor whose parent is the application's logger provider.
+    /// </summary>
+    internal static BaseProcessor<global::OpenTelemetry.Logs.LogRecord>? LogProcessor { get; private set; }
+
+    /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
     /// </summary>
     public void Initializing()
@@ -398,8 +403,10 @@ public class Plugin
             return;
         }
 
-        options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
-            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+        var processor = new global::OpenTelemetry.SimpleLogRecordExportProcessor(
+            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter());
+        LogProcessor ??= processor;
+        options.AddProcessor(processor);
 
         string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
         if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
