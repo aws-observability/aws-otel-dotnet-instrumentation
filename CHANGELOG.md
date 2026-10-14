@@ -17,7 +17,7 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 - Fix `XrayUdpExporter` crashing with `MissingMethodException: WriteTraceData not found`, and the
   SigV4 OTLP log exporter silently failing every export, when `OpenTelemetry.Exporter.OpenTelemetryProtocol`
   1.18.0 or later is resolved
-  ([#467](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/issues/467)).
+  ([#483](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/483)).
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
