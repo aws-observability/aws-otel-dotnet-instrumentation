@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Http;
-using Amazon;
-using Amazon.CloudWatchLogs;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -52,14 +50,7 @@ public static class OtlpAwsLogRecordExporter
 
         var endpoint = options.Endpoint;
         var region = endpoint.Host.Split('.')[1];
-        var config = new AmazonCloudWatchLogsConfig
-        {
-            AuthenticationRegion = region,
-            AuthenticationServiceName = "logs",
-            UseHttp = endpoint.Scheme == Uri.UriSchemeHttp,
-            ServiceURL = endpoint.AbsoluteUri,
-            RegionEndpoint = RegionEndpoint.GetBySystemName(region),
-        };
+        var config = new AwsAuthConfig(endpoint, region, "logs");
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
         options.HttpClientFactory = () => new HttpClient(
             new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))

@@ -411,6 +411,14 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
+        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
+        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
+            && AwsSpanProcessingUtil.IsLambdaEnvironment())
+        {
+            Logger.LogWarning(
+                "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
+        }
+
         if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
         {
             OtlpAwsLogRecordExporter.Configure(options);
