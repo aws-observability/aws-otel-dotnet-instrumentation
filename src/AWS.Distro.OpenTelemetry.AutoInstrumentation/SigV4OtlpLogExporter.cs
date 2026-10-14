@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Http;
-using Amazon;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
-using Amazon.XRay;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
@@ -64,14 +63,7 @@ internal class SigV4OtlpLogExporter : BaseExporter<LogRecord>
                 SignatureVersion = SignatureVersion.SigV4,
             };
 
-            var config = new AmazonXRayConfig()
-            {
-                AuthenticationRegion = this.region,
-                AuthenticationServiceName = ServiceName,
-                UseHttp = false,
-                ServiceURL = this.endpoint.AbsoluteUri,
-                RegionEndpoint = RegionEndpoint.GetBySystemName(this.region),
-            };
+            var config = new AwsAuthConfig(this.endpoint, this.region, ServiceName);
 
 #pragma warning disable CS0618 // FallbackCredentialsFactory is obsolete in v4 but still functional
             var awsCredentials = FallbackCredentialsFactory.GetCredentials();

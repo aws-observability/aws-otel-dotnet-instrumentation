@@ -3,8 +3,6 @@
 
 using System.Diagnostics;
 using System.Net.Http;
-using Amazon;
-using Amazon.XRay;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -52,14 +50,7 @@ public static class OtlpAwsSpanExporter
 
         var endpoint = options.Endpoint;
         var region = endpoint.Host.Split('.')[1];
-        var config = new AmazonXRayConfig
-        {
-            AuthenticationRegion = region,
-            AuthenticationServiceName = "xray",
-            UseHttp = endpoint.Scheme == Uri.UriSchemeHttp,
-            ServiceURL = endpoint.AbsoluteUri,
-            RegionEndpoint = RegionEndpoint.GetBySystemName(region),
-        };
+        var config = new AwsAuthConfig(endpoint, region, "xray");
 
         // TODO: In a follow-up PR, detect an existing Authorization header in options.Headers
         // and warn once during exporter setup that SigV4 authentication overrides it.
