@@ -12,7 +12,10 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Reuse the upstream OTLP log exporter for SigV4
+- **(Breaking Change)** Reuse the upstream OTLP log exporter for SigV4.
+  In AWS Lambda, you must explicitly set `OTEL_LOGS_EXPORTER=otlp` to enable
+  SigV4 log export. Setting `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` alone no longer
+  enables SigV4 log export.
   ([#477](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/477)).
 
 - Reuse the upstream OTLP trace exporter for SigV4
