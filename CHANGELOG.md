@@ -13,7 +13,7 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 ## Unreleased
 
 - Add SigV4 signing to the upstream OTLP metric exporter
-  ([#2](https://github.com/liustve/aws-otel-dotnet-instrumentation/pull/2)).
+  ([#484](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/484)).
 
 - **(Breaking Change)** Reuse the upstream OTLP log exporter for SigV4.
   In AWS Lambda, you must explicitly set `OTEL_LOGS_EXPORTER=otlp` to enable
