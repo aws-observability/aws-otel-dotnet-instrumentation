@@ -614,6 +614,13 @@ internal sealed class AwsCredentialProviderHelper : IDisposable
         var originalMetadataCache = metadataCache.GetValue(null);
         metadataCache.SetValue(null, new Dictionary<string, string>());
         this.restoreSdkState.Add(() => metadataCache.SetValue(null, originalMetadataCache));
+
+        // FallbackCredentialsFactory.Reset() does not clear the SDK's shared IMDS provider.
+        var instanceProfileType = typeof(AWSCredentials).Assembly.GetType("Amazon.Runtime.DefaultInstanceProfileAWSCredentials")!;
+        var instanceProfile = instanceProfileType.GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var originalInstanceProfile = instanceProfile.GetValue(null);
+        instanceProfile.SetValue(null, null);
+        this.restoreSdkState.Add(() => instanceProfile.SetValue(null, originalInstanceProfile));
         this.DirectoryPath = Directory.CreateTempSubdirectory("adot-credentials-").FullName;
         this.CredentialsFile = Path.Combine(this.DirectoryPath, "credentials");
         this.ConfigFile = Path.Combine(this.DirectoryPath, "config");
