@@ -16,12 +16,25 @@ permissions:
 
 jobs:
   build-release-nuget:
-    runs-on: windows-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:windows-ec2-2022
+      - instance-size:large
 
     strategy:
         fail-fast: true
+    # CodeBuild runner labels don't tell actionlint this is Windows; pwsh is also the runner's default here.
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
+      # No checkout here, so codebuild-runner-setup can't run; dotnet nuget comes with the SDK.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
+        with:
+          dotnet-version: 8.0.x
+
       - name: Assume nuget role
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
         with:
@@ -36,6 +49,7 @@ jobs:
           --output text
           --query SecretString | ConvertFrom-Json
 
-          nuget delete AWS.Distro.OpenTelemetry.AutoInstrumentation ${{ env.VERSION_INPUT }}
-          -Source https://api.nuget.org/v3/index.json
-          -ApiKey $nugetKey.Key
+          dotnet nuget delete AWS.Distro.OpenTelemetry.AutoInstrumentation ${{ env.VERSION_INPUT }}
+          --source https://api.nuget.org/v3/index.json
+          --api-key $nugetKey.Key
+          --non-interactive
