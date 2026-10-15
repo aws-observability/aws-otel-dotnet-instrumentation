@@ -82,7 +82,8 @@ public class LogHeaderTests
         var metricsPort = FreePort();
 
         using var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{logsPort}/v1/logs/");
+        // Listen at the root so Windows HTTP.sys accepts /v1/logs without a trailing slash.
+        listener.Prefixes.Add($"http://127.0.0.1:{logsPort}/");
         listener.Start();
 
         Dictionary<string, string>? captured = null;
