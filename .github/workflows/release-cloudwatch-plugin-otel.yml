@@ -151,6 +151,20 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Pull contract-test images
+        uses: ./.github/actions/retry
+        with:
+          timeout-minutes: 10
+          max-attempts: 4
+          retry-wait-seconds: 60
+          retry-backoff-multiplier: 2
+          command: |
+            docker pull public.ecr.aws/docker/library/python:3.10
+            docker pull mcr.microsoft.com/dotnet/sdk:8.0
+            docker pull mcr.microsoft.com/dotnet/aspnet:8.0
+            docker pull public.ecr.aws/localstack/localstack:4.0.0
+            docker pull public.ecr.aws/docker/library/redis:7
+
       - name: Set up contract tests
         env:
           OTEL_VERSION: ${{ matrix.dependency.otel }}
