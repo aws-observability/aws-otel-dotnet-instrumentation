@@ -12,7 +12,22 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 
-- Add SigV4 signing to the upstream OTLP metric exporter
+- Add SigV4 signing to the upstream OTLP metric exporter.
+  To enable it, set `OTEL_METRICS_EXPORTER=otlp`,
+  `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://monitoring.<region>.amazonaws.com/v1/metrics`,
+  and `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf`.
+  Outside Lambda, `instrument.sh` and `adot-launch.sh` overwrite
+  `OTEL_METRICS_EXPORTER` with `none`. Override it after the launch script's setup
+  by passing `env` as the command, for example:
+
+  ```sh
+  ./instrument.sh env OTEL_METRICS_EXPORTER=otlp \
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://monitoring.us-east-1.amazonaws.com/v1/metrics \
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf dotnet MyApp.dll
+  ```
+
+  Replace `us-east-1` with your AWS region and `MyApp.dll` with your application.
+  Use the same `env ...` command with `adot-launch.sh` when using that launcher.
   ([#484](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/484)).
 
 - **(Breaking Change)** Reuse the upstream OTLP log exporter for SigV4.
