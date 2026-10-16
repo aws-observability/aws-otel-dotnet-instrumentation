@@ -30,27 +30,123 @@ permissions:
   contents: write
 
 jobs:
-  build-sdk:
-    strategy:
-      fail-fast: false
-      matrix:
-        aws-region: [ 'us-east-1' ]
-    uses: ./.github/workflows/main-build.yml
-    secrets: inherit
-    with:
-      caller-workflow-name: 'release_build_workflow'
-  
-  # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
-    # since deleting from Private ECR is not possible.
-  build-release-nuget:
-    needs: build-sdk
+  # Reuse the distribution artifacts from the main build that already validated this commit
+  # instead of rebuilding them. The artifacts are pulled cross-run and re-uploaded to this run
+  # so downstream jobs keep consuming them by name with no changes.
+  download-artifacts:
     environment: Release
-    runs-on: windows-latest
-    strategy:
-        fail-fast: true
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
+    # This job selects another workflow run and downloads its artifacts cross-run; both the
+    # workflow-run query and the cross-run artifact download require actions: read. Because the
+    # workflow-level permissions block is declared, unlisted scopes default to none, so grant it
+    # here at job level only -- the publish jobs don't need it.
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Get successful main build run
+        id: main_build
+        uses: ./.github/actions/get_main_build_run
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}
+          # Pin to the main build of the exact commit being released so the reused ZIPs/scripts
+          # can't drift from the NuGet package and release metadata built at github.sha.
+          head-sha: ${{ github.sha }}
+
+      - name: Download main build artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ steps.main_build.outputs.run_id }}
+        run: |
+          set -e
+          for name in \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip \
+            aws-distro-opentelemetry-dotnet-instrumentation-windows.zip \
+            aws-otel-dotnet-install.sh \
+            AWS.Otel.DotNet.Auto.psm1; do
+            gh run download "$RUN_ID" -n "$name" -D "staging/$name"
+          done
+
+      - name: Re-upload linux glibc x64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
+
+      - name: Re-upload linux musl x64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+
+      - name: Re-upload linux glibc arm64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-arm64.zip
+
+      - name: Re-upload linux musl arm64 artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip/aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-arm64.zip
+
+      - name: Re-upload windows artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+          path: staging/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip/aws-distro-opentelemetry-dotnet-instrumentation-windows.zip
+
+      - name: Re-upload bash installation script
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: aws-otel-dotnet-install.sh
+          path: staging/aws-otel-dotnet-install.sh/aws-otel-dotnet-install.sh
+
+      - name: Re-upload psm1 installation script
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
+        with:
+          name: AWS.Otel.DotNet.Auto.psm1
+          path: staging/AWS.Otel.DotNet.Auto.psm1/AWS.Otel.DotNet.Auto.psm1
+
+  # We want to build and release nuget first so that if it fails, it fails before publishing to private ECR
+    # since deleting from Private ECR is not possible.
+  build-release-nuget:
+    needs: download-artifacts
+    environment: Release
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:windows-ec2-2022
+      - instance-size:large
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
+    strategy:
+        fail-fast: true
+
+    # CodeBuild runner labels don't tell actionlint this is Windows; pwsh is also the runner's default here.
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
         
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -121,14 +217,20 @@ jobs:
           --output text
           --query SecretString | ConvertFrom-Json
 
-          nuget push
+          dotnet nuget push
           .\Deployment\nuget-packages\*.nupkg
-          -Source https://api.nuget.org/v3/index.json
-          -ApiKey $nugetKey.Key
+          --source https://api.nuget.org/v3/index.json
+          --api-key $nugetKey.Key
 
   release-image:
     needs: build-release-nuget
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     strategy:
       matrix:
         include:
@@ -136,6 +238,9 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Configure AWS credentials for public ECR
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -217,7 +322,10 @@ jobs:
 
   release-multi-platform-image:
     needs: release-image
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -258,7 +366,10 @@ jobs:
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
 
   setup-regions-matrix:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: release-multi-platform-image
     outputs:
       aws_regions_json: ${{ steps.set-matrix.outputs.aws_regions_json }}
@@ -281,7 +392,10 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
   publish-layer-prod:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: setup-regions-matrix
     strategy:
       matrix:
@@ -385,7 +499,10 @@ jobs:
         run: |
           aws s3 rb --force s3://${{ env.BUCKET_NAME }}
   generate-lambda-release-note:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: publish-layer-prod
     outputs:
       layer-note: ${{ steps.layer-note.outputs.layer-note }}
@@ -452,7 +569,10 @@ jobs:
 
   publish-github:
     needs: generate-lambda-release-note
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -607,7 +727,10 @@ jobs:
             --clobber
 
   sign-public-ecr-image:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     needs: publish-github
     steps:
       - name: Configure AWS Credentials for public ECR

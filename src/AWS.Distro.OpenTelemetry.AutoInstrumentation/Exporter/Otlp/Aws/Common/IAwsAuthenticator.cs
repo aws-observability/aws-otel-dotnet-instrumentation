@@ -5,6 +5,8 @@ using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
 
+namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+
 /// <summary>
 /// Provides AWS authentication and signing capabilities for AWS service requests.
 /// </summary>
@@ -22,6 +24,10 @@ public interface IAwsAuthenticator
     /// <summary>
     /// Signs an AWS request using AWS Signature Version 4 with the provided credentials snapshot.
     /// </summary>
+    /// <remarks>
+    /// Stores the signing result in <see cref="IRequest.AWS4SignerResult"/>.
+    /// The caller attaches the authorization header.
+    /// </remarks>
     /// <param name="request">The request to sign.</param>
     /// <param name="config">The client config supplying the signing region/service.</param>
     /// <param name="credentials">
@@ -65,8 +71,6 @@ public class DefaultAwsAuthenticator : IAwsAuthenticator
         // re-resolve credentials internally; signing from SignRequest with the same snapshot the
         // caller used for the token header guarantees the signature and x-amz-security-token match
         // even if the underlying credentials rotate between resolutions.
-        var signingResult = new AWS4Signer().SignRequest(request, config, null, credentials.AccessKey, credentials.SecretKey);
-        request.AWS4SignerResult = signingResult;
-        request.Headers["Authorization"] = signingResult.ForAuthorizationHeader;
+        request.AWS4SignerResult = new AWS4Signer().SignRequest(request, config, null, credentials.AccessKey, credentials.SecretKey);
     }
 }
