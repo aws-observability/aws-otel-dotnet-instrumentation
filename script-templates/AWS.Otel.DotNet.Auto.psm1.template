@@ -252,6 +252,14 @@ function Test-AssemblyNotForGAC([string] $Name) {
     return $false 
 }
 
+# AWS SDK keeps one assembly version per major version (e.g. 4.0.0.0 for every 4.x release), and
+# .NET Framework always prefers a GAC copy with a matching identity over the application's own copy.
+# A GAC'd AWS SDK would replace every application's (usually newer) AWS SDK on the host and break it.
+# Outside the GAC, the application's AWS SDK is used, or ours is loaded from the install directory.
+function Test-AwsSdkAssembly([string] $Name) {
+    return $Name -like "AWSSDK.*.dll"
+}
+
 function Is-Greater-Version($v1, $v2) {
     # Helper convert version main part to version object
     function ToVersion($version) {
@@ -338,6 +346,12 @@ function Install-OpenTelemetryCore() {
                 -PercentComplete $percentageComplete
 
             if (Test-AssemblyNotForGAC $dlls[$i].Name) {
+                continue
+            }
+
+            if (Test-AwsSdkAssembly $dlls[$i].Name) {
+                # Remove copies registered by earlier versions of this module.
+                $publish.GacRemove($dlls[$i].FullName)
                 continue
             }
 
