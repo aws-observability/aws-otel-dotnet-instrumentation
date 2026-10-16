@@ -427,7 +427,7 @@ public class Plugin
     }
 
     /// <summary>
-    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
+    /// Registers Lambda console output and tracks the logger provider for invocation completion flushing.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
@@ -437,6 +437,7 @@ public class Plugin
             return;
         }
 
+        options.AddProcessor(new AwsLambdaSpanProcessor.LogRecordProcessor());
         options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
     }
@@ -447,14 +448,6 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
-        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
-            && AwsSpanProcessingUtil.IsLambdaEnvironment())
-        {
-            Logger.LogWarning(
-                "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
-        }
-
         if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
         {
             OtlpAwsLogRecordExporter.Configure(options);
