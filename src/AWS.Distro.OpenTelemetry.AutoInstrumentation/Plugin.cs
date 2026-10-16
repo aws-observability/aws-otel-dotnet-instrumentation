@@ -947,30 +947,6 @@ public class Plugin
         var signalName = signal.ToString().ToUpperInvariant();
         isLegacyPath = false;
 
-        var signalHeadersConfig = signal switch
-        {
-            OtlpSignal.Traces => OtelExporterOtlpTracesHeadersConfig,
-            OtlpSignal.Logs => OtelExporterOtlpLogsHeadersConfig,
-            OtlpSignal.Metrics => OtelExporterOtlpMetricsHeadersConfig,
-            _ => OtelExporterOtlpHeadersConfig,
-        };
-        var signalHeaders = System.Environment.GetEnvironmentVariable(signalHeadersConfig);
-
-        // Match the upstream exporter: nonblank signal-specific headers replace global headers.
-        var hasSignalHeaders = !string.IsNullOrWhiteSpace(signalHeaders);
-        var headersEnvVar = hasSignalHeaders ? signalHeadersConfig : OtelExporterOtlpHeadersConfig;
-        var headers = hasSignalHeaders
-            ? signalHeaders
-            : System.Environment.GetEnvironmentVariable(OtelExporterOtlpHeadersConfig);
-        if (PluginUtils.ParseOtlpHeadersEnvVariable(headers).ContainsKey("Authorization"))
-        {
-            Logger.LogInformation(
-                "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
-                headersEnvVar,
-                signal);
-            return false;
-        }
-
         var exporter = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
         var protocol = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_PROTOCOL")
             ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
@@ -979,6 +955,7 @@ public class Plugin
         var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
         var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
         var shouldConfigureExporter = false;
+        var hasSignalHeaders = false;
 
         if (signal == OtlpSignal.Traces)
         {
@@ -991,6 +968,17 @@ public class Plugin
             //   does not contain Authorization.
             // Legacy traces also allow OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true,
             // subject to the same endpoint, protocol, and header checks.
+            var tracesHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(tracesHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(tracesHeaders).ContainsKey("Authorization"))
+            {
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpTracesHeadersConfig,
+                    signal);
+                return false;
+            }
+
             var isXRayOtlpEndpoint = endpoint != null
                 && new Regex(XRayOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
             var isLegacySigV4TracesExporterEnabled = exporter == "none"
@@ -1013,6 +1001,17 @@ public class Plugin
             //   is "http/protobuf" or unset.
             // - OTEL_EXPORTER_OTLP_LOGS_HEADERS, falling back to OTEL_EXPORTER_OTLP_HEADERS,
             //   does not contain Authorization.
+            var logsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(logsHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(logsHeaders).ContainsKey("Authorization"))
+            {
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpLogsHeadersConfig,
+                    signal);
+                return false;
+            }
+
             var isCloudWatchLogsOtlpEndpoint = endpoint != null
                 && new Regex(CloudWatchLogsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
 
@@ -1029,12 +1028,35 @@ public class Plugin
             //   is "http/protobuf" or unset.
             // - OTEL_EXPORTER_OTLP_METRICS_HEADERS, falling back to OTEL_EXPORTER_OTLP_HEADERS,
             //   does not contain Authorization.
+            var metricsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(metricsHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(metricsHeaders).ContainsKey("Authorization"))
+            {
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpMetricsHeadersConfig,
+                    signal);
+                return false;
+            }
+
             var isCloudWatchMetricsOtlpEndpoint = endpoint != null
                 && new Regex(CloudWatchMetricsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
 
             shouldConfigureExporter = isCloudWatchMetricsOtlpEndpoint
                 && isHttpProtobuf
                 && isOtlpExporterEnabled;
+        }
+
+        // Fall back to global headers only when the signal-specific headers are unset or blank.
+        if (!hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(
+            System.Environment.GetEnvironmentVariable(OtelExporterOtlpHeadersConfig)).ContainsKey("Authorization"))
+        {
+            Logger.LogInformation(
+                "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                OtelExporterOtlpHeadersConfig,
+                signal);
+            isLegacyPath = false;
+            return false;
         }
 
         return shouldConfigureExporter;
