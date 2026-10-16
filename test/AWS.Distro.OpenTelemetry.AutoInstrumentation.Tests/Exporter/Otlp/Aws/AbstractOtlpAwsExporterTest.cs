@@ -25,10 +25,10 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
 {
-    private readonly string region;
     private readonly string serviceName;
     private readonly ImmutableCredentials credentials = new("AKIDEXAMPLE", "test-secret", "session-token");
     private readonly List<byte[]> signedPayloads = new();
+    private string region;
 
     protected AbstractOtlpAwsExporterTest(Uri endpoint, string region, string serviceName)
     {
@@ -88,9 +88,15 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
         this.Authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    [Fact]
-    public void ShouldDefaultCompressionToNone()
+    [Theory]
+    [InlineData("us-west-2", "amazonaws.com")]
+    [InlineData("us-east-1", "amazonaws.com")]
+    [InlineData("cn-north-1", "amazonaws.com.cn")]
+    [InlineData("cn-northwest-1", "amazonaws.com.cn")]
+    public void ShouldDefaultCompressionToNone(string region, string domain)
     {
+        this.region = region;
+        this.Options.Endpoint = new UriBuilder(this.Options.Endpoint) { Host = $"{this.serviceName}.{region}.{domain}" }.Uri;
         this.ValidateOtlpRequest(compression: null);
     }
 

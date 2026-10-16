@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -228,19 +227,6 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
     public void ShouldNotUseSigV4SpanExporterIfConfigIsIncorrect(Dictionary<string, string?> config)
     {
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", new Plugin().ConfigureTracesOptions, expectSigning: false);
-    }
-
-    [Theory]
-    [InlineData("https://xray.us-east-1.amazonaws.com/v1/traces", "us-east-1")]
-    [InlineData("https://xray.cn-north-1.amazonaws.com.cn/v1/traces", "cn-north-1")]
-    [InlineData("https://xray.cn-northwest-1.amazonaws.com.cn/v1/traces", "cn-northwest-1")]
-    public void ShouldExtractTheSigningRegionFromSupportedEndpoints(string endpoint, string expectedRegion)
-    {
-        var match = Regex.Match(endpoint, Plugin.XRayOtlpEndpointPattern);
-
-        Assert.True(match.Success);
-        Assert.Equal(expectedRegion, match.Groups[1].Value);
-        Assert.Equal(expectedRegion, new Uri(endpoint).Host.Split('.')[1]);
     }
 
     [Fact]
@@ -539,18 +525,6 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
     public void ShouldNotUseSigV4LogExporterIfConfigIsIncorrect(Dictionary<string, string?> config)
     {
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: false);
-    }
-
-    [Theory]
-    [InlineData("https://logs.us-east-1.amazonaws.com/v1/logs", "us-east-1")]
-    [InlineData("https://logs.cn-north-1.amazonaws.com.cn/v1/logs", "cn-north-1")]
-    public void ShouldExtractTheSigningRegionFromSupportedEndpoints(string endpoint, string expectedRegion)
-    {
-        var match = Regex.Match(endpoint, Plugin.CloudWatchLogsOtlpEndpointPattern);
-
-        Assert.True(match.Success);
-        Assert.Equal(expectedRegion, match.Groups[1].Value);
-        Assert.Equal(expectedRegion, new Uri(endpoint).Host.Split('.')[1]);
     }
 
     [Theory]
