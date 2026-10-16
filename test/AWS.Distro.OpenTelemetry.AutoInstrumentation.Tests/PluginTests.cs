@@ -45,7 +45,14 @@ public abstract class PluginTests : IDisposable
             options.Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute);
         }
 
+        if (config.TryGetValue(endpointConfigName.Replace("_ENDPOINT", "_HEADERS"), out var headers) && headers != null)
+        {
+            options.Headers = headers;
+        }
+
+        var originalHeaders = options.Headers;
         configureExporter(options);
+        Assert.Equal(originalHeaders, options.Headers);
 
         // Java checks the customized exporter type. .NET customizes upstream's HTTP client factory.
         if (expectSigning)
@@ -108,6 +115,9 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -181,6 +191,21 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
+
+        var bearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token");
+        bearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
+        bearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { bearerLegacyConfig };
+
+        var globalBearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "Authorization=Bearer%20global-token");
+        globalBearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
+        globalBearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { globalBearerLegacyConfig };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -377,11 +402,16 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         Assert.True(provider.ForceFlush(5000));
     }
 
-    private static Dictionary<string, string?> CreateSigV4TracesConfig(string? endpoint) => new()
+    private static Dictionary<string, string?> CreateSigV4TracesConfig(
+        string? endpoint,
+        string? signalHeaders = null,
+        string? globalHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_TRACES_EXPORTER"] = "otlp",
         ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = signalHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -430,6 +460,9 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, globalHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -489,6 +522,11 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -625,11 +663,16 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
     }
 
-    private static Dictionary<string, string?> CreateSigV4LogsConfig(string? endpoint) => new()
+    private static Dictionary<string, string?> CreateSigV4LogsConfig(
+        string? endpoint,
+        string? signalHeaders = null,
+        string? globalHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_LOGS_EXPORTER"] = "otlp",
         ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = signalHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -665,6 +708,8 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
         foreach (var endpoint in new[]
         {
             CloudWatchMetricsEndpoint,
+            "https://monitoring.cn-north-1.amazonaws.com.cn/v1/metrics",
+            "https://monitoring.cn-northwest-1.amazonaws.com.cn/v1/metrics",
             "https://MONITORING.US-EAST-1.AMAZONAWS.COM/V1/METRICS",
             "https://MONITORING.US-EAST-1.amazonaws.com/v1/metrics",
             "https://monitoring.US-EAST-1.AMAZONAWS.com/v1/metrics",
@@ -674,6 +719,9 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, globalHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -724,10 +772,18 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
             "https:://monitoring.us-east-1.amazonaws.com/v1/metrics",
             "https://xray.us-east-1.amazonaws.com/v1/traces",
             "https://logs.us-east-1.amazonaws.com/v1/logs",
+            "https://monitoring.cn-north-1.amazonaws.com.cn.evil/v1/metrics",
+            "https://monitoring.cn-north-1.amazonaws.cn/v1/metrics",
+            "http://monitoring.cn-north-1.amazonaws.com.cn/v1/metrics",
         })
         {
             yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "prometheus" })
         {
@@ -856,11 +912,16 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: true);
     }
 
-    private static Dictionary<string, string?> CreateSigV4MetricsConfig(string? endpoint) => new()
+    private static Dictionary<string, string?> CreateSigV4MetricsConfig(
+        string? endpoint,
+        string? signalHeaders = null,
+        string? globalHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_METRICS_EXPORTER"] = "otlp",
         ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = signalHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
