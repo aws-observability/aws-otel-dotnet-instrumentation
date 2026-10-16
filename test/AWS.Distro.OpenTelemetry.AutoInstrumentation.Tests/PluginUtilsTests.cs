@@ -4,7 +4,7 @@
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
-public class UtilsTests
+public class PluginUtilsTests
 {
     [Theory]
     [InlineData(null)]
@@ -12,13 +12,13 @@ public class UtilsTests
     [InlineData(" , invalid, =value")]
     public void TestParseOtlpHeadersEnvVariableShouldReturnEmptyMapForMissingOrMalformedHeaders(string? headers)
     {
-        Assert.Empty(Utils.ParseOtlpHeadersEnvVariable(headers));
+        Assert.Empty(PluginUtils.ParseOtlpHeadersEnvVariable(headers));
     }
 
     [Fact]
     public void TestParseOtlpHeadersEnvVariableShouldParseHeadersWithWhitespaceAndEncodedValues()
     {
-        var headers = Utils.ParseOtlpHeadersEnvVariable(" Authorization = Bearer%20token== , x-test = value%2Cwith%3Dequals ");
+        var headers = PluginUtils.ParseOtlpHeadersEnvVariable(" Authorization = Bearer%20token== , x-test = value%2Cwith%3Dequals ");
 
         Assert.Equal(2, headers.Count);
         Assert.Equal("Bearer%20token==", headers["authorization"]);
@@ -28,7 +28,7 @@ public class UtilsTests
     [Fact]
     public void TestParseOtlpHeadersEnvVariableShouldKeepEmptyValuesAndIgnoreMalformedEntries()
     {
-        var headers = Utils.ParseOtlpHeadersEnvVariable("invalid,Authorization=, =ignored,x-test=value");
+        var headers = PluginUtils.ParseOtlpHeadersEnvVariable("invalid,Authorization=, =ignored,x-test=value");
 
         Assert.Equal(2, headers.Count);
         Assert.Equal(string.Empty, headers["Authorization"]);
@@ -38,7 +38,7 @@ public class UtilsTests
     [Fact]
     public void TestParseOtlpHeadersEnvVariableShouldUseLastValueForDuplicateHeaderNames()
     {
-        var headers = Utils.ParseOtlpHeadersEnvVariable("Authorization=first,authorization=second");
+        var headers = PluginUtils.ParseOtlpHeadersEnvVariable("Authorization=first,authorization=second");
 
         Assert.Single(headers);
         Assert.Equal("second", headers["Authorization"]);
@@ -50,7 +50,7 @@ public class UtilsTests
     [InlineData("X-Authorization=Bearer%20token")]
     public void TestParseOtlpHeadersEnvVariableShouldKeepOtherHeaderNamesDistinctFromAuthorization(string headers)
     {
-        var parsedHeaders = Utils.ParseOtlpHeadersEnvVariable(headers);
+        var parsedHeaders = PluginUtils.ParseOtlpHeadersEnvVariable(headers);
 
         Assert.Single(parsedHeaders);
         Assert.False(parsedHeaders.ContainsKey("Authorization"));

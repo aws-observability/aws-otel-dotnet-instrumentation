@@ -4,9 +4,9 @@
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
-/// Utilities for inspecting OTLP exporter headers.
+/// PluginUtils class.
 /// </summary>
-internal static class Utils
+internal static class PluginUtils
 {
     /// <summary>
     /// Parses comma-separated OTLP headers in key=value format.

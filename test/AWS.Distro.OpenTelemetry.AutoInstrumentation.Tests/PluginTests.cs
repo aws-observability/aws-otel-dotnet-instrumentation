@@ -45,7 +45,7 @@ public abstract class PluginTests : IDisposable
             options.Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute);
         }
 
-        if (config.TryGetValue(endpointConfigName.Replace("_ENDPOINT", "_HEADERS"), out var headers) && headers != null)
+        if (config.TryGetValue(endpointConfigName.Replace("_ENDPOINT", "_HEADERS"), out var headers) && !string.IsNullOrWhiteSpace(headers))
         {
             options.Headers = headers;
         }
@@ -118,6 +118,7 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
 
         yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value") };
         yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -130,6 +131,11 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         legacyConfig["OTEL_TRACES_EXPORTER"] = "none";
         legacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
         yield return new object[] { legacyConfig };
+
+        var legacyHeadersOverrideConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token");
+        legacyHeadersOverrideConfig["OTEL_TRACES_EXPORTER"] = "none";
+        legacyHeadersOverrideConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { legacyHeadersOverrideConfig };
 
         foreach (var exporter in new[] { "otlp", "none" })
         {
@@ -195,7 +201,9 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token") };
         yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
         yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         var bearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token");
         bearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
@@ -463,6 +471,7 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
 
         yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value") };
         yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -526,7 +535,9 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token") };
         yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
         yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -722,6 +733,7 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
 
         yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value") };
         yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -783,7 +795,9 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
         yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token") };
         yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
         yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "prometheus" })
         {
