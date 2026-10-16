@@ -198,9 +198,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true";
     fi
 
-    if [ -z "${OTEL_METRICS_EXPORTER}" ]; then
-      export OTEL_METRICS_EXPORTER="none";
-    fi
+    export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-none}"
 
     if [ -z "${OTEL_LOGS_EXPORTER}" ]; then
       export OTEL_LOGS_EXPORTER="none";
@@ -234,7 +232,7 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
     export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
     export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4316"
     export OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT="http://127.0.0.1:4316/v1/metrics"
-    export OTEL_METRICS_EXPORTER="none"
+    export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-none}"
     export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true"
     export OTEL_TRACES_SAMPLER="xray"
     export OTEL_TRACES_SAMPLER_ARG="endpoint=http://127.0.0.1:2000"
