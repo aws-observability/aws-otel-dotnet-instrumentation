@@ -198,7 +198,9 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_AWS_APPLICATION_SIGNALS_ENABLED="true";
     fi
 
-    export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-none}"
+    if [ -z "${OTEL_METRICS_EXPORTER}" ]; then
+      export OTEL_METRICS_EXPORTER="none";
+    fi
 
     if [ -z "${OTEL_LOGS_EXPORTER}" ]; then
       export OTEL_LOGS_EXPORTER="none";
