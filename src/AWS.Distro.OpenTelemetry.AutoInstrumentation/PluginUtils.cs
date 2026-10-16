@@ -21,7 +21,7 @@ internal static class PluginUtils
     internal static Dictionary<string, string> ParseOtlpHeadersEnvVariable(string? headers)
     {
         var parsedHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrEmpty(headers))
+        if (headers == null || headers.Length == 0)
         {
             return parsedHeaders;
         }
