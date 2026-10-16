@@ -20,6 +20,7 @@ using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
@@ -48,11 +49,24 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
+
+    // The optional "\.cn" suffix covers the AWS China partition (cn-north-1, cn-northwest-1), whose
+    // endpoints are *.amazonaws.com.cn. Both patterns stay anchored with ^...$ so the optional group
+    // does not loosen matching: a lookalike host such as
+    // "https://xray.cn-north-1.amazonaws.com.cn.evil/v1/traces" still fails to match and falls back
+    // to the unsigned exporter. The same optional-suffix form is already used by
+    // S3PresignedUrlAttributor.
+    //
+    // Region extraction is unaffected. Both call sites take the second dot-separated label
+    // (OtlpAwsSpanExporter.cs and ConfigureLogsOptions below), which yields "cn-north-1" for a China
+    // host just as it yields "us-east-1" for a commercial one. Signing uses that region plus an
+    // explicit ServiceURL, so the DNS suffix never reaches the signer.
+    //
+    // Internal rather than private so the patterns can be asserted directly in unit tests; the
+    // gating methods that consume them read process-wide environment state captured at class load.
+    internal static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/traces$";
+    internal static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/logs$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
-    private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
-    private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
 #pragma warning restore CS0436 // Type conflicts with imported type
@@ -63,7 +77,6 @@ public class Plugin
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
-    private static readonly string TracesProtocolEnvVarName = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL";
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
@@ -94,6 +107,13 @@ public class Plugin
         };
 
     private Sampler? sampler;
+
+    private enum OtlpSignal
+    {
+        Traces,
+        Logs,
+        Metrics,
+    }
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
@@ -209,7 +229,7 @@ public class Plugin
 
         var tracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
         if (tracesEndpoint != null
-            && this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath)
+            && this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath)
             && isLegacyPath)
         {
             var options = new OtlpExporterOptions
@@ -234,7 +254,7 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP trace exporter options.</param>
     public void ConfigureTracesOptions(OtlpExporterOptions options)
     {
-        if (this.ShouldConfigureOtlpAwsExporter("traces", out var isLegacyPath))
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath))
         {
             if (isLegacyPath)
             {
@@ -386,9 +406,7 @@ public class Plugin
     }
 
     /// <summary>
-    /// To configure logs SDK. In Lambda, registers CompactConsoleLogRecordExporter for console
-    /// output and a SigV4-signed OTLP exporter (via SimpleLogRecordExportProcessor for
-    /// synchronous flush before Lambda freezes the container).
+    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
@@ -400,16 +418,25 @@ public class Plugin
 
         options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+    }
 
-        string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP log exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP log exporter options.</param>
+    public void ConfigureLogsOptions(OtlpExporterOptions options)
+    {
+        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
+        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
+            && AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
-            string region = new Uri(logsEndpoint).Host.Split('.')[1];
-            var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
-            var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
-            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
-            Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
+            Logger.LogWarning(
+                "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
+        }
+
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
+        {
+            OtlpAwsLogRecordExporter.Configure(options);
         }
     }
 
@@ -680,26 +707,6 @@ public class Plugin
             LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
     }
 
-    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
-    {
-        var headers = new Dictionary<string, string>();
-        if (string.IsNullOrEmpty(headersString))
-        {
-            return headers;
-        }
-
-        foreach (var pair in headersString!.Split(','))
-        {
-            var parts = pair.Split(new[] { '=' }, 2);
-            if (parts.Length == 2)
-            {
-                headers[parts[0].Trim()] = parts[1].Trim();
-            }
-        }
-
-        return headers;
-    }
-
     // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
     // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
     // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
@@ -914,35 +921,47 @@ public class Plugin
         return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 
-    private bool ShouldConfigureOtlpAwsExporter(string signal, out bool isLegacyPath)
+    private bool ShouldConfigureOtlpAwsExporter(OtlpSignal signal, out bool isLegacyPath)
     {
-        isLegacyPath = false;
-        if (signal == "traces")
+        var signalName = signal.ToString().ToUpperInvariant();
+        var exporter = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
+        var protocol = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_PROTOCOL")
+            ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+        var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
+        var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
+        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
+        var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
+        if (signal == OtlpSignal.Traces)
         {
-            var tracesExporter = System.Environment.GetEnvironmentVariable(TracesExporterConfig);
-            var tracesProtocol = System.Environment.GetEnvironmentVariable(TracesProtocolEnvVarName)
-                ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
-            var isHttpProtobuf = tracesProtocol == null || tracesProtocol == "http/protobuf";
-            var isXRayOtlpEndpoint = this.IsXRayOtlpEndpoint(
-                System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig));
-            var isLegacySigV4TracesExporterEnabled = tracesExporter == "none"
+            var isXRayOtlpEndpoint = endpoint != null
+                && new Regex(XRayOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+            var isLegacySigV4TracesExporterEnabled = exporter == "none"
                 && System.Environment.GetEnvironmentVariable(SigV4EnabledConfig) == "true"
                 && isXRayOtlpEndpoint
                 && isHttpProtobuf;
             var isSigV4TracesExporterEnabled = isXRayOtlpEndpoint
                 && isHttpProtobuf
-                && (tracesExporter == null || tracesExporter.Split(',').Any(exporter => exporter.Trim() == "otlp"));
+                && isOtlpExporterEnabled;
 
             isLegacyPath = isLegacySigV4TracesExporterEnabled;
             return isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
         }
 
+        if (signal == OtlpSignal.Logs)
+        {
+            var isCloudWatchLogsOtlpEndpoint = endpoint != null
+                && new Regex(CloudWatchLogsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+
+            isLegacyPath = false;
+            return isCloudWatchLogsOtlpEndpoint
+                && isHttpProtobuf
+                && isOtlpExporterEnabled;
+        }
+
+        isLegacyPath = false;
         return false;
     }
-
-    private bool IsXRayOtlpEndpoint(string? endpoint)
-        => endpoint != null
-            && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).IsMatch(endpoint);
 
     private string GetFallbackServiceName()
     {

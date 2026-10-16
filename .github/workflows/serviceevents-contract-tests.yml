@@ -36,10 +36,14 @@ permissions:
 
 jobs:
   serviceevents-contract-test:
-    runs-on: ubuntu-latest
+    # Fork PRs run on GitHub-hosted runners; the CodeBuild webhook requires approval for them.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", "image:ubuntu-8.0", "instance-size:large"]', github.run_id, github.run_attempt)) }}
     steps:
       - name: Checkout @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
@@ -52,6 +56,17 @@ jobs:
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v6.0.0
         with:
           python-version: '3.10'
+
+      - name: Pull contract-test images
+        uses: ./.github/actions/retry
+        with:
+          timeout-minutes: 30
+          max-attempts: 6
+          retry-wait-seconds: 60
+          retry-backoff-multiplier: 2
+          command: |
+            docker pull public.ecr.aws/docker/library/python:3.10
+            docker pull mcr.microsoft.com/dotnet/sdk:8.0
 
       - name: Set up and run the ServiceEvents contract tests with pytest
         run: |

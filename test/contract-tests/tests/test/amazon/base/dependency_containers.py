@@ -21,7 +21,7 @@ def create_localstack_container(
         NETWORK_NAME: EndpointConfig(version="1.22", aliases=list(aliases))
     }
     return (
-        LocalStackContainer(image="localstack/localstack:4.0.0")
+        LocalStackContainer(image="public.ecr.aws/localstack/localstack:4.0.0")
         .with_name(name)
         .with_services(*services)
         .with_env("DEFAULT_REGION", region)
@@ -34,7 +34,7 @@ def create_redis_container(name: str) -> DockerContainer:
         NETWORK_NAME: EndpointConfig(version="1.22", aliases=["redis"])
     }
     return (
-        DockerContainer("redis:7")
+        DockerContainer("public.ecr.aws/docker/library/redis:7")
         .with_name(name)
         .with_kwargs(network=NETWORK_NAME, networking_config=networking_config)
     )

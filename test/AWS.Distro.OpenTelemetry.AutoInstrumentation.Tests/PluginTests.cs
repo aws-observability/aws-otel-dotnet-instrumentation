@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
@@ -379,6 +381,244 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         environment["OTEL_AWS_APPLICATION_SIGNALS_ENABLED"] = "false";
         environment["OTEL_AWS_DYNAMIC_INSTRUMENTATION_ENABLED"] = "false";
         environment["OTEL_AWS_SERVICE_EVENTS_ENABLED"] = "false";
+        environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
+        return environment;
+    }
+}
+
+/// <summary>
+/// Validates SigV4 log exporter customization and preservation of upstream log settings.
+/// </summary>
+[Collection("AWS credential providers")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
+{
+    private const string CloudWatchLogsEndpoint = "https://logs.us-east-1.amazonaws.com/v1/logs";
+    private static readonly Uri Endpoint = new(CloudWatchLogsEndpoint);
+
+    public OtlpAwsLogRecordExporterConfigurationTests()
+        : base(CreateEnvironment())
+    {
+    }
+
+    public static IEnumerable<object[]> ValidSigV4LogsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            CloudWatchLogsEndpoint,
+            "https://LOGS.US-EAST-1.AMAZONAWS.COM/V1/LOGS",
+            "https://LOGS.US-EAST-1.amazonaws.com/v1/logs",
+            "https://logs.US-EAST-1.AMAZONAWS.com/v1/logs",
+            "https://Logs.Us-East-1.amazonaws.com/v1/logs",
+            "https://LoGs.Us-EaSt-1.AmAzOnAwS.cOm/V1/LoGs",
+        })
+        {
+            yield return new object[] { CreateSigV4LogsConfig(endpoint) };
+        }
+
+        foreach (var exporter in new string?[] { null, "otlp,console" })
+        {
+            var config = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+            config["OTEL_LOGS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Logs, string? Global)[]
+        {
+            ("http/protobuf", null),
+            (null, "http/protobuf"),
+            ("http/protobuf", "grpc"),
+        })
+        {
+            var config = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+            config["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = protocols.Logs;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+    }
+
+    public static IEnumerable<object[]> InvalidSigV4LogsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            "http://localhost:4318/v1/logs",
+            "http://logs.us-east-1.amazonaws.com/v1/logs",
+            "ftp://logs.us-east-1.amazonaws.com/v1/logs",
+            "https://log.us-east-1.amazonaws.com/v1/logs",
+            "https://logging.us-east-1.amazonaws.com/v1/logs",
+            "https://cloud-logs.us-east-1.amazonaws.com/v1/logs",
+            "https://logs.amazonaws.com/v1/logs",
+            "https://logs.us-east-1.amazon.com/v1/logs",
+            "https://logs.us-east-1.aws.com/v1/logs",
+            "https://logs.us_east_1.amazonaws.com/v1/logs",
+            "https://logs.us.east.1.amazonaws.com/v1/logs",
+            "https://logs.us-east-1.amazonaws.com/logs",
+            "https://logs.us-east-1.amazonaws.com/v2/logs",
+            "https://logs.us-east-1.amazonaws.com/v1/log",
+            "https://logs.us-east-1.amazonaws.com/v1/logs/",
+            "https://logs.us-east-1.amazonaws.com//v1/logs",
+            "https://logs.us-east-1.amazonaws.com/v1//logs",
+            "https://logs.us-east-1.amazonaws.com/v1/logs?param=value",
+            "https://logs.us-east-1.amazonaws.com/v1/logs#fragment",
+            "https://logs.us-east-1.amazonaws.com:443/v1/logs",
+            "https:/logs.us-east-1.amazonaws.com/v1/logs",
+            "https:://logs.us-east-1.amazonaws.com/v1/logs",
+            "https://xray.us-east-1.amazonaws.com/v1/traces",
+        })
+        {
+            yield return new object[] { CreateSigV4LogsConfig(endpoint) };
+        }
+
+        foreach (var exporter in new[] { "console", "none", "zipkin" })
+        {
+            var config = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+            config["OTEL_LOGS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Logs, string? Global)[]
+        {
+            ("grpc", null),
+            (null, "grpc"),
+            ("grpc", "http/protobuf"),
+            ("http/json", null),
+        })
+        {
+            var config = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+            config["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = protocols.Logs;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+
+        yield return new object[] { CreateSigV4LogsConfig(null) };
+    }
+
+    [Theory]
+    [MemberData(nameof(ValidSigV4LogsConfigs))]
+    public void ShouldEnableSigV4LogExporterIfConfigIsCorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidSigV4LogsConfigs))]
+    public void ShouldNotUseSigV4LogExporterIfConfigIsIncorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: false);
+    }
+
+    [Theory]
+    [InlineData(ExportProcessorType.Simple)]
+    [InlineData(ExportProcessorType.Batch)]
+    public void ShouldPreserveUpstreamLogAndBatchSettings(ExportProcessorType processorType)
+    {
+        var plugin = new Plugin();
+        var clientCount = 0;
+        OtlpExporterOptions? configuredOptions = null;
+        LogRecordExportProcessorOptions? configuredProcessorOptions = null;
+        BatchExportLogRecordProcessorOptions? batchOptions = null;
+
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "x-environment-header=environment-value");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT", "5432");
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
+        {
+            plugin.ConfigureLogsOptions(options);
+            options.AddOtlpExporter((exporterOptions, processorOptions) =>
+            {
+                exporterOptions.Endpoint = Endpoint;
+                exporterOptions.Protocol = OtlpExportProtocol.HttpProtobuf;
+                exporterOptions.Headers = "x-aws-log-group=test-group,x-aws-log-stream=test-stream,x-log-header=log-value";
+                exporterOptions.TimeoutMilliseconds = 4321;
+                exporterOptions.Compression = OtlpExportCompression.GZip;
+                processorOptions.ExportProcessorType = processorType;
+                processorOptions.BatchExportProcessorOptions = new BatchExportLogRecordProcessorOptions
+                {
+                    MaxQueueSize = 32,
+                    MaxExportBatchSize = 4,
+                    ScheduledDelayMilliseconds = 12345,
+                    ExporterTimeoutMilliseconds = 6789,
+                };
+                batchOptions = processorOptions.BatchExportProcessorOptions;
+                var originalFactory = exporterOptions.HttpClientFactory;
+
+                plugin.ConfigureLogsOptions(exporterOptions);
+
+                Assert.NotSame(originalFactory, exporterOptions.HttpClientFactory);
+                var signingFactory = exporterOptions.HttpClientFactory;
+                exporterOptions.HttpClientFactory = () =>
+                {
+                    clientCount++;
+                    var client = signingFactory();
+                    Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
+                    return client;
+                };
+                configuredOptions = exporterOptions;
+                configuredProcessorOptions = processorOptions;
+            });
+        }));
+
+        loggerFactory.CreateLogger("SigV4.Logs.Configuration.Tests");
+
+        Assert.NotNull(configuredOptions);
+        Assert.Equal(Endpoint, configuredOptions.Endpoint);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, configuredOptions.Protocol);
+        Assert.Equal("x-aws-log-group=test-group,x-aws-log-stream=test-stream,x-log-header=log-value", configuredOptions.Headers);
+        Assert.Equal(4321, configuredOptions.TimeoutMilliseconds);
+        Assert.Equal(OtlpExportCompression.GZip, configuredOptions.Compression);
+        Assert.NotNull(configuredProcessorOptions);
+        Assert.Equal(processorType, configuredProcessorOptions.ExportProcessorType);
+        Assert.Same(batchOptions, configuredProcessorOptions.BatchExportProcessorOptions);
+        Assert.NotNull(batchOptions);
+        Assert.Equal(32, batchOptions.MaxQueueSize);
+        Assert.Equal(4, batchOptions.MaxExportBatchSize);
+        Assert.Equal(12345, batchOptions.ScheduledDelayMilliseconds);
+        Assert.Equal(6789, batchOptions.ExporterTimeoutMilliseconds);
+        Assert.Equal(1, clientCount);
+        Assert.Equal("otlp", Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER"));
+        Assert.Equal("x-environment-header=environment-value", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
+        Assert.Equal("5432", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"));
+    }
+
+    [Theory]
+    [InlineData(OtlpExportProtocol.Grpc)]
+    [InlineData((OtlpExportProtocol)byte.MaxValue)]
+    public void ShouldThrowIfLogExporterProtocolIsIncorrect(OtlpExportProtocol protocol)
+    {
+        var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
+        var originalFactory = options.HttpClientFactory;
+
+        Assert.Throws<ArgumentException>(() => new Plugin().ConfigureLogsOptions(options));
+
+        Assert.Equal(protocol, options.Protocol);
+        Assert.Same(originalFactory, options.HttpClientFactory);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("false")]
+    [InlineData("true")]
+    public void ShouldSignCloudWatchLogsExportsBasedOnTheEndpoint(string? sigV4Enabled)
+    {
+        var config = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+        config["OTEL_AWS_SIG_V4_ENABLED"] = sigV4Enabled;
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
+    }
+
+    private static Dictionary<string, string?> CreateSigV4LogsConfig(string? endpoint) => new()
+    {
+        ["OTEL_AWS_SIG_V4_ENABLED"] = null,
+        ["OTEL_LOGS_EXPORTER"] = "otlp",
+        ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = endpoint,
+    };
+
+    private static Dictionary<string, string?> CreateEnvironment()
+    {
+        var environment = CreateSigV4LogsConfig(CloudWatchLogsEndpoint);
+        environment["OTEL_EXPORTER_OTLP_ENDPOINT"] = null;
+        environment["OTEL_EXPORTER_OTLP_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = null;
+        environment["OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"] = null;
         environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
         return environment;
     }

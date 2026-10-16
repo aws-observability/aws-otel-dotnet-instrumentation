@@ -11,6 +11,17 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
+  CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
+  endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with
+  HTTP 403. Note the signed OTLP log exporter is only registered in AWS Lambda, so the logs half of
+  this applies to Lambda workloads
+
+- **(Breaking Change)** Reuse the upstream OTLP log exporter for SigV4.
+  In AWS Lambda, you must explicitly set `OTEL_LOGS_EXPORTER=otlp` to enable
+  SigV4 log export. Setting `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` alone no longer
+  enables SigV4 log export.
+  ([#477](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/477)).
 
 - Reuse the upstream OTLP trace exporter for SigV4
   ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).

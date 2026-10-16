@@ -7,6 +7,7 @@ using Amazon.Runtime;
 using Amazon.Runtime.Internal;
 using Amazon.Runtime.Internal.Auth;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+using Google.Protobuf;
 using Moq;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -199,6 +200,39 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
     }
 
     /// <summary>
+    /// Reads protobuf fields while preserving repeated values.
+    /// </summary>
+    /// <param name="payload">The serialized protobuf message.</param>
+    /// <returns>The values grouped by protobuf field number.</returns>
+    protected static Dictionary<int, List<object>> ReadFields(byte[] payload)
+    {
+        using var reader = new CodedInputStream(payload);
+        var fields = new Dictionary<int, List<object>>();
+        uint tag;
+        while ((tag = reader.ReadTag()) != 0)
+        {
+            object value = WireFormat.GetTagWireType(tag) switch
+            {
+                WireFormat.WireType.Varint => reader.ReadUInt64(),
+                WireFormat.WireType.Fixed64 => reader.ReadFixed64(),
+                WireFormat.WireType.LengthDelimited => reader.ReadBytes(),
+                WireFormat.WireType.Fixed32 => reader.ReadFixed32(),
+                _ => throw new InvalidOperationException($"Unexpected protobuf wire type for tag {tag}."),
+            };
+            var field = WireFormat.GetTagFieldNumber(tag);
+            if (!fields.TryGetValue(field, out var values))
+            {
+                values = new List<object>();
+                fields.Add(field, values);
+            }
+
+            values.Add(value);
+        }
+
+        return fields;
+    }
+
+    /// <summary>
     /// Creates an independent expected payload for an export.
     /// </summary>
     /// <returns>The expected signal model.</returns>
@@ -208,7 +242,7 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
     /// Creates and exports a signal matching the expected payload.
     /// </summary>
     /// <param name="expectedPayload">The expected signal model, populated with any generated identifiers before export.</param>
-    /// <returns>The exporter result.</returns>
+    /// <returns>The observed export outcome.</returns>
     protected abstract ExportResult Export(TExpectedPayload expectedPayload);
 
     /// <summary>
