@@ -116,8 +116,8 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "x-test=value") };
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -192,17 +192,17 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
-        var bearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, signalHeaders: "Authorization=Bearer%20test-token");
+        var bearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token");
         bearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
         bearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
         yield return new object[] { bearerLegacyConfig };
 
-        var globalBearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, globalHeaders: "Authorization=Bearer%20global-token");
+        var globalBearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token");
         globalBearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
         globalBearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
         yield return new object[] { globalBearerLegacyConfig };
@@ -403,15 +403,15 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
     }
 
     private static Dictionary<string, string?> CreateSigV4TracesConfig(
-        string? endpoint,
-        string? signalHeaders = null,
-        string? globalHeaders = null) => new()
+        string? otelExporterOtlpTracesEndpoint,
+        string? otelExporterOtlpTracesHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_TRACES_EXPORTER"] = "otlp",
-        ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = endpoint,
-        ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = signalHeaders,
-        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
+        ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = otelExporterOtlpTracesEndpoint,
+        ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = otelExporterOtlpTracesHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -461,8 +461,8 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "x-test=value") };
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, globalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -523,10 +523,10 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -664,15 +664,15 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
     }
 
     private static Dictionary<string, string?> CreateSigV4LogsConfig(
-        string? endpoint,
-        string? signalHeaders = null,
-        string? globalHeaders = null) => new()
+        string? otelExporterOtlpLogsEndpoint,
+        string? otelExporterOtlpLogsHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_LOGS_EXPORTER"] = "otlp",
-        ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = endpoint,
-        ["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = signalHeaders,
-        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
+        ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = otelExporterOtlpLogsEndpoint,
+        ["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = otelExporterOtlpLogsHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -720,8 +720,8 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "x-test=value") };
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, globalHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -780,10 +780,10 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
         }
 
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "Authorization=Bearer%20test-token") };
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "Authorization=Bearer%20test-token", globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, globalHeaders: "Authorization=Bearer%20global-token") };
-        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, signalHeaders: "x-test=value", globalHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "prometheus" })
         {
@@ -913,15 +913,15 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
     }
 
     private static Dictionary<string, string?> CreateSigV4MetricsConfig(
-        string? endpoint,
-        string? signalHeaders = null,
-        string? globalHeaders = null) => new()
+        string? otelExporterOtlpMetricsEndpoint,
+        string? otelExporterOtlpMetricsHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_METRICS_EXPORTER"] = "otlp",
-        ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = endpoint,
-        ["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = signalHeaders,
-        ["OTEL_EXPORTER_OTLP_HEADERS"] = globalHeaders,
+        ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = otelExporterOtlpMetricsEndpoint,
+        ["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = otelExporterOtlpMetricsHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
