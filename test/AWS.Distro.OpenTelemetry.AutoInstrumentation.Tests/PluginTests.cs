@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
@@ -44,7 +45,14 @@ public abstract class PluginTests : IDisposable
             options.Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute);
         }
 
+        if (config.TryGetValue(endpointConfigName.Replace("_ENDPOINT", "_HEADERS"), out var headers) && !string.IsNullOrWhiteSpace(headers))
+        {
+            options.Headers = headers;
+        }
+
+        var originalHeaders = options.Headers;
         configureExporter(options);
+        Assert.Equal(originalHeaders, options.Headers);
 
         // Java checks the customized exporter type. .NET customizes upstream's HTTP client factory.
         if (expectSigning)
@@ -87,6 +95,9 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         string[] endpoints =
         {
             "https://xray.us-east-1.amazonaws.com/v1/traces",
+            "https://xray.eu-west-1.amazonaws.com/v1/traces",
+            "https://xray.cn-north-1.amazonaws.com.cn/v1/traces",
+            "https://xray.cn-northwest-1.amazonaws.com.cn/v1/traces",
             "https://XRAY.US-EAST-1.AMAZONAWS.COM/V1/TRACES",
             "https://XRAY.US-EAST-1.amazonaws.com/v1/traces",
             "https://xray.US-EAST-1.AMAZONAWS.com/v1/traces",
@@ -105,6 +116,10 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
 
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
             var config = CreateSigV4TracesConfig(Endpoint.OriginalString);
@@ -116,6 +131,11 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         legacyConfig["OTEL_TRACES_EXPORTER"] = "none";
         legacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
         yield return new object[] { legacyConfig };
+
+        var legacyHeadersOverrideConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token");
+        legacyHeadersOverrideConfig["OTEL_TRACES_EXPORTER"] = "none";
+        legacyHeadersOverrideConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { legacyHeadersOverrideConfig };
 
         foreach (var exporter in new[] { "otlp", "none" })
         {
@@ -164,11 +184,36 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
             "https:/xray.us-east-1.amazonaws.com/v1/traces",
             "https:://xray.us-east-1.amazonaws.com/v1/traces",
             "https://logs.us-east-1.amazonaws.com/v1/logs",
+            "https://xray.cn-north-1.amazonaws.com.cn.evil/v1/traces",
+            "https://xray.us-east-1.amazonaws.com.evil/v1/traces",
+            "https://xray.cn-north-1.amazonaws.cn/v1/traces",
+            "https://xray.cn-north-1.cn.amazonaws.com/v1/traces",
+            "https://xray.us-east-1.amazonaws.com/v1/metrics",
+            "https://logs.us-east-1.amazonaws.com/v1/traces",
+            "https://xray.us-east-1.amazonaws.com/v1/traces/extra",
+            "https://example.com/v1/traces",
         };
         foreach (var endpoint in endpoints)
         {
             yield return new object[] { CreateSigV4TracesConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+
+        var bearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpTracesHeaders: "Authorization=Bearer%20test-token");
+        bearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
+        bearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { bearerLegacyConfig };
+
+        var globalBearerLegacyConfig = CreateSigV4TracesConfig(XRayEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token");
+        globalBearerLegacyConfig["OTEL_TRACES_EXPORTER"] = "none";
+        globalBearerLegacyConfig["OTEL_AWS_SIG_V4_ENABLED"] = "true";
+        yield return new object[] { globalBearerLegacyConfig };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -365,11 +410,16 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         Assert.True(provider.ForceFlush(5000));
     }
 
-    private static Dictionary<string, string?> CreateSigV4TracesConfig(string? endpoint) => new()
+    private static Dictionary<string, string?> CreateSigV4TracesConfig(
+        string? otelExporterOtlpTracesEndpoint,
+        string? otelExporterOtlpTracesHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_TRACES_EXPORTER"] = "otlp",
-        ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = otelExporterOtlpTracesEndpoint,
+        ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = otelExporterOtlpTracesHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -406,6 +456,9 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         foreach (var endpoint in new[]
         {
             CloudWatchLogsEndpoint,
+            "https://logs.eu-west-1.amazonaws.com/v1/logs",
+            "https://logs.cn-north-1.amazonaws.com.cn/v1/logs",
+            "https://logs.cn-northwest-1.amazonaws.com.cn/v1/logs",
             "https://LOGS.US-EAST-1.AMAZONAWS.COM/V1/LOGS",
             "https://LOGS.US-EAST-1.amazonaws.com/v1/logs",
             "https://logs.US-EAST-1.AMAZONAWS.com/v1/logs",
@@ -415,6 +468,10 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         {
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new string?[] { null, "otlp,console" })
         {
@@ -464,10 +521,23 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
             "https:/logs.us-east-1.amazonaws.com/v1/logs",
             "https:://logs.us-east-1.amazonaws.com/v1/logs",
             "https://xray.us-east-1.amazonaws.com/v1/traces",
+            "https://logs.cn-north-1.amazonaws.com.cn.evil/v1/logs",
+            "https://logs.us-east-1.amazonaws.com.evil/v1/logs",
+            "https://logs.cn-north-1.amazonaws.cn/v1/logs",
+            "https://logs.us-east-1.amazonaws.com/v1/traces",
+            "https://xray.us-east-1.amazonaws.com/v1/logs",
+            "https://example.com/v1/logs",
         })
         {
             yield return new object[] { CreateSigV4LogsConfig(endpoint) };
         }
+
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4LogsConfig(CloudWatchLogsEndpoint, otelExporterOtlpLogsHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
 
         foreach (var exporter in new[] { "console", "none", "zipkin" })
         {
@@ -604,11 +674,16 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
     }
 
-    private static Dictionary<string, string?> CreateSigV4LogsConfig(string? endpoint) => new()
+    private static Dictionary<string, string?> CreateSigV4LogsConfig(
+        string? otelExporterOtlpLogsEndpoint,
+        string? otelExporterOtlpLogsHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
     {
         ["OTEL_AWS_SIG_V4_ENABLED"] = null,
         ["OTEL_LOGS_EXPORTER"] = "otlp",
-        ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = endpoint,
+        ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = otelExporterOtlpLogsEndpoint,
+        ["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = otelExporterOtlpLogsHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
     };
 
     private static Dictionary<string, string?> CreateEnvironment()
@@ -619,6 +694,258 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         environment["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = null;
         environment["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = null;
         environment["OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"] = null;
+        environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
+        return environment;
+    }
+}
+
+/// <summary>
+/// Validates SigV4 metric exporter customization and preservation of upstream metric reader settings.
+/// </summary>
+[Collection("AWS credential providers")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+public class OtlpAwsMetricExporterConfigurationTests : PluginTests
+{
+    private const string CloudWatchMetricsEndpoint = "https://monitoring.us-east-1.amazonaws.com/v1/metrics";
+    private static readonly Uri Endpoint = new(CloudWatchMetricsEndpoint);
+
+    public OtlpAwsMetricExporterConfigurationTests()
+        : base(CreateEnvironment())
+    {
+    }
+
+    public static IEnumerable<object[]> ValidSigV4MetricsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            CloudWatchMetricsEndpoint,
+            "https://monitoring.cn-north-1.amazonaws.com.cn/v1/metrics",
+            "https://monitoring.cn-northwest-1.amazonaws.com.cn/v1/metrics",
+            "https://MONITORING.US-EAST-1.AMAZONAWS.COM/V1/METRICS",
+            "https://MONITORING.US-EAST-1.amazonaws.com/v1/metrics",
+            "https://monitoring.US-EAST-1.AMAZONAWS.com/v1/metrics",
+            "https://Monitoring.Us-East-1.amazonaws.com/v1/metrics",
+            "https://MoNiToRiNg.Us-EaSt-1.AmAzOnAwS.cOm/V1/MeTrIcS",
+        })
+        {
+            yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
+        }
+
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "x-test=value", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+
+        foreach (var exporter in new string?[] { null, "otlp,console" })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_METRICS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Metrics, string? Global)[]
+        {
+            ("http/protobuf", null),
+            (null, "http/protobuf"),
+            ("http/protobuf", "grpc"),
+        })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = protocols.Metrics;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+    }
+
+    public static IEnumerable<object[]> InvalidSigV4MetricsConfigs()
+    {
+        foreach (var endpoint in new[]
+        {
+            "http://localhost:4318/v1/metrics",
+            "http://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "ftp://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https://metric.us-east-1.amazonaws.com/v1/metrics",
+            "https://metrics.us-east-1.amazonaws.com/v1/metrics",
+            "https://cloud-metrics.us-east-1.amazonaws.com/v1/metrics",
+            "https://monitoring.amazonaws.com/v1/metrics",
+            "https://monitoring.us-east-1.amazon.com/v1/metrics",
+            "https://monitoring.us-east-1.aws.com/v1/metrics",
+            "https://monitoring.us_east_1.amazonaws.com/v1/metrics",
+            "https://monitoring.us.east.1.amazonaws.com/v1/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v2/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metric",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics/",
+            "https://monitoring.us-east-1.amazonaws.com//v1/metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1//metrics",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics?param=value",
+            "https://monitoring.us-east-1.amazonaws.com/v1/metrics#fragment",
+            "https://monitoring.us-east-1.amazonaws.com:443/v1/metrics",
+            "https:/monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https:://monitoring.us-east-1.amazonaws.com/v1/metrics",
+            "https://xray.us-east-1.amazonaws.com/v1/traces",
+            "https://logs.us-east-1.amazonaws.com/v1/logs",
+            "https://monitoring.cn-north-1.amazonaws.com.cn.evil/v1/metrics",
+            "https://monitoring.cn-north-1.amazonaws.cn/v1/metrics",
+            "http://monitoring.cn-north-1.amazonaws.com.cn/v1/metrics",
+        })
+        {
+            yield return new object[] { CreateSigV4MetricsConfig(endpoint) };
+        }
+
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: "Authorization=Bearer%20test-token", otelExporterOtlpHeaders: "x-test=value") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: string.Empty, otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+        yield return new object[] { CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint, otelExporterOtlpMetricsHeaders: " ", otelExporterOtlpHeaders: "Authorization=Bearer%20global-token") };
+
+        foreach (var exporter in new[] { "console", "none", "prometheus" })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_METRICS_EXPORTER"] = exporter;
+            yield return new object[] { config };
+        }
+
+        foreach (var protocols in new (string? Metrics, string? Global)[]
+        {
+            ("grpc", null),
+            (null, "grpc"),
+            ("grpc", "http/protobuf"),
+            ("http/json", null),
+        })
+        {
+            var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+            config["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = protocols.Metrics;
+            config["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocols.Global;
+            yield return new object[] { config };
+        }
+
+        yield return new object[] { CreateSigV4MetricsConfig(null) };
+    }
+
+    [Theory]
+    [MemberData(nameof(ValidSigV4MetricsConfigs))]
+    public void ShouldEnableSigV4MetricExporterIfConfigIsCorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: true);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidSigV4MetricsConfigs))]
+    public void ShouldNotUseSigV4MetricExporterIfConfigIsIncorrect(Dictionary<string, string?> config)
+    {
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: false);
+    }
+
+    [Theory]
+    [InlineData(MetricReaderTemporalityPreference.Cumulative)]
+    [InlineData(MetricReaderTemporalityPreference.Delta)]
+    public void ShouldPreserveUpstreamMetricAndReaderSettings(MetricReaderTemporalityPreference temporality)
+    {
+        var plugin = new Plugin();
+        var clientCount = 0;
+        OtlpExporterOptions? configuredOptions = null;
+        MetricReaderOptions? configuredReaderOptions = null;
+        PeriodicExportingMetricReaderOptions? periodicReaderOptions = null;
+
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_HEADERS", "x-environment-header=environment-value");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT", "5432");
+        using var provider = Sdk.CreateMeterProviderBuilder()
+            .AddOtlpExporter((exporterOptions, readerOptions) =>
+            {
+                exporterOptions.Endpoint = Endpoint;
+                exporterOptions.Protocol = OtlpExportProtocol.HttpProtobuf;
+                exporterOptions.Headers = "x-metric-header=metric-value";
+                exporterOptions.TimeoutMilliseconds = 4321;
+                exporterOptions.Compression = OtlpExportCompression.GZip;
+                readerOptions.TemporalityPreference = temporality;
+                readerOptions.PeriodicExportingMetricReaderOptions = new PeriodicExportingMetricReaderOptions
+                {
+                    ExportIntervalMilliseconds = 12345,
+                    ExportTimeoutMilliseconds = 6789,
+                };
+                periodicReaderOptions = readerOptions.PeriodicExportingMetricReaderOptions;
+                var originalFactory = exporterOptions.HttpClientFactory;
+
+                plugin.ConfigureMetricsOptions(exporterOptions);
+
+                Assert.NotSame(originalFactory, exporterOptions.HttpClientFactory);
+                var signingFactory = exporterOptions.HttpClientFactory;
+                exporterOptions.HttpClientFactory = () =>
+                {
+                    clientCount++;
+                    var client = signingFactory();
+                    Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
+                    return client;
+                };
+                configuredOptions = exporterOptions;
+                configuredReaderOptions = readerOptions;
+            })
+            .Build();
+
+        Assert.NotNull(configuredOptions);
+        Assert.Equal(Endpoint, configuredOptions.Endpoint);
+        Assert.Equal(OtlpExportProtocol.HttpProtobuf, configuredOptions.Protocol);
+        Assert.Equal("x-metric-header=metric-value", configuredOptions.Headers);
+        Assert.Equal(4321, configuredOptions.TimeoutMilliseconds);
+        Assert.Equal(OtlpExportCompression.GZip, configuredOptions.Compression);
+        Assert.NotNull(configuredReaderOptions);
+        Assert.Equal(temporality, configuredReaderOptions.TemporalityPreference);
+        Assert.Same(periodicReaderOptions, configuredReaderOptions.PeriodicExportingMetricReaderOptions);
+        Assert.NotNull(periodicReaderOptions);
+        Assert.Equal(12345, periodicReaderOptions.ExportIntervalMilliseconds);
+        Assert.Equal(6789, periodicReaderOptions.ExportTimeoutMilliseconds);
+        Assert.Equal(1, clientCount);
+        Assert.Equal("otlp", Environment.GetEnvironmentVariable("OTEL_METRICS_EXPORTER"));
+        Assert.Equal("x-environment-header=environment-value", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_HEADERS"));
+        Assert.Equal("5432", Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"));
+    }
+
+    [Theory]
+    [InlineData(OtlpExportProtocol.Grpc)]
+    [InlineData((OtlpExportProtocol)byte.MaxValue)]
+    public void ShouldThrowIfMetricExporterProtocolIsIncorrect(OtlpExportProtocol protocol)
+    {
+        var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
+        var originalFactory = options.HttpClientFactory;
+
+        Assert.Throws<ArgumentException>(() => new Plugin().ConfigureMetricsOptions(options));
+
+        Assert.Equal(protocol, options.Protocol);
+        Assert.Same(originalFactory, options.HttpClientFactory);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("false")]
+    [InlineData("true")]
+    public void ShouldSignCloudWatchMetricsExportsBasedOnTheEndpoint(string? sigV4Enabled)
+    {
+        var config = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+        config["OTEL_AWS_SIG_V4_ENABLED"] = sigV4Enabled;
+        CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", new Plugin().ConfigureMetricsOptions, expectSigning: true);
+    }
+
+    private static Dictionary<string, string?> CreateSigV4MetricsConfig(
+        string? otelExporterOtlpMetricsEndpoint,
+        string? otelExporterOtlpMetricsHeaders = null,
+        string? otelExporterOtlpHeaders = null) => new()
+    {
+        ["OTEL_AWS_SIG_V4_ENABLED"] = null,
+        ["OTEL_METRICS_EXPORTER"] = "otlp",
+        ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = otelExporterOtlpMetricsEndpoint,
+        ["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = otelExporterOtlpMetricsHeaders,
+        ["OTEL_EXPORTER_OTLP_HEADERS"] = otelExporterOtlpHeaders,
+    };
+
+    private static Dictionary<string, string?> CreateEnvironment()
+    {
+        var environment = CreateSigV4MetricsConfig(CloudWatchMetricsEndpoint);
+        environment["OTEL_EXPORTER_OTLP_ENDPOINT"] = null;
+        environment["OTEL_EXPORTER_OTLP_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = null;
+        environment["OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"] = null;
         environment["AWS_LAMBDA_FUNCTION_NAME"] = null;
         return environment;
     }
