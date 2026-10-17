@@ -63,6 +63,9 @@
          flow transitively. Referenced directly here so ServiceEventsGateTest can assert that a
          disabled ServiceEvents leaves customer telemetry untouched. -->
     <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.ServiceEvents\AWS.Distro.OpenTelemetry.ServiceEvents.csproj" />
+    <!-- Also referenced with PrivateAssets="All" by the main project. Referenced directly here so
+         OtlpExporterUtilsTest can exercise the reflection binding against the resolved OTLP exporter. -->
+    <ProjectReference Include="..\..\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
