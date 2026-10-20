@@ -11,6 +11,19 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Register otlp/sigv4 exporters for traces, metrics, and logs.
+  Select `otlp/sigv4` in `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or
+  `OTEL_LOGS_EXPORTER`; the protocol must be `http/protobuf`.
+  At startup, `otlp/sigv4` is normalized to `otlp` so upstream configures and builds
+  the exporter. Combining `otlp` and `otlp/sigv4` produces one signed exporter per signal.
+  Set the signing service with `AWS_TRACES_EXPORTER_SERVICE`, `AWS_METRICS_EXPORTER_SERVICE`,
+  or `AWS_LOGS_EXPORTER_SERVICE`, falling back to `AWS_EXPORTER_SERVICE`, then to
+  `xray`, `monitoring`, or `logs`, respectively.
+  All SigV4 exporters now resolve the signing region from `AWS_REGION`, then
+  `AWS_DEFAULT_REGION`, then the AWS endpoint, then the AWS SDK region chain.
+  AWS Lambda reserves `AWS_REGION`, so export to the function's region: an endpoint
+  in another region will be signed for the function's region and AWS will reject the request.
+
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
   endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with

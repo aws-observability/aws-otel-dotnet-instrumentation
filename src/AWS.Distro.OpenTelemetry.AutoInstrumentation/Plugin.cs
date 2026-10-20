@@ -20,6 +20,7 @@ using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Metrics;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
@@ -37,6 +38,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
+using OtlpSignal = AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common.OtlpAwsExporterOptions.OtlpSignal;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -58,10 +60,8 @@ public class Plugin
     // to the unsigned exporter. The same optional-suffix form is already used by
     // S3PresignedUrlAttributor.
     //
-    // Region extraction is unaffected. Both call sites take the second dot-separated label
-    // (OtlpAwsSpanExporter.cs and ConfigureLogsOptions below), which yields "cn-north-1" for a China
-    // host just as it yields "us-east-1" for a commercial one. Signing uses that region plus an
-    // explicit ServiceURL, so the DNS suffix never reaches the signer.
+    // Signing region resolution is shared by all AWS OTLP exporters through
+    // OtlpAwsExporterOptions.GetAwsRegion.
     //
     // Internal rather than private so the patterns can be asserted directly in unit tests; the
     // gating methods that consume them read process-wide environment state captured at class load.
@@ -116,19 +116,20 @@ public class Plugin
         };
 
     private Sampler? sampler;
-
-    private enum OtlpSignal
-    {
-        Traces,
-        Logs,
-        Metrics,
-    }
+    private bool shouldUseSigV4TracesExporter;
+    private bool shouldUseSigV4MetricsExporter;
+    private bool shouldUseSigV4LogsExporter;
 
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
     /// </summary>
     public void Initializing()
     {
+        // Upstream reads its lazy exporter settings after this hook returns.
+        this.shouldUseSigV4TracesExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Traces);
+        this.shouldUseSigV4MetricsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Metrics);
+        this.shouldUseSigV4LogsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Logs);
+
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
         this.InitializeServiceEvents();
@@ -404,8 +405,8 @@ public class Plugin
             return builder;
         }
 
-        var exporters = System.Environment.GetEnvironmentVariable(MetricExporterConfig);
-        if (!string.IsNullOrEmpty(exporters) && exporters.Contains("none"))
+        var exporters = PluginUtils.ParseOtelExporterEnvVariable(System.Environment.GetEnvironmentVariable(MetricExporterConfig));
+        if (exporters.Contains("none"))
         {
             Logger.Log(LogLevel.Information, "Install runtime metric filter in metrics collection.");
             builder.AddView(instrument => instrument.Meter.Name == RuntimeMetricMeterName
@@ -447,8 +448,8 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
-        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
+        var logsExporters = PluginUtils.ParseOtelExporterEnvVariable(System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER"));
+        if (logsExporters.Contains("otlp")
             && AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
             Logger.LogWarning(
@@ -942,17 +943,79 @@ public class Plugin
         return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 
+    /// <summary>
+    /// Normalizes signed OTLP exporter names in the signal's OTEL_*_EXPORTER environment variable.
+    /// </summary>
+    /// <remarks>
+    /// HACK: Upstream has no extension point for custom exporter names. Rewrite otlp/sigv4
+    /// to otlp before upstream reads the environment so it applies its OTLP settings and
+    /// builds the exporter through the normal configuration pipeline. Remember SigV4 intent
+    /// separately so our Configure*Options hooks can add signing to the configured options.
+    /// TODO: Remove this workaround once upstream supports custom exporter registration or
+    /// overriding exporter selection while preserving its configuration pipeline.
+    /// </remarks>
+    /// <param name="signal">The signal token.</param>
+    /// <returns>Whether the signed exporter was selected.</returns>
+    private bool NormalizeOtelExportersIfSigV4Enabled(string signal)
+    {
+        var variable = $"OTEL_{signal}_EXPORTER";
+        var exporters = PluginUtils.ParseOtelExporterEnvVariable(Environment.GetEnvironmentVariable(variable));
+        var normalizedExporters = new List<string>();
+        var useSigV4 = false;
+        var hasOtlp = false;
+        foreach (var exporter in exporters)
+        {
+            var name = exporter;
+            switch (name)
+            {
+                case OtlpAwsExporterOptions.ExporterName:
+                    name = "otlp";
+                    useSigV4 = true;
+                    break;
+            }
+
+            if (name == "otlp")
+            {
+                if (hasOtlp)
+                {
+                    continue;
+                }
+
+                hasOtlp = true;
+            }
+
+            normalizedExporters.Add(name);
+        }
+
+        if (useSigV4)
+        {
+            Environment.SetEnvironmentVariable(variable, string.Join(",", normalizedExporters));
+        }
+
+        return useSigV4;
+    }
+
     private bool ShouldConfigureOtlpAwsExporter(OtlpSignal signal, out bool isLegacyPath)
     {
-        var signalName = signal.ToString().ToUpperInvariant();
         isLegacyPath = false;
 
-        var exporter = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
+        // An explicit otlp/sigv4 choice requests signing regardless of endpoint detection.
+        switch (signal)
+        {
+            case OtlpSignal.Traces when this.shouldUseSigV4TracesExporter:
+            case OtlpSignal.Metrics when this.shouldUseSigV4MetricsExporter:
+            case OtlpSignal.Logs when this.shouldUseSigV4LogsExporter:
+                return true;
+        }
+
+        var signalName = signal.ToString().ToUpperInvariant();
+        var exporterValue = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
+        var exporters = PluginUtils.ParseOtelExporterEnvVariable(exporterValue);
         var protocol = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_PROTOCOL")
             ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
         var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
         var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
-        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
+        var isOtlpExporterEnabled = exporterValue == null || exporters.Contains("otlp");
         var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
         var shouldConfigureExporter = false;
         var hasSignalHeaders = false;
@@ -981,7 +1044,7 @@ public class Plugin
 
             var isXRayOtlpEndpoint = endpoint != null
                 && new Regex(XRayOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
-            var isLegacySigV4TracesExporterEnabled = exporter == "none"
+            var isLegacySigV4TracesExporterEnabled = exporters.Count == 1 && exporters.Contains("none")
                 && System.Environment.GetEnvironmentVariable(SigV4EnabledConfig) == "true"
                 && isXRayOtlpEndpoint
                 && isHttpProtobuf;
