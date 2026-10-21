@@ -17,7 +17,9 @@ public class OtlpExporterUtils
     private static readonly ILogger Logger = Factory.CreateLogger<OtlpExporterUtils>();
 
     private static readonly MethodInfo? WriteTraceDataMethod;
+    private static readonly object? WriteTraceDataMaxBufferSize;
     private static readonly MethodInfo? WriteLogsDataMethod;
+    private static readonly object? WriteLogsDataMaxBufferSize;
     private static readonly object? SdkLimitOptions;
     private static readonly object? ExperimentalOptions;
 
@@ -39,10 +41,9 @@ public class OtlpExporterUtils
             return;
         }
 
-        WriteTraceDataMethod = otlpSerializerType.GetMethod(
+        WriteTraceDataMethod = GetSerializerMethod(
+            otlpSerializerType,
             "WriteTraceData",
-            BindingFlags.NonPublic | BindingFlags.Static,
-            null,
             new[]
             {
                 typeof(byte[]).MakeByRefType(),    // ref byte[] buffer
@@ -51,19 +52,18 @@ public class OtlpExporterUtils
                 typeof(Resource),                  // Resource?
                 typeof(Batch<Activity>).MakeByRefType() // in Batch<Activity>
             },
-            null)
+            out WriteTraceDataMaxBufferSize)
             ?? throw new MissingMethodException("WriteTraceData not found");
 
         if (otlpLogSerializerType != null)
         {
-            WriteLogsDataMethod = otlpLogSerializerType.GetMethod(
+            WriteLogsDataMethod = GetSerializerMethod(
+                otlpLogSerializerType,
                 "WriteLogsData",
-                BindingFlags.NonPublic | BindingFlags.Static,
-                null,
                 experimentalOptionsType != null
                     ? new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, experimentalOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() }
                     : new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() },
-                null);
+                out WriteLogsDataMaxBufferSize);
 
             ExperimentalOptions = experimentalOptionsType != null ? Activator.CreateInstance(experimentalOptionsType) : null;
         }
@@ -89,6 +89,10 @@ public class OtlpExporterUtils
         
         // Pack arguments (ref/in remain by-ref in the args array)
         object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
+        if (WriteTraceDataMaxBufferSize != null)
+        {
+            args = args.Append(WriteTraceDataMaxBufferSize).ToArray();
+        }
 
         // Invoke static method (null target) :contentReference[oaicite:2]{index=2}
         var result = (int)WriteTraceDataMethod?.Invoke(obj: null, parameters: args)!;
@@ -111,13 +115,28 @@ public class OtlpExporterUtils
             return -1;
         }
 
-        object[] args = ExperimentalOptions != null && WriteLogsDataMethod.GetParameters().Length == 6
+        object[] args = ExperimentalOptions != null
             ? new object[] { buffer, writePosition, SdkLimitOptions, ExperimentalOptions, resource!, batch! }
             : new object[] { buffer, writePosition, SdkLimitOptions, resource!, batch! };
+        if (WriteLogsDataMaxBufferSize != null)
+        {
+            args = args.Append(WriteLogsDataMaxBufferSize).ToArray();
+        }
 
         var result = (int)WriteLogsDataMethod.Invoke(obj: null, parameters: args)!;
         buffer = (byte[])args[0];
         return result;
+    }
+
+    // v1.18.0 appended "int maxBufferSize = ProtobufSerializer.MaxBufferSize" to the serializer methods. Reflection
+    // binds and invokes on exact arity and ignores default values, so probe for that overload first and return its
+    // declared default for the caller to pass explicitly.
+    private static MethodInfo? GetSerializerMethod(Type serializerType, string name, Type[] parameterTypes, out object? maxBufferSize)
+    {
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        MethodInfo? method = serializerType.GetMethod(name, flags, null, parameterTypes.Append(typeof(int)).ToArray(), null);
+        maxBufferSize = method?.GetParameters()[parameterTypes.Length].DefaultValue;
+        return method ?? serializerType.GetMethod(name, flags, null, parameterTypes, null);
     }
 
     // Uses reflection to the get the SdkLimitOptions required to invoke the ToOtlpSpan function used in the
