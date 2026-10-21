@@ -82,10 +82,6 @@ public static class OtlpAwsSpanExporter
         // TODO: In a follow-up PR, detect an existing Authorization header in options.Headers
         // and warn once during exporter setup that SigV4 authentication overrides it.
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
-        options.HttpClientFactory = () => new HttpClient(
-            new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
-        {
-            Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
-        };
+        options.HttpClientFactory = new AwsAuthHttpClientFactory(options, headerSupplier, transportFactory).Create;
     }
 }

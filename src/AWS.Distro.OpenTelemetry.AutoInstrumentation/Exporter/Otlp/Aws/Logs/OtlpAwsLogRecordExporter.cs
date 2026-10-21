@@ -79,10 +79,6 @@ public static class OtlpAwsLogRecordExporter
 
         var config = new AwsAuthConfig(options.Endpoint, region, service);
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
-        options.HttpClientFactory = () => new HttpClient(
-            new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
-        {
-            Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
-        };
+        options.HttpClientFactory = new AwsAuthHttpClientFactory(options, headerSupplier, transportFactory).Create;
     }
 }

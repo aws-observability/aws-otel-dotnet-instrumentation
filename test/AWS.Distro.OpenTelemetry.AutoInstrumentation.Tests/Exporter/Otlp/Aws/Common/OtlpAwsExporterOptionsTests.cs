@@ -9,19 +9,6 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.C
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class OtlpAwsExporterOptionsTests : PluginTests
 {
-    public OtlpAwsExporterOptionsTests()
-        : base(new Dictionary<string, string?>
-        {
-            ["AWS_REGION"] = null,
-            ["AWS_DEFAULT_REGION"] = null,
-            ["AWS_EXPORTER_SERVICE"] = null,
-            ["AWS_TRACES_EXPORTER_SERVICE"] = null,
-            ["AWS_METRICS_EXPORTER_SERVICE"] = null,
-            ["AWS_LOGS_EXPORTER_SERVICE"] = null,
-        })
-    {
-    }
-
     public static IEnumerable<object?[]> ServiceConfigurations()
     {
         foreach (var (signal, defaultService) in new[]
@@ -115,4 +102,14 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     {
         Assert.Null(OtlpAwsExporterOptions.GetAwsRegion(new Uri("http://localhost"), () => null));
     }
+
+    protected override Dictionary<string, string?> CreateEnvironment() => new()
+    {
+        ["AWS_REGION"] = null,
+        ["AWS_DEFAULT_REGION"] = null,
+        ["AWS_EXPORTER_SERVICE"] = null,
+        ["AWS_TRACES_EXPORTER_SERVICE"] = null,
+        ["AWS_METRICS_EXPORTER_SERVICE"] = null,
+        ["AWS_LOGS_EXPORTER_SERVICE"] = null,
+    };
 }
