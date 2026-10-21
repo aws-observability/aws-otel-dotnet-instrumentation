@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Net.Http;
+using System.Reflection;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
@@ -51,7 +53,6 @@ public abstract class PluginTests : IDisposable
     {
         SetEnvironmentVariables(config);
         var options = new OtlpExporterOptions { Protocol = OtlpExportProtocol.HttpProtobuf };
-        var originalFactory = options.HttpClientFactory;
         if (config[endpointConfigName] is string endpoint)
         {
             options.Endpoint = new Uri(endpoint, UriKind.RelativeOrAbsolute);
@@ -66,14 +67,11 @@ public abstract class PluginTests : IDisposable
         configureExporter(options);
         Assert.Equal(originalHeaders, options.Headers);
 
-        if (expectSigning)
-        {
-            Assert.IsType<AwsAuthHttpClientFactory>(options.HttpClientFactory.Target);
-        }
-        else
-        {
-            Assert.Same(originalFactory, options.HttpClientFactory);
-        }
+        using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.Equal(expectSigning, handler is AwsAuthHttpHandler);
     }
 }
 
@@ -88,13 +86,13 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
     private static readonly Uri Endpoint = new(XRayEndpoint);
 
     [Theory]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectedHttpClientFactoryType: */ typeof(OtlpExporterOptions))]
-    public void TestInitializing(string configuredExporters, string[] expectedExporters, Type expectedHttpClientFactoryType)
+    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectSigning: */ false)]
+    public void TestInitializing(string configuredExporters, string[] expectedExporters, bool expectSigning)
     {
         var endpoint = new Uri("http://localhost:4318/v1/traces");
         SetEnvironmentVariables(CreateEnvironment(endpoint.AbsoluteUri, exporters: configuredExporters));
@@ -118,9 +116,11 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         Assert.Equal(1234, options.TimeoutMilliseconds);
         Assert.Equal(OtlpExportCompression.GZip, options.Compression);
         Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
-        Assert.IsType(expectedHttpClientFactoryType, options.HttpClientFactory.Target);
-
         using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.Equal(expectSigning, handler is AwsAuthHttpHandler);
         Assert.Equal(TimeSpan.FromMilliseconds(1234), client.Timeout);
     }
 
@@ -332,8 +332,11 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         Assert.Equal(4, batchOptions.MaxExportBatchSize);
         Assert.Equal(12345, batchOptions.ScheduledDelayMilliseconds);
         Assert.Equal(6789, batchOptions.ExporterTimeoutMilliseconds);
-        Assert.IsType<AwsAuthHttpClientFactory>(options.HttpClientFactory.Target);
         using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.IsType<AwsAuthHttpHandler>(handler);
         Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
     }
 
@@ -344,12 +347,15 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
     {
         var plugin = new Plugin();
         var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
-        var originalFactory = options.HttpClientFactory;
 
         Assert.Throws<ArgumentException>(() => plugin.ConfigureTracesOptions(options));
 
         Assert.Equal(protocol, options.Protocol);
-        Assert.Same(originalFactory, options.HttpClientFactory);
+        using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.IsNotType<AwsAuthHttpHandler>(handler);
     }
 
     [Theory]
@@ -391,7 +397,11 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
         Assert.Contains("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", warning);
         Assert.Equal("none", Environment.GetEnvironmentVariable("OTEL_TRACES_EXPORTER"));
         Assert.Equal("true", Environment.GetEnvironmentVariable("OTEL_AWS_SIG_V4_ENABLED"));
-        Assert.IsType<AwsAuthHttpClientFactory>(options.HttpClientFactory.Target);
+        using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.IsType<AwsAuthHttpHandler>(handler);
     }
 
     [Theory]
@@ -475,13 +485,13 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
     private static readonly Uri Endpoint = new(CloudWatchLogsEndpoint);
 
     [Theory]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectedHttpClientFactoryType: */ typeof(OtlpExporterOptions))]
-    public void TestInitializing(string configuredExporters, string[] expectedExporters, Type expectedHttpClientFactoryType)
+    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectSigning: */ false)]
+    public void TestInitializing(string configuredExporters, string[] expectedExporters, bool expectSigning)
     {
         var endpoint = new Uri("http://localhost:4318/v1/logs");
         SetEnvironmentVariables(CreateEnvironment(endpoint.AbsoluteUri, exporters: configuredExporters));
@@ -505,9 +515,11 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         Assert.Equal(1234, options.TimeoutMilliseconds);
         Assert.Equal(OtlpExportCompression.GZip, options.Compression);
         Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
-        Assert.IsType(expectedHttpClientFactoryType, options.HttpClientFactory.Target);
-
         using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.Equal(expectSigning, handler is AwsAuthHttpHandler);
         Assert.Equal(TimeSpan.FromMilliseconds(1234), client.Timeout);
     }
 
@@ -671,12 +683,15 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
                 batchOptions = processorOptions.BatchExportProcessorOptions;
                 plugin.ConfigureLogsOptions(exporterOptions);
 
-                Assert.IsType<AwsAuthHttpClientFactory>(exporterOptions.HttpClientFactory.Target);
                 var signingFactory = exporterOptions.HttpClientFactory;
                 exporterOptions.HttpClientFactory = () =>
                 {
                     clientCount++;
                     var client = signingFactory();
+                    var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.NotNull(handlerField);
+                    var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+                    Assert.IsType<AwsAuthHttpHandler>(handler);
                     Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
                     return client;
                 };
@@ -713,12 +728,15 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
     public void ShouldThrowIfLogExporterProtocolIsIncorrect(OtlpExportProtocol protocol)
     {
         var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
-        var originalFactory = options.HttpClientFactory;
 
         Assert.Throws<ArgumentException>(() => new Plugin().ConfigureLogsOptions(options));
 
         Assert.Equal(protocol, options.Protocol);
-        Assert.Same(originalFactory, options.HttpClientFactory);
+        using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.IsNotType<AwsAuthHttpHandler>(handler);
     }
 
     [Theory]
@@ -766,13 +784,13 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
     private static readonly Uri Endpoint = new(CloudWatchMetricsEndpoint);
 
     [Theory]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectedHttpClientFactoryType: */ typeof(AwsAuthHttpClientFactory))]
-    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectedHttpClientFactoryType: */ typeof(OtlpExporterOptions))]
-    public void TestInitializing(string configuredExporters, string[] expectedExporters, Type expectedHttpClientFactoryType)
+    [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "console,otlp/sigv4,otlp", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ "otlp/sigv4,otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " console , otlp/sigv4 , otlp ", /* expectedExporters: */ new[] { "console", "otlp" }, /* expectSigning: */ true)]
+    [InlineData(/* configuredExporters: */ " otlp , console ", /* expectedExporters: */ new[] { "otlp", "console" }, /* expectSigning: */ false)]
+    public void TestInitializing(string configuredExporters, string[] expectedExporters, bool expectSigning)
     {
         var endpoint = new Uri("http://localhost:4318/v1/metrics");
         SetEnvironmentVariables(CreateEnvironment(endpoint.AbsoluteUri, exporters: configuredExporters));
@@ -796,9 +814,11 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
         Assert.Equal(1234, options.TimeoutMilliseconds);
         Assert.Equal(OtlpExportCompression.GZip, options.Compression);
         Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
-        Assert.IsType(expectedHttpClientFactoryType, options.HttpClientFactory.Target);
-
         using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.Equal(expectSigning, handler is AwsAuthHttpHandler);
         Assert.Equal(TimeSpan.FromMilliseconds(1234), client.Timeout);
     }
 
@@ -955,12 +975,15 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
                 periodicReaderOptions = readerOptions.PeriodicExportingMetricReaderOptions;
                 plugin.ConfigureMetricsOptions(exporterOptions);
 
-                Assert.IsType<AwsAuthHttpClientFactory>(exporterOptions.HttpClientFactory.Target);
                 var signingFactory = exporterOptions.HttpClientFactory;
                 exporterOptions.HttpClientFactory = () =>
                 {
                     clientCount++;
                     var client = signingFactory();
+                    var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.NotNull(handlerField);
+                    var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+                    Assert.IsType<AwsAuthHttpHandler>(handler);
                     Assert.Equal(TimeSpan.FromMilliseconds(4321), client.Timeout);
                     return client;
                 };
@@ -993,12 +1016,15 @@ public class OtlpAwsMetricExporterConfigurationTests : PluginTests
     public void ShouldThrowIfMetricExporterProtocolIsIncorrect(OtlpExportProtocol protocol)
     {
         var options = new OtlpExporterOptions { Endpoint = Endpoint, Protocol = protocol };
-        var originalFactory = options.HttpClientFactory;
 
         Assert.Throws<ArgumentException>(() => new Plugin().ConfigureMetricsOptions(options));
 
         Assert.Equal(protocol, options.Protocol);
-        Assert.Same(originalFactory, options.HttpClientFactory);
+        using var client = options.HttpClientFactory();
+        var handlerField = typeof(HttpMessageInvoker).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(handlerField);
+        var handler = Assert.IsAssignableFrom<HttpMessageHandler>(handlerField.GetValue(client));
+        Assert.IsNotType<AwsAuthHttpHandler>(handler);
     }
 
     [Theory]

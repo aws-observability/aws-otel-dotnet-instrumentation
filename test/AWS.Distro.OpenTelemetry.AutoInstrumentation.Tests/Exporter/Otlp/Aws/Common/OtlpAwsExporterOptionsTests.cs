@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
+using OtlpSignal = AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common.OtlpAwsExporterOptions.OtlpSignal;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.Common;
 
@@ -10,28 +11,29 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.C
 public class OtlpAwsExporterOptionsTests : PluginTests
 {
     [Theory]
-    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
-    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
-    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
-    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
-    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
-    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
-    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
-    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
-    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
-    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
+    [InlineData(OtlpSignal.Traces, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpSignal.Traces, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Traces, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Traces, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
+    [InlineData(OtlpSignal.Traces, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
+    [InlineData(OtlpSignal.Metrics, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpSignal.Metrics, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Metrics, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Metrics, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
+    [InlineData(OtlpSignal.Metrics, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
+    [InlineData(OtlpSignal.Logs, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpSignal.Logs, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Logs, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpSignal.Logs, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
+    [InlineData(OtlpSignal.Logs, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
     public void GetAwsServiceEnvironmentVariablesOverrideDefault(
-        string signal, string? signalService, string? globalService, string expectedService)
+        object signal, string? signalService, string? globalService, string expectedService)
     {
-        Environment.SetEnvironmentVariable($"AWS_{signal}_EXPORTER_SERVICE", signalService);
-        Environment.SetEnvironmentVariable("AWS_EXPORTER_SERVICE", globalService);
+        var otlpSignal = (OtlpSignal)signal;
+        Environment.SetEnvironmentVariable($"AWS_{otlpSignal.ToString().ToUpperInvariant()}_EXPORTER_SERVICE", signalService);
+        Environment.SetEnvironmentVariable(OtlpAwsExporterOptions.ExporterServiceEnvironmentVariable, globalService);
 
-        Assert.Equal(expectedService, OtlpAwsExporterOptions.GetAwsService(signal));
+        Assert.Equal(expectedService, OtlpAwsExporterOptions.GetAwsService(otlpSignal));
     }
 
     [Theory]
@@ -104,9 +106,9 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     {
         ["AWS_REGION"] = null,
         ["AWS_DEFAULT_REGION"] = null,
-        ["AWS_EXPORTER_SERVICE"] = null,
-        ["AWS_TRACES_EXPORTER_SERVICE"] = null,
-        ["AWS_METRICS_EXPORTER_SERVICE"] = null,
-        ["AWS_LOGS_EXPORTER_SERVICE"] = null,
+        [OtlpAwsExporterOptions.ExporterServiceEnvironmentVariable] = null,
+        [OtlpAwsExporterOptions.TracesExporterServiceEnvironmentVariable] = null,
+        [OtlpAwsExporterOptions.MetricsExporterServiceEnvironmentVariable] = null,
+        [OtlpAwsExporterOptions.LogsExporterServiceEnvironmentVariable] = null,
     };
 }

@@ -126,9 +126,9 @@ public class Plugin
     public void Initializing()
     {
         // Upstream reads its lazy exporter settings after this hook returns.
-        this.shouldUseSigV4TracesExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Traces);
-        this.shouldUseSigV4MetricsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Metrics);
-        this.shouldUseSigV4LogsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpAwsExporterOptions.Logs);
+        this.shouldUseSigV4TracesExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Traces);
+        this.shouldUseSigV4MetricsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Metrics);
+        this.shouldUseSigV4LogsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Logs);
 
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
@@ -954,11 +954,26 @@ public class Plugin
     /// TODO: Remove this workaround once upstream supports custom exporter registration or
     /// overriding exporter selection while preserving its configuration pipeline.
     /// </remarks>
-    /// <param name="signal">The signal token.</param>
+    /// <param name="signal">The OTLP signal.</param>
     /// <returns>Whether the signed exporter was selected.</returns>
-    private bool NormalizeOtelExportersIfSigV4Enabled(string signal)
+    private bool NormalizeOtelExportersIfSigV4Enabled(OtlpSignal signal)
     {
-        var variable = $"OTEL_{signal}_EXPORTER";
+        string variable;
+        switch (signal)
+        {
+            case OtlpSignal.Traces:
+                variable = "OTEL_TRACES_EXPORTER";
+                break;
+            case OtlpSignal.Metrics:
+                variable = MetricExporterConfig;
+                break;
+            case OtlpSignal.Logs:
+                variable = "OTEL_LOGS_EXPORTER";
+                break;
+            default:
+                throw new ArgumentException("Unknown OTLP signal.", nameof(signal));
+        }
+
         var exporters = PluginUtils.ParseOtelExporterEnvVariable(Environment.GetEnvironmentVariable(variable));
         var normalizedExporters = new List<string>();
         var useSigV4 = false;

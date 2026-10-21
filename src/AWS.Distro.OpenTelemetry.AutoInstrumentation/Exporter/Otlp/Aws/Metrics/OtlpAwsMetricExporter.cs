@@ -53,7 +53,7 @@ public static class OtlpAwsMetricExporter
             throw new ArgumentException("The AWS OTLP metric exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.Metrics, options);
+        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Metrics, options);
         Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
     }
 
@@ -79,6 +79,10 @@ public static class OtlpAwsMetricExporter
 
         var config = new AwsAuthConfig(options.Endpoint, region, service);
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
-        options.HttpClientFactory = new AwsAuthHttpClientFactory(options, headerSupplier, transportFactory).Create;
+        options.HttpClientFactory = () => new HttpClient(
+            new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
+        {
+            Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
+        };
     }
 }

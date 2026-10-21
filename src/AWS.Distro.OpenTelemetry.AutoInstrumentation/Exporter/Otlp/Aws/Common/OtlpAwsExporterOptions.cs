@@ -15,14 +15,17 @@ internal sealed class OtlpAwsExporterOptions
     /// <summary>The exporter selection token.</summary>
     internal const string ExporterName = "otlp/sigv4";
 
-    /// <summary>The traces signal token.</summary>
-    internal const string Traces = "TRACES";
+    /// <summary>The environment variable for the global SigV4 service.</summary>
+    internal const string ExporterServiceEnvironmentVariable = "AWS_EXPORTER_SERVICE";
 
-    /// <summary>The metrics signal token.</summary>
-    internal const string Metrics = "METRICS";
+    /// <summary>The environment variable for the traces SigV4 service.</summary>
+    internal const string TracesExporterServiceEnvironmentVariable = "AWS_TRACES_EXPORTER_SERVICE";
 
-    /// <summary>The logs signal token.</summary>
-    internal const string Logs = "LOGS";
+    /// <summary>The environment variable for the metrics SigV4 service.</summary>
+    internal const string MetricsExporterServiceEnvironmentVariable = "AWS_METRICS_EXPORTER_SERVICE";
+
+    /// <summary>The environment variable for the logs SigV4 service.</summary>
+    internal const string LogsExporterServiceEnvironmentVariable = "AWS_LOGS_EXPORTER_SERVICE";
 
     /// <summary>The default SigV4 service for traces.</summary>
     internal const string DefaultTracesService = "xray";
@@ -53,11 +56,11 @@ internal sealed class OtlpAwsExporterOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="OtlpAwsExporterOptions"/> class.
     /// </summary>
-    /// <param name="signal">The signal token.</param>
+    /// <param name="signal">The OTLP signal.</param>
     /// <param name="options">The configured upstream exporter options.</param>
     /// <param name="sdkRegionProvider">An optional replacement for the cached SDK region provider.</param>
     /// <exception cref="ArgumentException">No signing region can be resolved.</exception>
-    internal OtlpAwsExporterOptions(string signal, OtlpExporterOptions options, Func<string?>? sdkRegionProvider = null)
+    internal OtlpAwsExporterOptions(OtlpSignal signal, OtlpExporterOptions options, Func<string?>? sdkRegionProvider = null)
     {
         this.Service = GetAwsService(signal);
         this.Region = GetAwsRegion(options.Endpoint, sdkRegionProvider)
@@ -87,24 +90,24 @@ internal sealed class OtlpAwsExporterOptions
     /// <summary>
     /// Resolves the signing service from signal settings, global settings, or the signal default.
     /// </summary>
-    /// <param name="signal">The signal token.</param>
+    /// <param name="signal">The OTLP signal.</param>
     /// <returns>The SigV4 service name.</returns>
-    internal static string GetAwsService(string signal)
+    internal static string GetAwsService(OtlpSignal signal)
     {
         string serviceEnvironmentVariable;
         string defaultService;
         switch (signal)
         {
-            case Traces:
-                serviceEnvironmentVariable = "AWS_TRACES_EXPORTER_SERVICE";
+            case OtlpSignal.Traces:
+                serviceEnvironmentVariable = TracesExporterServiceEnvironmentVariable;
                 defaultService = DefaultTracesService;
                 break;
-            case Metrics:
-                serviceEnvironmentVariable = "AWS_METRICS_EXPORTER_SERVICE";
+            case OtlpSignal.Metrics:
+                serviceEnvironmentVariable = MetricsExporterServiceEnvironmentVariable;
                 defaultService = DefaultMetricsService;
                 break;
-            case Logs:
-                serviceEnvironmentVariable = "AWS_LOGS_EXPORTER_SERVICE";
+            case OtlpSignal.Logs:
+                serviceEnvironmentVariable = LogsExporterServiceEnvironmentVariable;
                 defaultService = DefaultLogsService;
                 break;
             default:
@@ -117,7 +120,7 @@ internal sealed class OtlpAwsExporterOptions
             return service;
         }
 
-        service = GetEnvironmentValue("AWS_EXPORTER_SERVICE");
+        service = GetEnvironmentValue(ExporterServiceEnvironmentVariable);
         if (service != null)
         {
             return service;

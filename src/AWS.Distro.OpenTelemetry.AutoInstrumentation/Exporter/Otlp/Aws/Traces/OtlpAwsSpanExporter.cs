@@ -53,7 +53,7 @@ public static class OtlpAwsSpanExporter
             throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.Traces, options);
+        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Traces, options);
         Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
     }
 
@@ -82,6 +82,10 @@ public static class OtlpAwsSpanExporter
         // TODO: In a follow-up PR, detect an existing Authorization header in options.Headers
         // and warn once during exporter setup that SigV4 authentication overrides it.
         var headerSupplier = new AwsAuthHeaderSupplier(config, authenticator);
-        options.HttpClientFactory = new AwsAuthHttpClientFactory(options, headerSupplier, transportFactory).Create;
+        options.HttpClientFactory = () => new HttpClient(
+            new AwsAuthHttpHandler(headerSupplier, transportFactory?.Invoke() ?? new HttpClientHandler()))
+        {
+            Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
+        };
     }
 }
