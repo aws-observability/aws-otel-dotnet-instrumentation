@@ -97,7 +97,7 @@ public class OtlpAwsLogRecordExporterTests : AbstractOtlpAwsExporterTest<OtlpAws
         // Create the exporter after the test selects compression; reuse the same logger provider.
         if (this.loggerFactory == null)
         {
-            var exporter = OtlpAwsLogRecordExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
+            var exporter = OtlpAwsLogRecordExporter.Create(this.Options, this.ServiceName, this.Region, this.Authenticator.Object, () => this.Transport);
             this.loggerFactory = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
             {
                 options.IncludeScopes = true;

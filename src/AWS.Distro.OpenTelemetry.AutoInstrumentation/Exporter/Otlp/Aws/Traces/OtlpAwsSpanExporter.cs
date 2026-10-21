@@ -15,20 +15,25 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 public static class OtlpAwsSpanExporter
 {
     /// <summary>
-    /// Creates an OTLP trace exporter for the X-Ray endpoint.
+    /// Creates an OTLP trace exporter with configured AWS service and region resolution.
     /// </summary>
     /// <param name="options">The OTLP endpoint, timeout, headers, and compression options. The protocol must be HTTP/protobuf.</param>
     /// <returns>The upstream exporter configured with AWS request signing.</returns>
-    /// <exception cref="ArgumentException">The protocol is not HTTP/protobuf.</exception>
+    /// <exception cref="ArgumentException">The protocol is not HTTP/protobuf or no signing region can be resolved.</exception>
     public static BaseExporter<Activity> Create(OtlpExporterOptions options)
-        => Create(options, null, null);
+    {
+        Configure(options);
+        return new OtlpTraceExporter(options);
+    }
 
     internal static BaseExporter<Activity> Create(
         OtlpExporterOptions options,
+        string service,
+        string region,
         IAwsAuthenticator? authenticator,
         Func<HttpMessageHandler>? transportFactory)
     {
-        Configure(options, authenticator, transportFactory);
+        Configure(options, service, region, authenticator, transportFactory);
         return new OtlpTraceExporter(options);
     }
 
@@ -48,9 +53,31 @@ public static class OtlpAwsSpanExporter
             throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var endpoint = options.Endpoint;
-        var region = endpoint.Host.Split('.')[1];
-        var config = new AwsAuthConfig(endpoint, region, "xray");
+        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Traces, options);
+        Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
+    }
+
+    /// <summary>
+    /// Adds AWS request signing using an explicit service and region.
+    /// </summary>
+    /// <param name="options">The configured upstream exporter options.</param>
+    /// <param name="service">The SigV4 service name.</param>
+    /// <param name="region">The signing region.</param>
+    /// <param name="authenticator">The AWS authenticator, or null to use the default credential provider.</param>
+    /// <param name="transportFactory">The HTTP transport factory, or null to use the default transport.</param>
+    internal static void Configure(
+        OtlpExporterOptions options,
+        string service,
+        string region,
+        IAwsAuthenticator? authenticator = null,
+        Func<HttpMessageHandler>? transportFactory = null)
+    {
+        if (options.Protocol != OtlpExportProtocol.HttpProtobuf)
+        {
+            throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
+        }
+
+        var config = new AwsAuthConfig(options.Endpoint, region, service);
 
         // TODO: In a follow-up PR, detect an existing Authorization header in options.Headers
         // and warn once during exporter setup that SigV4 authentication overrides it.

@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Register otlp/sigv4 exporters for traces, metrics, and logs ([#497](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/497)).
+
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
   endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with

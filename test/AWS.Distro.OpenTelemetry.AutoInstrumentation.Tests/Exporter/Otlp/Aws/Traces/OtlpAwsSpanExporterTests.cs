@@ -95,7 +95,7 @@ public class OtlpAwsSpanExporterTests : AbstractOtlpAwsExporterTest<OtlpSpan>, I
         // Create the exporter after the test selects compression; reuse it across exports.
         if (this.exporter == null)
         {
-            this.exporter = OtlpAwsSpanExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
+            this.exporter = OtlpAwsSpanExporter.Create(this.Options, this.ServiceName, this.Region, this.Authenticator.Object, () => this.Transport);
             this.provider = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(ResourceBuilder.CreateEmpty()
                     .AddService("test-aws-service")
