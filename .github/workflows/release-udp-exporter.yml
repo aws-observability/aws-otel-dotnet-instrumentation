@@ -52,6 +52,9 @@ jobs:
 
       - name: Set up CodeBuild runner
         uses: ./.github/actions/codebuild-runner-setup
+        with:
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # The exporter targets net8.0/net9.0/net10.0; CodeBuild's Windows image only preinstalls the .NET 10 SDK.
       - name: Setup .NET

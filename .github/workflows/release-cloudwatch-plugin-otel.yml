@@ -92,6 +92,9 @@ jobs:
 
       - name: Set up CodeBuild runner
         uses: ./.github/actions/codebuild-runner-setup
+        with:
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
@@ -137,6 +140,9 @@ jobs:
 
       - name: Set up CodeBuild runner
         uses: ./.github/actions/codebuild-runner-setup
+        with:
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
@@ -159,11 +165,11 @@ jobs:
           retry-wait-seconds: 60
           retry-backoff-multiplier: 2
           command: |
-            docker pull public.ecr.aws/docker/library/python:3.10
+            docker pull python:3.10
             docker pull mcr.microsoft.com/dotnet/sdk:8.0
             docker pull mcr.microsoft.com/dotnet/aspnet:8.0
-            docker pull public.ecr.aws/localstack/localstack:4.0.0
-            docker pull public.ecr.aws/docker/library/redis:7
+            docker pull localstack/localstack:4.0.0
+            docker pull redis:7
 
       - name: Set up contract tests
         env:
@@ -203,6 +209,9 @@ jobs:
 
       - name: Set up CodeBuild runner
         uses: ./.github/actions/codebuild-runner-setup
+        with:
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
