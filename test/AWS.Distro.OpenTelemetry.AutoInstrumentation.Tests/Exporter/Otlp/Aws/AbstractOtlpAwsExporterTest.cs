@@ -90,14 +90,20 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
         this.Authenticator.Verify(a => a.Sign(It.IsAny<IRequest>(), It.IsAny<IClientConfig>(), It.IsAny<ImmutableCredentials>()), Times.Never());
     }
 
-    [Fact]
-    public void ShouldDefaultCompressionToNone()
+    [Theory]
+    [InlineData("us-west-2", "amazonaws.com")]
+    [InlineData("us-east-1", "amazonaws.com")]
+    [InlineData("cn-north-1", "amazonaws.com.cn")]
+    [InlineData("cn-northwest-1", "amazonaws.com.cn")]
+    public void ShouldDefaultCompressionToNone(string region, string domain)
     {
+        this.Region = region;
+        this.Options.Endpoint = new UriBuilder(this.Options.Endpoint) { Host = $"{this.ServiceName}.{region}.{domain}" }.Uri;
         this.ValidateOtlpRequest(compression: null);
     }
 
     [Fact]
-    public void Export_SignsWithConfiguredServiceAndRegion()
+    public void ShouldAllowGzipCompression()
     {
         this.ServiceName = "custom-service";
         this.Region = "eu-central-1";
