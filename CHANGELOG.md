@@ -11,7 +11,7 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
-- Register otlp/sigv4 exporters for traces, metrics, and logs.
+- Register otlp/sigv4 exporters for traces, metrics, and logs ([#497](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/497)).
   Select `otlp/sigv4` in `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or
   `OTEL_LOGS_EXPORTER`; the protocol must be `http/protobuf`.
   At startup, `otlp/sigv4` is normalized to `otlp` so upstream configures and builds
