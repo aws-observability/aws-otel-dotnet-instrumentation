@@ -9,26 +9,23 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws.C
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class OtlpAwsExporterOptionsTests : PluginTests
 {
-    public static IEnumerable<object?[]> ServiceConfigurations()
-    {
-        foreach (var (signal, defaultService) in new[]
-        {
-            ("TRACES", "xray"),
-            ("METRICS", "monitoring"),
-            ("LOGS", "logs"),
-        })
-        {
-            yield return new object?[] { signal, "custom-service", "global-service", "custom-service" };
-            yield return new object?[] { signal, null, "global-service", "global-service" };
-            yield return new object?[] { signal, "  ", "global-service", "global-service" };
-            yield return new object?[] { signal, null, null, defaultService };
-            yield return new object?[] { signal, "  ", "  ", defaultService };
-        }
-    }
-
     [Theory]
-    [MemberData(nameof(ServiceConfigurations))]
-    public void GetAwsService_EnvironmentVariablesOverrideDefault(
+    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
+    [InlineData(OtlpAwsExporterOptions.Traces, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultTracesService)]
+    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
+    [InlineData(OtlpAwsExporterOptions.Metrics, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultMetricsService)]
+    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "custom-service", /* globalService: */ "global-service", /* expectedService: */ "custom-service")]
+    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ null, /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "  ", /* globalService: */ "global-service", /* expectedService: */ "global-service")]
+    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ null, /* globalService: */ null, /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
+    [InlineData(OtlpAwsExporterOptions.Logs, /* signalService: */ "  ", /* globalService: */ "  ", /* expectedService: */ OtlpAwsExporterOptions.DefaultLogsService)]
+    public void GetAwsServiceEnvironmentVariablesOverrideDefault(
         string signal, string? signalService, string? globalService, string expectedService)
     {
         Environment.SetEnvironmentVariable($"AWS_{signal}_EXPORTER_SERVICE", signalService);
@@ -43,7 +40,7 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     [InlineData("  ", "us-west-2", "us-west-2")]
     [InlineData(null, null, "us-east-1")]
     [InlineData("  ", "  ", "us-east-1")]
-    public void GetAwsRegion_EnvironmentVariablesOverrideEndpoint(
+    public void GetAwsRegionEnvironmentVariablesOverrideEndpoint(
         string? region, string? defaultRegion, string expectedRegion)
     {
         Environment.SetEnvironmentVariable("AWS_REGION", region);
@@ -71,7 +68,7 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     [InlineData("monitoring.eu-isoe-west-1.cloud.adc-e.uk", "eu-isoe-west-1")]
     [InlineData("logs.us-isof-south-1.csp.hci.ic.gov", "us-isof-south-1")]
     [InlineData("XRAY.US-EAST-1.AMAZONAWS.COM", "us-east-1")]
-    public void GetAwsRegion_RecognizedAwsEndpoint(string host, string expectedRegion)
+    public void GetAwsRegionRecognizedAwsEndpoint(string host, string expectedRegion)
     {
         Assert.Equal(
             expectedRegion,
@@ -84,7 +81,7 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     [InlineData("localhost")]
     [InlineData("example.com")]
     [InlineData("xray.us-east-1.amazonaws.com.evil.com")]
-    public void GetAwsRegion_UnrecognizedEndpointUsesSdkRegionProvider(string host)
+    public void GetAwsRegionUnrecognizedEndpointUsesSdkRegionProvider(string host)
     {
         var providerCalls = 0;
         var region = OtlpAwsExporterOptions.GetAwsRegion(new Uri($"https://{host}"), () =>
@@ -98,7 +95,7 @@ public class OtlpAwsExporterOptionsTests : PluginTests
     }
 
     [Fact]
-    public void GetAwsRegion_NoRegionSourceReturnsNull()
+    public void GetAwsRegionNoRegionSourceReturnsNull()
     {
         Assert.Null(OtlpAwsExporterOptions.GetAwsRegion(new Uri("http://localhost"), () => null));
     }
