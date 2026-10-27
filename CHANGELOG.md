@@ -17,6 +17,12 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   HTTP 403. Note the signed OTLP log exporter is only registered in AWS Lambda, so the logs half of
   this applies to Lambda workloads
 
+- Windows installer (`AWS.Otel.DotNet.Auto.psm1`) no longer registers `AWSSDK.*` assemblies in the GAC,
+  and removes ones registered by earlier versions. GAC'd copies replaced the AWS SDK of every .NET Framework
+  application on the host, which crashed applications using newer AWS SDK packages
+  (e.g. `MissingMethodException`), even when not instrumented.
+  ([#487](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/487))
+
 - Add SigV4 signing to the upstream OTLP metric exporter.
   To enable it, set `OTEL_METRICS_EXPORTER=otlp`,
   `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://monitoring.<region>.amazonaws.com/v1/metrics`,
