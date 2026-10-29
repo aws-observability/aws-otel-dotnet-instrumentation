@@ -6,7 +6,6 @@ using System.Reflection;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 
 namespace AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
@@ -18,16 +17,11 @@ public class OtlpExporterUtils
 
     private static readonly MethodInfo? WriteTraceDataMethod;
     private static readonly object? WriteTraceDataMaxBufferSize;
-    private static readonly MethodInfo? WriteLogsDataMethod;
-    private static readonly object? WriteLogsDataMaxBufferSize;
     private static readonly object? SdkLimitOptions;
-    private static readonly object? ExperimentalOptions;
 
     static OtlpExporterUtils() {
         Type? otlpSerializerType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer.ProtobufOtlpTraceSerializer, OpenTelemetry.Exporter.OpenTelemetryProtocol");
-        Type? otlpLogSerializerType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer.ProtobufOtlpLogSerializer, OpenTelemetry.Exporter.OpenTelemetryProtocol");
         Type? sdkLimitOptionsType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.SdkLimitOptions, OpenTelemetry.Exporter.OpenTelemetryProtocol");
-        Type? experimentalOptionsType = Type.GetType("OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExperimentalOptions, OpenTelemetry.Exporter.OpenTelemetryProtocol");
 
         if (sdkLimitOptionsType == null)
         {
@@ -54,19 +48,6 @@ public class OtlpExporterUtils
             },
             out WriteTraceDataMaxBufferSize)
             ?? throw new MissingMethodException("WriteTraceData not found");
-
-        if (otlpLogSerializerType != null)
-        {
-            WriteLogsDataMethod = GetSerializerMethod(
-                otlpLogSerializerType,
-                "WriteLogsData",
-                experimentalOptionsType != null
-                    ? new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, experimentalOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() }
-                    : new[] { typeof(byte[]).MakeByRefType(), typeof(int), sdkLimitOptionsType, typeof(Resource), typeof(Batch<LogRecord>).MakeByRefType() },
-                out WriteLogsDataMaxBufferSize);
-
-            ExperimentalOptions = experimentalOptionsType != null ? Activator.CreateInstance(experimentalOptionsType) : null;
-        }
 
         SdkLimitOptions = GetSdkLimitOptions();
     }
@@ -100,31 +81,6 @@ public class OtlpExporterUtils
         // Unpack ref-buffer
         buffer = (byte[])args[0];
 
-        return result;
-    }
-
-
-    public static int WriteLogsData(
-        ref byte[] buffer,
-        int writePosition,
-        Resource? resource,
-        in Batch<LogRecord> batch)
-    {
-        if (SdkLimitOptions == null || WriteLogsDataMethod == null)
-        {
-            return -1;
-        }
-
-        object[] args = ExperimentalOptions != null
-            ? new object[] { buffer, writePosition, SdkLimitOptions, ExperimentalOptions, resource!, batch! }
-            : new object[] { buffer, writePosition, SdkLimitOptions, resource!, batch! };
-        if (WriteLogsDataMaxBufferSize != null)
-        {
-            args = args.Append(WriteLogsDataMaxBufferSize).ToArray();
-        }
-
-        var result = (int)WriteLogsDataMethod.Invoke(obj: null, parameters: args)!;
-        buffer = (byte[])args[0];
         return result;
     }
 

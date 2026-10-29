@@ -37,9 +37,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 - Reuse the upstream OTLP trace exporter for SigV4
   ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).
-- Fix `XrayUdpExporter` crashing with `MissingMethodException: WriteTraceData not found`, and the
-  SigV4 OTLP log exporter silently failing every export, when `OpenTelemetry.Exporter.OpenTelemetryProtocol`
-  1.18.0 or later is resolved
+- Fix `XrayUdpExporter` crashing with `MissingMethodException: WriteTraceData not found` when
+  `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.18.0 or later is resolved
   ([#483](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/483)).
 
 ## v1.15.0 - 2026-08-25
