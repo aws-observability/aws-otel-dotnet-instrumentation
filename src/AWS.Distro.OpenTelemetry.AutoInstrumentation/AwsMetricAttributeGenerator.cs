@@ -225,18 +225,20 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
             remoteService = NormalizeRemoteServiceName(span, GetRemoteService(span, AttributeAWSServiceName));
             remoteOperation = GetRemoteOperation(span, AttributeAWSOperationName);
         }
-        else if (IsKeyPresent(span, AttributeDbSystem)
-            || IsKeyPresent(span, AttributeDbOperation)
-            || IsKeyPresent(span, AttributeDbStatement))
+        else if (IsDBSpan(span))
         {
-            remoteService = GetRemoteService(span, AttributeDbSystem);
-            if (IsKeyPresent(span, AttributeDbOperation))
+            remoteService = GetRemoteService(span, GetLegacyOrStableKey(span, AttributeDbSystem, AttributeDbSystemName));
+            if (IsKeyPresent(span, AttributeDbOperation) || IsKeyPresent(span, AttributeDbOperationName))
             {
-                remoteOperation = GetRemoteOperation(span, AttributeDbOperation);
+                remoteOperation = GetRemoteOperation(span, GetLegacyOrStableKey(span, AttributeDbOperation, AttributeDbOperationName));
+            }
+            else if (IsKeyPresent(span, AttributeDbCommandName))
+            {
+                remoteOperation = GetRemoteOperation(span, AttributeDbCommandName);
             }
             else
             {
-                remoteOperation = GetDBStatementRemoteOperation(span, AttributeDbStatement);
+                remoteOperation = GetDBStatementRemoteOperation(span, GetLegacyOrStableKey(span, AttributeDbStatement, AttributeDbQueryText));
             }
         }
         else if (IsKeyPresent(span, AttributeFaasInvokedName) || IsKeyPresent(span, AttributeFaasTrigger))
@@ -779,7 +781,7 @@ internal class AwsMetricAttributeGenerator : IMetricAttributeGenerator
 
     private static string? GetDbConnection(Activity span)
     {
-        var dbName = span.GetTagItem(AttributeDbName);
+        var dbName = span.GetTagItem(GetLegacyOrStableKey(span, AttributeDbName, AttributeDbNamespace));
         string? dbConnection = null;
 
         if (IsKeyPresent(span, AttributeServerAddress))

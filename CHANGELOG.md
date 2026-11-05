@@ -11,6 +11,12 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Application Signals now recognizes database spans that use the stable semantic conventions
+  (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
+  MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
+  The legacy attributes still take precedence when both are present.
+  ([#495](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/495))
+
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
   endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with
