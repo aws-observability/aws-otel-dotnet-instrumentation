@@ -9,6 +9,31 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 internal static class PluginUtils
 {
     /// <summary>
+    /// Parses a comma-separated OpenTelemetry exporter selection.
+    /// </summary>
+    /// <param name="exporters">The value of an OTEL_*_EXPORTER environment variable.</param>
+    /// <returns>The trimmed exporter names, excluding empty entries.</returns>
+    internal static List<string> ParseOtelExporterEnvVariable(string? exporters)
+    {
+        var parsedExporters = new List<string>();
+        if (string.IsNullOrWhiteSpace(exporters))
+        {
+            return parsedExporters;
+        }
+
+        foreach (var exporter in exporters.Split(','))
+        {
+            var name = exporter.Trim();
+            if (name.Length > 0)
+            {
+                parsedExporters.Add(name);
+            }
+        }
+
+        return parsedExporters;
+    }
+
+    /// <summary>
     /// Parses comma-separated OTLP headers in key=value format.
     /// </summary>
     /// <remarks>
