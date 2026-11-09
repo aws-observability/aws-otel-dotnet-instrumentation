@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using OpenTelemetry.Instrumentation.AWSLambda;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 [assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
@@ -15,11 +16,12 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
 /// <summary>
 /// LambdaWrapper class. This class is used by the instrument.sh file to wrap around Lambda Functions
-/// and forceFlush spans at the end of the lambda function execution
+/// and flush traces, logs and metrics at the end of each invocation
 /// </summary>
 public class LambdaWrapper
 {
     private static readonly TracerProvider? TracerProvider;
+    private static readonly MeterProvider? MeterProvider;
     private static readonly DefaultLambdaJsonSerializer Serializer = new DefaultLambdaJsonSerializer();
 
     static LambdaWrapper()
@@ -30,6 +32,9 @@ public class LambdaWrapper
         {
             throw new Exception("instrumentationType Type was not found. Cannot load the tracer provider!");
         }
+
+        // Null when metrics are disabled; the flush then skips metrics.
+        MeterProvider = instrumentationType.GetField("_meterProvider", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null) as MeterProvider;
 
         FieldInfo? tracerProviderField = instrumentationType.GetField("_tracerProvider", BindingFlags.Static | BindingFlags.NonPublic);
 
@@ -56,8 +61,15 @@ public class LambdaWrapper
     /// <param name="input">Input as raw Stream which will be deserialized to the correct object type during runtime</param>
     /// <param name="context">ILambdaContext lambda context</param>
     /// <returns>returns an object that will be contain the same structure as the original handler output type</returns>
+    /// <remarks>
+    /// AWSLambdaWrapper flushes traces; logs and metrics are flushed afterwards, including when the handler throws.
+    /// </remarks>
     public Task<object?> TracingFunctionHandler(Stream input, ILambdaContext context)
-    => AWSLambdaWrapper.TraceAsync(TracerProvider, this.FunctionHandler, input, context);
+    => LambdaTelemetryFlusher.InvokeAndFlushAsync(
+        () => AWSLambdaWrapper.TraceAsync(TracerProvider, this.FunctionHandler, input, context),
+        MeterProvider,
+        LambdaTelemetryFlusher.LogProcessors,
+        LambdaTelemetryFlusher.FlushTimeoutMilliseconds);
 
     /// <summary>
     /// The following are assumptions made about the lambda handler function parameters.

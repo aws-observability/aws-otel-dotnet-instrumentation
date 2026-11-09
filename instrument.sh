@@ -202,6 +202,11 @@ if [ "$ENABLE_PROFILING" = "true" ]; then
       export OTEL_METRICS_EXPORTER="none";
     fi
 
+    # LambdaWrapper flushes metrics per invocation; max interval disables the periodic export.
+    if [ -z "${OTEL_METRIC_EXPORT_INTERVAL}" ]; then
+      export OTEL_METRIC_EXPORT_INTERVAL="2147483647";
+    fi
+
     if [ -z "${OTEL_LOGS_EXPORTER}" ]; then
       export OTEL_LOGS_EXPORTER="none";
     fi

@@ -437,8 +437,7 @@ public class Plugin
             return;
         }
 
-        options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
-            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+        AddLambdaConsoleProcessor(options);
     }
 
     /// <summary>
@@ -447,14 +446,6 @@ public class Plugin
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
-        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
-            && AwsSpanProcessingUtil.IsLambdaEnvironment())
-        {
-            Logger.LogWarning(
-                "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
-        }
-
         if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
         {
             OtlpAwsLogRecordExporter.Configure(options);
@@ -670,6 +661,21 @@ public class Plugin
             System.Environment.GetEnvironmentVariable(envVar),
             "false",
             StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Adds the console processor and keeps it so LambdaWrapper can flush the pipeline's LoggerProvider
+    /// at the end of each invocation. Separate from ConfigureLogsOptions so tests can call it outside Lambda.
+    /// </summary>
+    /// <param name="options">The OpenTelemetry logger options</param>
+    internal static void AddLambdaConsoleProcessor(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
+    {
+        var consoleProcessor = new global::OpenTelemetry.SimpleLogRecordExportProcessor(
+            new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter());
+        options.AddProcessor(consoleProcessor);
+#if !NETFRAMEWORK
+        LambdaTelemetryFlusher.LogProcessors.Add(consoleProcessor);
+#endif
+    }
 
     private static int GetMetricExportInterval()
     {

@@ -11,6 +11,11 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Flush logs and metrics at the end of every AWS Lambda invocation, including when the handler throws.
+  Previously only traces were flushed, so OTLP logs and metrics arrived late or were lost. The flush waits
+  at most `OTEL_INSTRUMENTATION_AWS_LAMBDA_FLUSH_TIMEOUT` ms (default `10000`), and `OTEL_METRIC_EXPORT_INTERVAL`
+  now defaults to its maximum in Lambda so metrics are exported only by this flush.
+
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
   endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with
