@@ -806,6 +806,75 @@ public class AwsMetricAttributesGeneratorTest
     }
 
     [Fact]
+    public void TestDBClientSpanWithStableSemanticConventions()
+    {
+        // Stable names only, e.g. a MongoDB.Driver operation span
+        Dictionary<string, object?> attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbOperationName, "find" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "find");
+
+        // MongoDB.Driver command span: no db.operation.name, only db.command.name
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbCommandName, "getMore" },
+            { "db.query.summary", "getMore orders" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "getMore");
+
+        // db.operation.name takes precedence over db.command.name
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbOperationName, "find" },
+            { AttributeDbCommandName, "getMore" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "find");
+
+        // db.query.text is parsed like db.statement
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "postgresql" },
+            { AttributeDbQueryText, "SELECT * FROM orders" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "postgresql", "SELECT");
+
+        // Legacy names win when both are present, so existing values don't change
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystem, "mssql" },
+            { AttributeDbSystemName, "microsoft.sql_server" },
+            { AttributeDbOperation, "SELECT" },
+            { AttributeDbOperationName, "select" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mssql", "SELECT");
+
+        // db.namespace is used for the DB::Connection resource identifier
+        Dictionary<string, object> resourceAttributes = new Dictionary<string, object>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbNamespace, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, 27017L },
+        };
+        this.ValidateRemoteResourceAttributes(resourceAttributes, "DB::Connection", "db_name|abc.com|27017", "db_name|abc.com|27017", false);
+
+        // db.name wins over db.namespace
+        resourceAttributes = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeDbNamespace, "other_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, 3306L },
+        };
+        this.ValidateRemoteResourceAttributes(resourceAttributes, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
+    }
+
+    [Fact]
 
     // Validate behaviour of various combinations of DB attributes.
     public void TestGetDBStatementRemoteOperation()

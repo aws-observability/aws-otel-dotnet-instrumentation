@@ -14,7 +14,14 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 - Flush logs and metrics at the end of every AWS Lambda invocation, including when the handler throws.
   Previously only traces were flushed, so OTLP logs and metrics arrived late or were lost. The flush waits
   at most `OTEL_INSTRUMENTATION_AWS_LAMBDA_FLUSH_TIMEOUT` ms (default `10000`), and `OTEL_METRIC_EXPORT_INTERVAL`
-  now defaults to its maximum in Lambda so metrics are exported only by this flush.
+  now defaults to its maximum in Lambda so metrics are exported only by this flush. 
+  ([#498](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/498))
+  
+- Application Signals now recognizes database spans that use the stable semantic conventions
+  (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
+  MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
+  The legacy attributes still take precedence when both are present.
+  ([#495](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/495))
 
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
