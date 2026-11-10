@@ -33,26 +33,9 @@ public class LambdaWrapper
             throw new Exception("instrumentationType Type was not found. Cannot load the tracer provider!");
         }
 
-        // Null when metrics are disabled; the flush then skips metrics.
+        // Each is null when its signal is disabled; that signal is then skipped.
+        TracerProvider = instrumentationType.GetField("_tracerProvider", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null) as TracerProvider;
         MeterProvider = instrumentationType.GetField("_meterProvider", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null) as MeterProvider;
-
-        FieldInfo? tracerProviderField = instrumentationType.GetField("_tracerProvider", BindingFlags.Static | BindingFlags.NonPublic);
-
-        if (tracerProviderField == null)
-        {
-            throw new Exception("Field '_tracerProvider' not found in Instrumentation class. Cannot load the tracer provider!");
-        }
-
-        object? tracerProviderValue = tracerProviderField?.GetValue(null);
-
-        if (tracerProviderValue != null)
-        {
-            TracerProvider = (TracerProvider)tracerProviderValue;
-        }
-        else
-        {
-            throw new Exception("tracerProviderValue was null. Cannot load the tracer provider!");
-        }
     }
 
     /// <summary>
@@ -63,10 +46,13 @@ public class LambdaWrapper
     /// <returns>returns an object that will be contain the same structure as the original handler output type</returns>
     /// <remarks>
     /// AWSLambdaWrapper flushes traces; logs and metrics are flushed afterwards, including when the handler throws.
+    /// With traces disabled the handler runs untraced and logs and metrics are still flushed.
     /// </remarks>
     public Task<object?> TracingFunctionHandler(Stream input, ILambdaContext context)
     => LambdaTelemetryFlusher.InvokeAndFlushAsync(
-        () => AWSLambdaWrapper.TraceAsync(TracerProvider, this.FunctionHandler, input, context),
+        () => TracerProvider == null
+            ? this.FunctionHandler(input, context)
+            : AWSLambdaWrapper.TraceAsync(TracerProvider, this.FunctionHandler, input, context),
         MeterProvider,
         LambdaTelemetryFlusher.LogProcessors,
         LambdaTelemetryFlusher.FlushTimeoutMilliseconds);
