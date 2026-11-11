@@ -1,20 +1,38 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Temporary validation caller for test-framework PR #717. DO NOT MERGE.
-# The staged image comes from the exact dependency merge, not this workflow-only commit.
-name: Validate .NET preflight Service Events opt-in
+# Temporary read-only diagnostics for the preflight validation. DO NOT MERGE.
+name: Diagnose .NET preflight Service Events validation
 on:
   workflow_dispatch:
 permissions:
   id-token: write
   contents: read
 jobs:
-  service-events:
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-service-events-test.yml@fix/dotnet-service-events-preflight-opt-in
-    secrets: inherit
-    with:
-      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
-      aws-region: us-east-1
-      test-cluster-name: e2e-dotnet-adot-test
-      caller-workflow-name: preflight-opt-in-validation
-      adot-image-name: 637423224110.dkr.ecr.us-east-1.amazonaws.com/aws-observability/adot-autoinstrumentation-dotnet-staging:staging-linux-amd64-aae489c
+  diagnostics:
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:small
+    timeout-minutes: 10
+    steps:
+      - name: Configure test credentials
+        uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ACCOUNT_ID }}:role/${{ secrets.APPLICATION_SIGNALS_E2E_TEST_ROLE_NAME }}
+          aws-region: us-east-1
+      - name: Read current validation pod and agent diagnostics
+        env:
+          TEST_NAMESPACE: ns-43107637028-205
+        run: |
+          set -euo pipefail
+          aws eks update-kubeconfig --name e2e-dotnet-adot-test --region us-east-1
+          kubectl get pods -n "$TEST_NAMESPACE" -o json > test-pods.json
+          jq '.items[] | {name:.metadata.name,phase:.status.phase,initImages:[.spec.initContainers[]?.image],containers:[.spec.containers[]|{name,image,env:[.env[]?|select(.name=="OTEL_SERVICE_NAME" or .name=="OTEL_AWS_SERVICE_EVENTS_ENABLED" or .name=="OTEL_AWS_APPLICATION_SIGNALS_ENABLED" or .name=="OTEL_AWS_OTLP_LOGS_ENDPOINT" or .name=="OTEL_AWS_OTLP_METRICS_ENDPOINT" or .name=="OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT" or .name=="OTEL_DOTNET_AUTO_PLUGINS" or .name=="OTEL_DOTNET_AUTO_LOGGER")]}]}' test-pods.json
+          app_pod=$(jq -r '.items[]|select(any(.spec.containers[];.name=="back-end"))|.metadata.name' test-pods.json | head -n1)
+          test -n "$app_pod"
+          kubectl logs -n "$TEST_NAMESPACE" "$app_pod" -c back-end --tail=200
+          kubectl exec -n "$TEST_NAMESPACE" "$app_pod" -c back-end -- sh -c 'for f in /var/log/opentelemetry/dotnet/*.log; do if [ -f "$f" ]; then echo "$f"; tail -n 100 "$f"; fi; done' || true
+          agent_pods=$(kubectl get pods -n amazon-cloudwatch -l app.kubernetes.io/name=cloudwatch-agent -o jsonpath='{.items[*].metadata.name}')
+          for agent_pod in $agent_pods; do
+            kubectl logs -n amazon-cloudwatch "$agent_pod" --all-containers --tail=80 || true
+          done
