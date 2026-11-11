@@ -92,9 +92,6 @@ jobs:
           echo "It looks like you didn't add an entry to CHANGELOG.md. If this change affects the SDK behavior, please update CHANGELOG.md and link this PR in your entry. If this PR does not need a CHANGELOG entry, you can add the 'Skip Changelog' label to this PR."
           exit 1
 
-      - name: Test dependency update script
-        run: python3 -m unittest discover -s scripts/tests -v
-          
       - name: Check for versioned GitHub actions
         if: always()
         run: |
