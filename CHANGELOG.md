@@ -11,6 +11,10 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Restore AWS plugin hooks with the upstream automatic instrumentation plugin API, including
+  Application Signals span enrichment, metrics, and ServiceEvents initialization.
+  ([#465](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/465))
+
 - Application Signals now recognizes database spans that use the stable semantic conventions
   (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
   MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
