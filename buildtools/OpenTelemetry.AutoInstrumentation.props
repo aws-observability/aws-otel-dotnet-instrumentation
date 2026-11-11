@@ -1,6 +1,0 @@
-<Project>
-  <PropertyGroup>
-    <!-- PluginApi, the NuGet loader, and the downloaded distribution must use the same version. -->
-    <OpenTelemetryAutoInstrumentationVersion>1.19.1</OpenTelemetryAutoInstrumentationVersion>
-  </PropertyGroup>
-</Project>

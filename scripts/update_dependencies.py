@@ -118,34 +118,55 @@ def update_contrib_packages(csproj_dir):
         print(f"Error updating contrib packages: {e}")
         return False
 
-def update_instrumentation_version(file_path, instrumentation_version):
-    """Update the version shared by PluginApi, the NuGet loader, and the distribution."""
+def update_instrumentation_versions(csproj_path, build_cs_path, instrumentation_version):
+    """Update PluginApi, the pack-only loader, and the distribution to the same release."""
     try:
         if not instrumentation_version:
             return False
-        
-        with open(file_path, 'r', encoding='utf-8') as input_file:
-            content = input_file.read()
         
         version_match = re.fullmatch(r'v?(\d+\.\d+\.\d+)', instrumentation_version)
         if not version_match:
             raise ValueError(f"Invalid automatic instrumentation version: {instrumentation_version}")
         version = version_match.group(1)
-        pattern = r'(<OpenTelemetryAutoInstrumentationVersion>)[^<]+(</OpenTelemetryAutoInstrumentationVersion>)'
-        if not re.search(pattern, content):
-            raise ValueError(f"Missing OpenTelemetryAutoInstrumentationVersion in {file_path}")
-        new_content = re.sub(
-            pattern, lambda match: f'{match.group(1)}{version}{match.group(2)}', content
+
+        with open(csproj_path, 'r', encoding='utf-8') as input_file:
+            csproj_content = input_file.read()
+        with open(build_cs_path, 'r', encoding='utf-8') as input_file:
+            build_content = input_file.read()
+
+        new_csproj_content = csproj_content
+        for package_name in (
+            'OpenTelemetry.AutoInstrumentation.PluginApi',
+            'OpenTelemetry.AutoInstrumentation',
+        ):
+            pattern = rf'(<PackageReference\s+Include="{re.escape(package_name)}"\s+Version=")[^"]+(")'
+            new_csproj_content, count = re.subn(
+                pattern, lambda match: f'{match.group(1)}{version}{match.group(2)}',
+                new_csproj_content,
+            )
+            if count != 1:
+                raise ValueError(f"Expected one {package_name} reference in {csproj_path}")
+
+        build_pattern = r'(private const string OpenTelemetryAutoInstrumentationDefaultVersion = ")v[^"]*(";)'
+        new_build_content, count = re.subn(
+            build_pattern, lambda match: f'{match.group(1)}v{version}{match.group(2)}',
+            build_content,
         )
+        if count != 1:
+            raise ValueError(f"Expected one OpenTelemetryAutoInstrumentationDefaultVersion in {build_cs_path}")
 
-        if new_content != content:
-            with open(file_path, 'w', encoding='utf-8') as output_file:
-                output_file.write(new_content)
-            print(f"Updated OpenTelemetryAutoInstrumentationVersion to {version}")
-            return True
+        updated = False
+        for file_path, old_content, new_content in (
+            (csproj_path, csproj_content, new_csproj_content),
+            (build_cs_path, build_content, new_build_content),
+        ):
+            if new_content != old_content:
+                with open(file_path, 'w', encoding='utf-8') as output_file:
+                    output_file.write(new_content)
+                print(f"Updated automatic instrumentation in {file_path} to {version}")
+                updated = True
 
-        print(f"OpenTelemetryAutoInstrumentationVersion already at latest version: {version}")
-        return False
+        return updated
             
     except (OSError, IOError) as file_error:
         print(f"Error updating automatic instrumentation version: {file_error}")
@@ -171,12 +192,10 @@ def main():
         'sample-applications/udp-exporter-test-app/dotnet-sample-app.csproj'
     ]
     
-    instrumentation_props_path = 'buildtools/OpenTelemetry.AutoInstrumentation.props'
-
-    # Set both package references before restoring, including the pack-only reference that
+    # Set all three pins before restoring, including the pack-only reference that
     # dotnet list package cannot discover during an ordinary restore.
-    instrumentation_updated = update_instrumentation_version(
-        instrumentation_props_path, otel_dotnet_instrumentation_version
+    instrumentation_updated = update_instrumentation_versions(
+        files_to_update[0], 'build/Build.cs', otel_dotnet_instrumentation_version
     )
     
     # Update core packages in all files

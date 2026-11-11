@@ -1,7 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../../buildtools/OpenTelemetry.AutoInstrumentation.props" />
-
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
@@ -30,7 +28,7 @@
     <PackageReference Include="OpenTelemetry" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation.PluginApi" Version="$(OpenTelemetryAutoInstrumentationVersion)" />
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation.PluginApi" Version="1.19.1" />
     <!-- TODO: Need to look into release those packages before GA -->
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.20.3" />
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.20.2" />
@@ -90,7 +88,7 @@
     <Content Include="configuration/**">
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="$(OpenTelemetryAutoInstrumentationVersion)">
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.19.1">
       <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
