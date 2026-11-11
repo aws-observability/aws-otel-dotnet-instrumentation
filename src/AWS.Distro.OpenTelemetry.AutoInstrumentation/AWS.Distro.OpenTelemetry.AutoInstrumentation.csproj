@@ -1,5 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../../buildtools/OpenTelemetry.AutoInstrumentation.props" />
+
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
@@ -28,13 +30,13 @@
     <PackageReference Include="OpenTelemetry" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation.PluginApi" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation.PluginApi" Version="$(OpenTelemetryAutoInstrumentationVersion)" />
     <!-- TODO: Need to look into release those packages before GA -->
     <PackageReference Include="OpenTelemetry.Extensions.AWS" Version="1.20.3" />
     <PackageReference Include="OpenTelemetry.Resources.AWS" Version="1.20.2" />
     <PackageReference Include="OpenTelemetry.Extensions.Propagators" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.2" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.15.1" Condition="'$(TargetFramework)' == 'net472'" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNet" Version="1.20.3" Condition="'$(TargetFramework)' == 'net472'" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AWSLambda" Version="1.20.3" Condition="'$(TargetFramework)' != 'net472'" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.20.2" />
     <ProjectReference Include="../OpenTelemetry.Sampler.AWS/OpenTelemetry.Sampler.AWS.csproj" PrivateAssets="All" />
@@ -88,7 +90,7 @@
     <Content Include="configuration/**">
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
-    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="1.19.1">
+    <PackageReference Include="OpenTelemetry.AutoInstrumentation" Version="$(OpenTelemetryAutoInstrumentationVersion)">
       <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />

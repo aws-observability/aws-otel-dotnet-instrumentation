@@ -89,6 +89,13 @@ def update_contrib_packages(csproj_dir):
                 if len(parts) >= 5:  # Ensure we have package name and version
                     package_name = parts[1]
                     latest_version = parts[4]  # Latest version is in 5th column
+
+                    # These versions are shared with the distribution, not selected independently.
+                    if package_name in (
+                        'OpenTelemetry.AutoInstrumentation',
+                        'OpenTelemetry.AutoInstrumentation.PluginApi',
+                    ):
+                        continue
                     
                     # Update the package
                     update_result = subprocess.run(
@@ -111,8 +118,8 @@ def update_contrib_packages(csproj_dir):
         print(f"Error updating contrib packages: {e}")
         return False
 
-def update_build_cs_file(file_path, instrumentation_version):
-    """Update the openTelemetryAutoInstrumentationDefaultVersion in Build.cs."""
+def update_instrumentation_version(file_path, instrumentation_version):
+    """Update the version shared by PluginApi, the NuGet loader, and the distribution."""
     try:
         if not instrumentation_version:
             return False
@@ -120,25 +127,29 @@ def update_build_cs_file(file_path, instrumentation_version):
         with open(file_path, 'r', encoding='utf-8') as input_file:
             content = input_file.read()
         
-        pattern = r'private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v[^"]*";'
-        replacement = f'private const string OpenTelemetryAutoInstrumentationDefaultVersion = "{instrumentation_version}";'
-        
-        if re.search(pattern, content):
-            new_content = re.sub(pattern, replacement, content)
-            
-            if new_content != content:
-                with open(file_path, 'w', encoding='utf-8') as output_file:
-                    output_file.write(new_content)
-                print(f"Updated OpenTelemetryAutoInstrumentationDefaultVersion to {instrumentation_version}")
-                return True
-            else:
-                print(f"OpenTelemetryAutoInstrumentationDefaultVersion already at latest version: {instrumentation_version}")
-        
+        version_match = re.fullmatch(r'v?(\d+\.\d+\.\d+)', instrumentation_version)
+        if not version_match:
+            raise ValueError(f"Invalid automatic instrumentation version: {instrumentation_version}")
+        version = version_match.group(1)
+        pattern = r'(<OpenTelemetryAutoInstrumentationVersion>)[^<]+(</OpenTelemetryAutoInstrumentationVersion>)'
+        if not re.search(pattern, content):
+            raise ValueError(f"Missing OpenTelemetryAutoInstrumentationVersion in {file_path}")
+        new_content = re.sub(
+            pattern, lambda match: f'{match.group(1)}{version}{match.group(2)}', content
+        )
+
+        if new_content != content:
+            with open(file_path, 'w', encoding='utf-8') as output_file:
+                output_file.write(new_content)
+            print(f"Updated OpenTelemetryAutoInstrumentationVersion to {version}")
+            return True
+
+        print(f"OpenTelemetryAutoInstrumentationVersion already at latest version: {version}")
         return False
             
     except (OSError, IOError) as file_error:
-        print(f"Error updating Build.cs: {file_error}")
-        return False
+        print(f"Error updating automatic instrumentation version: {file_error}")
+        raise
 
 def main():
     otel_dotnet_core_version = os.environ.get("OTEL_DOTNET_CORE_VERSION")
@@ -160,8 +171,13 @@ def main():
         'sample-applications/udp-exporter-test-app/dotnet-sample-app.csproj'
     ]
     
-    csproj_dir = 'src/AWS.Distro.OpenTelemetry.AutoInstrumentation'
-    build_cs_path = 'build/Build.cs'
+    instrumentation_props_path = 'buildtools/OpenTelemetry.AutoInstrumentation.props'
+
+    # Set both package references before restoring, including the pack-only reference that
+    # dotnet list package cannot discover during an ordinary restore.
+    instrumentation_updated = update_instrumentation_version(
+        instrumentation_props_path, otel_dotnet_instrumentation_version
+    )
     
     # Update core packages in all files
     any_core_updated = False
@@ -176,10 +192,7 @@ def main():
         if update_contrib_packages(csproj_dir):
             any_contrib_updated = True
     
-    # Update Build.cs
-    build_cs_updated = update_build_cs_file(build_cs_path, otel_dotnet_instrumentation_version)
-    
-    if any_core_updated or any_contrib_updated or build_cs_updated:
+    if any_core_updated or any_contrib_updated or instrumentation_updated:
         print(f"Dependencies updated to Core {otel_dotnet_core_version}")
     else:
         print("No updates were made")

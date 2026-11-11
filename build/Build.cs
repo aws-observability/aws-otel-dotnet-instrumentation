@@ -4,6 +4,7 @@
 
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
@@ -12,7 +13,10 @@ using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 internal partial class Build : NukeBuild
 {
-    private const string OpenTelemetryAutoInstrumentationDefaultVersion = "v1.19.1";
+    private static readonly string OpenTelemetryAutoInstrumentationDefaultVersion = "v" +
+        XDocument.Load(RootDirectory / "buildtools" / "OpenTelemetry.AutoInstrumentation.props")
+            .Descendants("OpenTelemetryAutoInstrumentationVersion").Single().Value;
+
     private static readonly AbsolutePath TestNuGetPackageApps = NukeBuild.RootDirectory / "test" / "test-applications" / "nuget-package";
 
     [Solution("AWS.Distro.OpenTelemetry.AutoInstrumentation.sln")]
@@ -23,7 +27,7 @@ internal partial class Build : NukeBuild
     [Parameter("Configuration to build - Default is 'Release'")]
     private readonly Configuration configuration = Configuration.Release;
 
-    [Parameter($"OpenTelemetry AutoInstrumentation dependency version - Default is '{OpenTelemetryAutoInstrumentationDefaultVersion}'")]
+    [Parameter("OpenTelemetry AutoInstrumentation dependency version - Default is defined in buildtools/OpenTelemetry.AutoInstrumentation.props")]
     private readonly string openTelemetryAutoInstrumentationVersion = OpenTelemetryAutoInstrumentationDefaultVersion;
 
     private readonly AbsolutePath openTelemetryDistributionFolder = RootDirectory / "OpenTelemetryDistribution";
