@@ -11,8 +11,7 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
-- Restore AWS plugin hooks with the upstream automatic instrumentation plugin API, including
-  Application Signals span enrichment, metrics, and ServiceEvents initialization.
+- Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1
   ([#465](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/465))
 
 - Application Signals now recognizes database spans that use the stable semantic conventions
