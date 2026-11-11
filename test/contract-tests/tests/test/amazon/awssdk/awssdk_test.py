@@ -2,12 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from logging import INFO, Logger, getLogger
 from typing import Dict, List
-from docker.types import EndpointConfig
+
 from mock_collector_client import ResourceScopeMetric, ResourceScopeSpan
 from testcontainers.localstack import LocalStackContainer
 from typing_extensions import override
 
-from amazon.base.contract_test_base import NETWORK_NAME, ContractTestBase
+from amazon.base.contract_test_base import ContractTestBase
+from amazon.base.dependency_containers import (
+    create_localstack_container,
+    log_and_stop_container,
+)
 from amazon.utils.application_signals_constants import (
     AWS_LOCAL_SERVICE,
     AWS_REMOTE_CLOUDFORMATION_PRIMARY_IDENTIFIER,
@@ -51,6 +55,12 @@ _GEN_AI_USAGE_OUTPUT_TOKENS: str = "gen_ai.usage.output_tokens"
 _GEN_AI_RESPONSE_FINISH_REASONS: str = "gen_ai.response.finish_reasons"
 _AWS_DYNAMODB_TABLE_ARN: str = "aws.dynamodb.table.arn"
 
+_AWS_REQUEST_ID: str = "aws.requestId"
+_HTTP_RESPONSE_CONTENT_LENGTH: str = "http.response_content_length"
+_AWS_AUTH_ACCOUNT_ACCESS_KEY: str = "aws.auth.account.access_key"
+_AWS_AUTH_REGION: str = "aws.auth.region"
+_DB_SYSTEM: str = "db.system"
+
 # pylint: disable=too-many-public-methods
 class AWSSdkTest(ContractTestBase):
     _local_stack: LocalStackContainer
@@ -81,33 +91,25 @@ class AWSSdkTest(ContractTestBase):
     @classmethod
     @override
     def set_up_dependency_container(cls):
-        local_stack_networking_config: Dict[str, EndpointConfig] = {
-            NETWORK_NAME: EndpointConfig(
-                version="1.22",
-                aliases=[
-                    "localstack",
-                    "s3.localstack",
-                ],
-            )
-        }
-        cls._local_stack: LocalStackContainer = (
-            LocalStackContainer(image="localstack/localstack:4.0.0")
-            .with_name("localstack")
-            .with_services("s3", "secretsmanager", "sns", "sqs", "stepfunctions", "dynamodb", "kinesis")
-            .with_env("DEFAULT_REGION", "us-west-2")
-            .with_kwargs(network=NETWORK_NAME, networking_config=local_stack_networking_config)
+        cls._local_stack = create_localstack_container(
+            "localstack",
+            (
+                "s3",
+                "secretsmanager",
+                "sns",
+                "sqs",
+                "stepfunctions",
+                "dynamodb",
+                "kinesis",
+            ),
+            "us-west-2",
         )
         cls._local_stack.start()
-
 
     @classmethod
     @override
     def tear_down_dependency_container(cls):
-        _logger.info("LocalStack stdout")
-        _logger.info(cls._local_stack.get_logs()[0].decode())
-        _logger.info("LocalStack stderr")
-        _logger.info(cls._local_stack.get_logs()[1].decode())
-        cls._local_stack.stop()
+        log_and_stop_container(cls._local_stack, "LocalStack", _logger)
 
     def test_s3_create_bucket(self):
         self.do_test_requests(
@@ -178,6 +180,7 @@ class AWSSdkTest(ContractTestBase):
             request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
+                _DB_SYSTEM: "dynamodb",
             },
             span_name="DynamoDB.CreateTable",
         )
@@ -197,6 +200,7 @@ class AWSSdkTest(ContractTestBase):
             request_response_specific_attributes={
                 # SpanAttributes.AWS_DYNAMODB_TABLE_NAMES: ["test_table"],
                 "aws.table_name": ["test_table"],
+                _DB_SYSTEM: "dynamodb",
             },
             span_name="DynamoDB.PutItem",
         )
@@ -217,6 +221,7 @@ class AWSSdkTest(ContractTestBase):
             cloudformation_primary_identifier="test-table",
             request_response_specific_attributes={
                 "aws.table_name": ["test-table"],
+                _DB_SYSTEM: "dynamodb",
             },
             response_specific_attributes={
                 _AWS_DYNAMODB_TABLE_ARN: r"arn:aws:dynamodb:us-east-1:000000000000:table/test-table",
@@ -895,6 +900,9 @@ class AWSSdkTest(ContractTestBase):
             },
             remote_resource_access_key="account_b_access_key_id",
             remote_resource_region="eu-central-1",
+            # Assert the raw span-level credential attributes that the AppSignals attributes above derive from.
+            aws_auth_access_key="account_b_access_key_id",
+            aws_auth_region="eu-central-1",
             span_name="S3.PutBucket",
         )
 
@@ -969,6 +977,14 @@ class AWSSdkTest(ContractTestBase):
 
         self.assertEqual(len(target_spans), 1)
         self.assertEqual(target_spans[0].name, kwargs.get("span_name"))
+
+        # Assert the request-only, response-only, and combined request/response attribute maps together.
+        specific_attributes: dict = {
+            **kwargs.get("request_specific_attributes", {}),
+            **kwargs.get("response_specific_attributes", {}),
+            **kwargs.get("request_response_specific_attributes", {}),
+        }
+
         self._assert_semantic_conventions_attributes(
             target_spans[0].attributes,
             # For most cases, rpc_service is the same as the service name after "AWS::" prefix. Bedrock services are
@@ -977,7 +993,11 @@ class AWSSdkTest(ContractTestBase):
             kwargs.get("remote_service"),
             kwargs.get("remote_operation"),
             status_code,
-            kwargs.get("request_response_specific_attributes", {}),
+            specific_attributes,
+            # Forward only the keys used to assert the common per-call attributes.
+            aws_auth_access_key=kwargs.get("aws_auth_access_key"),
+            aws_auth_region=kwargs.get("aws_auth_region"),
+            assert_common_attributes=kwargs.get("assert_common_attributes"),
         )
 
     # pylint: disable=unidiomatic-typecheck
@@ -989,12 +1009,14 @@ class AWSSdkTest(ContractTestBase):
         operation: str,
         status_code: int,
         request_response_specific_attributes: dict,
+        **kwargs,
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_METHOD, operation)
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SYSTEM, "aws-api")
         self._assert_str_attribute(attributes_dict, SpanAttributes.RPC_SERVICE, rpc_service)
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_STATUS_CODE, status_code)
+        self._assert_common_aws_attributes(attributes_dict, service, status_code, **kwargs)
         for key, value in request_response_specific_attributes.items():
             if isinstance(value, str):
                 self._assert_str_attribute(attributes_dict, key, value)
@@ -1007,6 +1029,36 @@ class AWSSdkTest(ContractTestBase):
                 self._assert_invoke_model_finish_reasons(attributes_dict, key, value)
             else:
                 self._assert_array_value_ddb_table_name(attributes_dict, key, value)
+
+    def _assert_common_aws_attributes(
+        self, attributes_dict: Dict[str, AnyValue], service: str, status_code: int, **kwargs
+    ) -> None:
+        """Assert the common AWS SDK attributes emitted on every instrumented client span.
+
+        `aws.requestId` / `http.response_content_length` depend on a real HTTP response carrying a request-id
+        header and a content length, which the hand-mocked Bedrock endpoints do not, so these checks default
+        off for Bedrock services and on for real LocalStack-backed calls. A test may override with
+        assert_common_attributes=True/False; None uses the default.
+
+        `aws.region` is not asserted: the sample-app clients configure only ServiceURL, so it resolves to null
+        and the tag is omitted. Asserting it needs a client that resolves a concrete region (E2E follow-up).
+        """
+        assert_common = kwargs.get("assert_common_attributes")
+        if assert_common is None:
+            assert_common = "Bedrock" not in service
+        if assert_common:
+            self.assertIn(_AWS_REQUEST_ID, attributes_dict)
+            # http.response_content_length is only tagged when an HTTP response object exists (success path).
+            if status_code < 400:
+                self.assertIn(_HTTP_RESPONSE_CONTENT_LENGTH, attributes_dict)
+
+        # Credential-derived attributes, asserted for tests that configure explicit credentials.
+        expected_access_key = kwargs.get("aws_auth_access_key")
+        if expected_access_key is not None:
+            self._assert_str_attribute(attributes_dict, _AWS_AUTH_ACCOUNT_ACCESS_KEY, expected_access_key)
+        expected_auth_region = kwargs.get("aws_auth_region")
+        if expected_auth_region is not None:
+            self._assert_str_attribute(attributes_dict, _AWS_AUTH_REGION, expected_auth_region)
 
     @override
     def _assert_metric_attributes(

@@ -84,7 +84,16 @@ fn copy_recursive(source: &Path, dest: &Path) -> io::Result<()> {
     let mut stack = VecDeque::new();
     stack.push_back((source.to_path_buf(), dest.to_path_buf()));
     while let Some((current_source, current_dest)) = stack.pop_back() {
-        if current_source.is_dir() {
+        // Keep symbolic links as links (like GNU and busybox `cp -r`) instead of
+        // following them, so a symlinked directory is not copied out as a second tree.
+        if current_source.is_symlink() {
+            let target = current_source.read_link()?;
+            // Replace a link left by a previous run so re-running the copy succeeds.
+            if current_dest.is_symlink() {
+                fs::remove_file(&current_dest)?;
+            }
+            unix::fs::symlink(target, &current_dest)?;
+        } else if current_source.is_dir() {
             if !current_dest.exists() {
                 fs::create_dir(&current_dest)?;
             }
@@ -99,9 +108,6 @@ fn copy_recursive(source: &Path, dest: &Path) -> io::Result<()> {
                         ))?);
                 stack.push_back((next_source, next_dest));
             }
-        } else if current_source.is_symlink() {
-            // Follow symbolic links as regular files
-            fs::copy(current_source, current_dest)?;
         } else if current_source.is_file() {
             fs::copy(current_source, current_dest)?;
         }
@@ -311,11 +317,64 @@ mod tests {
             &test_base.join("foo/symlink1.txt"),
             &test_base.join("bar/symlink1.txt"),
         );
-        // recursive copy will treat symlink as a file
-        assert_recursive_same_link(
+        assert_same_link(
             &test_base.join("foo/symlink1.txt"),
             &test_base.join("bar/symlink1.txt"),
         )
+    }
+
+    #[test]
+    fn test_copy_recursive_keeps_directory_symlink() {
+        // prepare: mirrors the auto-instrumentation layout, e.g. linux -> linux-x64
+        let tempdir = tempfile::tempdir().unwrap();
+        let test_base = tempdir.path().to_path_buf();
+        create_dir(&test_base, "foo/linux-x64");
+        create_file(&test_base, "foo/linux-x64/native.so");
+        create_symlink(&test_base, "foo/linux", "linux-x64");
+
+        // act
+        let recursive_copy = CopyOperation {
+            copy_type: CopyType::Recursive,
+            source: test_base.join("foo"),
+            destination: test_base.join("bar"),
+        };
+        do_copy(recursive_copy).unwrap();
+        // copying again into the same destination must also succeed
+        let recursive_copy_again = CopyOperation {
+            copy_type: CopyType::Recursive,
+            source: test_base.join("foo"),
+            destination: test_base.join("bar"),
+        };
+        do_copy(recursive_copy_again).unwrap();
+
+        // assert: the directory symlink is copied as a link, not as a second tree
+        assert_same_link(&test_base.join("foo/linux"), &test_base.join("bar/linux"));
+        assert_same_file(
+            &test_base.join("foo/linux-x64/native.so"),
+            &test_base.join("bar/linux/native.so"),
+        );
+    }
+
+    #[test]
+    fn test_copy_recursive_dangling_symlink() {
+        // prepare
+        let tempdir = tempfile::tempdir().unwrap();
+        let test_base = tempdir.path().to_path_buf();
+        create_dir(&test_base, "foo");
+        create_symlink(&test_base, "foo/dangling", "missing");
+
+        // act
+        let recursive_copy = CopyOperation {
+            copy_type: CopyType::Recursive,
+            source: test_base.join("foo"),
+            destination: test_base.join("bar"),
+        };
+        do_copy(recursive_copy).unwrap();
+
+        // assert
+        let dest = test_base.join("bar/dangling");
+        assert!(dest.is_symlink());
+        assert_eq!(fs::read_link(dest).unwrap(), PathBuf::from("missing"));
     }
 
     #[test]
@@ -439,17 +498,5 @@ mod tests {
         assert!(dest.is_symlink());
 
         assert_eq!(fs::read_link(source).unwrap(), fs::read_link(dest).unwrap());
-    }
-
-    fn assert_recursive_same_link(source: &Path, dest: &Path) {
-        assert!(source.exists());
-        assert!(dest.exists());
-        assert!(source.is_symlink());
-        assert!(dest.is_file());
-
-        assert_eq!(
-            fs::read_to_string(source).unwrap(),
-            fs::read_to_string(dest).unwrap()
-        );
     }
 }

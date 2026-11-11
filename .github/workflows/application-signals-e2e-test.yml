@@ -35,7 +35,10 @@ concurrency:
 
 jobs:
   upload-main-build:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -58,7 +61,13 @@ jobs:
           aws s3 cp ./${{ inputs.ec2-windows-image-name }} s3://adot-autoinstrumentation-dotnet-staging/${{ inputs.ec2-windows-image-name }}
 
   upload-main-build-image:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    env:
+      # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
+      # without them. Set through env because checkout runs before any setup step can.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: true
     outputs: 
       short_sha: ${{ steps.short_sha.outputs.SHORT_SHA }}
     strategy:
@@ -68,6 +77,12 @@ jobs:
           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+
+      - name: Set up CodeBuild runner
+        uses: ./.github/actions/codebuild-runner-setup
+        with:
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Get Short SHA
         id: short_sha
         run: |
@@ -92,6 +107,13 @@ jobs:
         with:
           name: aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip
           path: ./artifacts/linux/x64
+
+      - name: Download Linux x64 MUSL Artifact
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 #v5.0.0
+        with:
+          name: aws-distro-opentelemetry-dotnet-instrumentation-linux-musl-x64.zip
+          path: ./artifacts/linux/x64-musl
           
       - name: Download Windows Artifact
         if: runner.os == 'Windows'
@@ -105,6 +127,7 @@ jobs:
         run: |
           mkdir -p ./OpenTelemetryDistribution/amd64
           unzip ./artifacts/linux/x64/*.zip -d ./OpenTelemetryDistribution/amd64
+          unzip ./artifacts/linux/x64-musl/*.zip "linux-musl-x64/*" -d ./OpenTelemetryDistribution/amd64
 
       - name: Set up Docker Buildx
         if: runner.os == 'Linux'
@@ -138,6 +161,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
@@ -148,6 +172,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
@@ -158,6 +183,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
@@ -168,6 +194,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-windows-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-windows-image-name }}
@@ -177,6 +204,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-adot-sigv4-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
   
@@ -185,6 +213,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-asg-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
@@ -194,6 +223,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-adot-test'
@@ -204,6 +234,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-windows-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       adot-image-name: ${{ inputs.adot-windows-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
       aws-region: us-east-1
       test-cluster-name: 'e2e-dotnet-windows-canary-test'
@@ -214,12 +245,36 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-k8s-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       caller-workflow-name: 'main-build'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
-        
+
+  # Service Events EKS cell. adot-image-name is required for this to exercise the image staged by
+  # upload-main-build-image; left empty, the operator's own default ADOT image is validated instead.
+  #
+  # dotnet-eks-linux-test is a needs edge for isolation, not for data. Both cells share the
+  # 'e2e-dotnet-adot-test' cluster and each deletes every ns-<run>-<attempt> namespace on startup,
+  # so running them concurrently lets one delete the other's live namespace. The workflow-level
+  # concurrency group already prevents two runs of this workflow from overlapping, so serializing
+  # these two jobs closes the remaining window. Remove this edge once the cells no longer share a
+  # cluster, or once the framework's namespace cleanup is scoped to its own run.
+  dotnet-eks-service-events-test:
+    needs: [ upload-main-build-image, dotnet-eks-linux-test ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-eks-service-events-test.yml@main
+    secrets: inherit
+    with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
+      aws-region: us-east-1
+      test-cluster-name: 'e2e-dotnet-adot-test'
+      caller-workflow-name: 'main-build'
+      adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
+
   build-lambda-staging-sample-app:
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
+      - image:ubuntu-8.0
+      - instance-size:large
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
@@ -269,6 +324,7 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
     secrets: inherit
     with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       aws-region: us-east-1
       runtime: ${{ matrix.runtime }}
       caller-workflow-name: 'main-build'
@@ -289,4 +345,8 @@ jobs:
   validate-all-tests-are-accounted-for:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@main
     with:
-      exclusions: dotnet-ec2-nuget-test.yml
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:small"]'
+      # dotnet-ec2-service-events-test.yml is temporarily excluded: the test framework added this
+      # .NET EC2 service-events e2e test, but it is not yet wired into this workflow. Remove this
+      # exclusion once the corresponding job is added here.
+      exclusions: dotnet-ec2-nuget-test.yml,dotnet-ec2-service-events-test.yml

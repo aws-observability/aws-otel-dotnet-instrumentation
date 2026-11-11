@@ -3,12 +3,14 @@
 from datetime import datetime, timedelta
 from logging import Logger, getLogger
 from time import sleep
-from typing import Callable, List, Set, TypeVar
+from typing import Callable, List, Optional, Set, TypeVar
 
 from google.protobuf.internal.containers import RepeatedScalarFieldContainer
 from grpc import Channel, insecure_channel
 from mock_collector_service_pb2 import (
     ClearRequest,
+    GetLogsRequest,
+    GetLogsResponse,
     GetMetricsRequest,
     GetMetricsResponse,
     GetTracesRequest,
@@ -16,8 +18,10 @@ from mock_collector_service_pb2 import (
 )
 from mock_collector_service_pb2_grpc import MockCollectorServiceStub
 
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+from opentelemetry.proto.logs.v1.logs_pb2 import LogRecord, ResourceLogs, ScopeLogs
 from opentelemetry.proto.metrics.v1.metrics_pb2 import Metric, ResourceMetrics, ScopeMetrics
 from opentelemetry.proto.trace.v1.trace_pb2 import ResourceSpans, ScopeSpans, Span
 
@@ -49,6 +53,18 @@ class ResourceScopeMetric:
         self.resource_metrics: ResourceMetrics = resource_metrics
         self.scope_metrics: ScopeMetrics = scope_metrics
         self.metric: Metric = metric
+
+
+class ResourceScopeLogRecord:
+    """Data class used to correlate resources, scope and telemetry signals.
+
+    Correlate resource, scope and log record
+    """
+
+    def __init__(self, resource_logs: ResourceLogs, scope_logs: ScopeLogs, log_record: LogRecord):
+        self.resource_logs: ResourceLogs = resource_logs
+        self.scope_logs: ScopeLogs = scope_logs
+        self.log_record: LogRecord = log_record
 
 
 class MockCollectorClient:
@@ -87,7 +103,12 @@ class MockCollectorClient:
                         spans.append(ResourceScopeSpan(resource_span, scope_span, span))
         return spans
 
-    def get_metrics(self, present_metrics: Set[str], exact_match=True) -> List[ResourceScopeMetric]:
+    def get_metrics(
+        self,
+        present_metrics: Set[str],
+        exact_match=True,
+        content_condition: Optional[Callable[[List[ResourceScopeMetric]], bool]] = None,
+    ) -> List[ResourceScopeMetric]:
         """Get all metrics that are currently stored in the mock collector.
 
         Returns:
@@ -105,27 +126,96 @@ class MockCollectorClient:
         def wait_condition(
             exported: List[ExportMetricsServiceRequest], current: List[ExportMetricsServiceRequest]
         ) -> bool:
-            received_metrics: Set[str] = set()
-            for exported_metric in current:
-                for resource_metric in exported_metric.resource_metrics:
-                    for scope_metric in resource_metric.scope_metrics:
-                        for metric in scope_metric.metrics:
-                            received_metrics.add(metric.name.lower())
+            current_metrics = _flatten_metrics(current)
+            received_metrics = {
+                resource_scope_metric.metric.name.lower()
+                for resource_scope_metric in current_metrics
+            }
             if exact_match:
-                return 0 < len(exported) == (len(current) - 2) and present_metrics_lower.issubset(received_metrics)
-            return present_metrics_lower.issubset(received_metrics)
+                content_ready = (
+                    0 < len(exported) == (len(current) - 2)
+                    and present_metrics_lower.issubset(received_metrics)
+                )
+            else:
+                content_ready = present_metrics_lower.issubset(received_metrics)
+            return content_ready and (
+                content_condition is None or content_condition(current_metrics)
+            )
 
         exported_metrics: List[ExportMetricsServiceRequest] = _wait_for_content(get_export, wait_condition)
-        metrics: List[ResourceScopeMetric] = []
-        for exported_metric in exported_metrics:
-            for resource_metric in exported_metric.resource_metrics:
-                for scope_metric in resource_metric.scope_metrics:
-                    for metric in scope_metric.metrics:
-                        metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
-        return metrics
+        return _flatten_metrics(exported_metrics)
+
+    def get_logs(self) -> List[ResourceScopeLogRecord]:
+        """Get all logs that are currently stored in the mock collector.
+
+        Returns:
+            List of `ResourceScopeLogRecord` which is a flat list containing all log records and their related
+            scope and resources.
+        """
+
+        def get_export() -> List[ExportLogsServiceRequest]:
+            response: GetLogsResponse = self.client.get_logs(GetLogsRequest())
+            serialized_logs: RepeatedScalarFieldContainer[bytes] = response.logs
+            return list(map(ExportLogsServiceRequest.FromString, serialized_logs))
+
+        def wait_condition(exported: List[ExportLogsServiceRequest], current: List[ExportLogsServiceRequest]) -> bool:
+            return 0 < len(exported) == len(current)
+
+        exported_logs: List[ExportLogsServiceRequest] = _wait_for_content(get_export, wait_condition)
+        records: List[ResourceScopeLogRecord] = []
+        for exported_log in exported_logs:
+            for resource_log in exported_log.resource_logs:
+                for scope_log in resource_log.scope_logs:
+                    for log_record in scope_log.log_records:
+                        records.append(ResourceScopeLogRecord(resource_log, scope_log, log_record))
+        return records
+
+    def get_logs_by_event_name(self, event_name: str) -> List[ResourceScopeLogRecord]:
+        """Get log records matching a specific event.name attribute value."""
+        return [
+            r
+            for r in self.get_logs()
+            if any(kv.key == "event.name" and kv.value.string_value == event_name for kv in r.log_record.attributes)
+        ]
+
+    def peek_logs(self) -> List[ResourceScopeLogRecord]:
+        """Return all logs currently stored without waiting for new ones. Safe when empty."""
+        response: GetLogsResponse = self.client.get_logs(GetLogsRequest())
+        serialized_logs: RepeatedScalarFieldContainer[bytes] = response.logs
+        exported_logs: List[ExportLogsServiceRequest] = list(map(ExportLogsServiceRequest.FromString, serialized_logs))
+        records: List[ResourceScopeLogRecord] = []
+        for exported_log in exported_logs:
+            for resource_log in exported_log.resource_logs:
+                for scope_log in resource_log.scope_logs:
+                    for log_record in scope_log.log_records:
+                        records.append(ResourceScopeLogRecord(resource_log, scope_log, log_record))
+        return records
+
+    def peek_logs_by_event_name(self, event_name: str) -> List[ResourceScopeLogRecord]:
+        """Like get_logs_by_event_name but non-blocking — returns empty list if no logs."""
+        return [
+            r
+            for r in self.peek_logs()
+            if any(kv.key == "event.name" and kv.value.string_value == event_name for kv in r.log_record.attributes)
+        ]
 
 
-def _wait_for_content(get_export: Callable[[], List[T]], wait_condition: Callable[[List[T], List[T]], bool]) -> List[T]:
+def _flatten_metrics(
+    exported_metrics: List[ExportMetricsServiceRequest],
+) -> List[ResourceScopeMetric]:
+    metrics: List[ResourceScopeMetric] = []
+    for exported_metric in exported_metrics:
+        for resource_metric in exported_metric.resource_metrics:
+            for scope_metric in resource_metric.scope_metrics:
+                for metric in scope_metric.metrics:
+                    metrics.append(ResourceScopeMetric(resource_metric, scope_metric, metric))
+    return metrics
+
+
+def _wait_for_content(
+    get_export: Callable[[], List[T]],
+    wait_condition: Callable[[List[T], List[T]], bool],
+) -> List[T]:
     # Verify that there is no more data to be received
     deadline: datetime = datetime.now() + _TIMEOUT_DELAY
     exported: List[T] = []

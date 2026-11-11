@@ -33,4 +33,25 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../stylecop.json" Link="stylecop.json" />
   </ItemGroup>
 
+  <!-- The native profiler resolves CallTargetState by type identity, so our integration classes must
+       return the profiler's real type. Reference (do not copy) the distribution's assembly. -->
+  <PropertyGroup>
+    <OTelAutoInstrumentationDll>$(MSBuildThisFileDirectory)..\..\OpenTelemetryDistribution\net\OpenTelemetry.AutoInstrumentation.dll</OTelAutoInstrumentationDll>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="OpenTelemetry.AutoInstrumentation">
+      <HintPath>$(OTelAutoInstrumentationDll)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- The reference above is a build artifact that build.sh downloads/unpacks into
+       OpenTelemetryDistribution/. A plain `dotnet build`/`dotnet test` on a fresh clone (or a CI job
+       that tests before running build.sh) won't have it, which otherwise fails with dozens of opaque
+       CS0234/CS0246 errors. Fail fast with one actionable message instead. -->
+  <Target Name="EnsureOTelAutoInstrumentationDll" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(OTelAutoInstrumentationDll)')"
+           Text="OpenTelemetry.AutoInstrumentation.dll not found at $(OTelAutoInstrumentationDll). Run ./build.sh (macOS/Linux) or build.cmd (Windows) first to download and unpack the OpenTelemetry distribution before building or testing this project." />
+  </Target>
+
 </Project>

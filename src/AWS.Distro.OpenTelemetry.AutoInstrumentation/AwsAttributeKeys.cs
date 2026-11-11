@@ -27,6 +27,16 @@ internal sealed class AwsAttributeKeys
     internal static readonly string AttributeAWSRemoteResourceAccountId = "aws.remote.resource.account.id";
     internal static readonly string AttributeAWSRemoteResourceRegion = "aws.remote.resource.region";
 
+    // Stable database semantic conventions. They are only used when the legacy attribute
+    // (db.system, db.operation, db.statement, db.name) is not present on the span.
+    internal static readonly string AttributeDbSystemName = "db.system.name";
+    internal static readonly string AttributeDbOperationName = "db.operation.name";
+    internal static readonly string AttributeDbQueryText = "db.query.text";
+    internal static readonly string AttributeDbNamespace = "db.namespace";
+
+    // MongoDB.Driver command spans (e.g. getMore) carry the command name here instead of db.operation.name.
+    internal static readonly string AttributeDbCommandName = "db.command.name";
+
     // This was copied over from AWSSemanticConventions from the here:
     // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AWS/Implementation/AWSSemanticConventions.cs
     // TODO: add any other attributes keys after auto instrumentation.

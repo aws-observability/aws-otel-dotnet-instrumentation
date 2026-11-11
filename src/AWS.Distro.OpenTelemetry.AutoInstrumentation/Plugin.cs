@@ -20,10 +20,15 @@ using OpenTelemetry.Instrumentation.AspNet;
 #endif
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Logs;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Metrics;
+using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Traces;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 #if !NETFRAMEWORK
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation;
 using AWS.Distro.OpenTelemetry.DynamicInstrumentation.Config;
+using AWS.Distro.OpenTelemetry.ServiceEvents;
+using AWS.Distro.OpenTelemetry.ServiceEvents.Config;
 #endif
 using AWS.Distro.OpenTelemetry.Exporter.Xray.Udp;
 using OpenTelemetry.Instrumentation.Http;
@@ -45,13 +50,25 @@ public class Plugin
     /// </summary>
     public static readonly string ApplicationSignalsEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_ENABLED";
     internal static readonly string LambdaApplicationSignalsRemoteEnvironment = "LAMBDA_APPLICATION_SIGNALS_REMOTE_ENVIRONMENT";
-    private static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/traces$";
-    private static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com/v1/logs$";
+
+    // The optional "\.cn" suffix covers the AWS China partition (cn-north-1, cn-northwest-1), whose
+    // endpoints are *.amazonaws.com.cn. Both patterns stay anchored with ^...$ so the optional group
+    // does not loosen matching: a lookalike host such as
+    // "https://xray.cn-north-1.amazonaws.com.cn.evil/v1/traces" still fails to match and falls back
+    // to the unsigned exporter. The same optional-suffix form is already used by
+    // S3PresignedUrlAttributor.
+    //
+    // Region extraction is unaffected. Both call sites take the second dot-separated label
+    // (OtlpAwsSpanExporter.cs and ConfigureLogsOptions below), which yields "cn-north-1" for a China
+    // host just as it yields "us-east-1" for a commercial one. Signing uses that region plus an
+    // explicit ServiceURL, so the DNS suffix never reaches the signer.
+    //
+    // Internal rather than private so the patterns can be asserted directly in unit tests; the
+    // gating methods that consume them read process-wide environment state captured at class load.
+    internal static readonly string XRayOtlpEndpointPattern = "^https://xray\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/traces$";
+    internal static readonly string CloudWatchLogsOtlpEndpointPattern = "^https://logs\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/logs$";
+    private static readonly string CloudWatchMetricsOtlpEndpointPattern = "^https://monitoring\\.([a-z0-9-]+)\\.amazonaws\\.com(?:\\.cn)?/v1/metrics$";
     private static readonly string SigV4EnabledConfig = "OTEL_AWS_SIG_V4_ENABLED";
-    private static readonly string TracesExporterConfig = "OTEL_TRACES_EXPORTER";
-    private static readonly string OtelExporterOtlpTracesTimeout = "OTEL_EXPORTER_OTLP_TIMEOUT";
-    private static readonly string OtelExporterOtlpLogsEndpointConfig = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT";
-    private static readonly int DefaultOtlpTracesTimeoutMilli = 10000;
 #pragma warning disable CS0436 // Type conflicts with imported type
     private static readonly ILoggerFactory Factory = LoggerFactory.Create(builder => builder.AddProvider(new ConsoleLoggerProvider()));
 #pragma warning restore CS0436 // Type conflicts with imported type
@@ -62,6 +79,13 @@ public class Plugin
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
+
+    // OpenTelemetry's OtlpSpecConfigDefinitions class is internal.
+    private static readonly string OtelExporterOtlpHeadersConfig = "OTEL_EXPORTER_OTLP_HEADERS";
+    private static readonly string OtelExporterOtlpTracesHeadersConfig = "OTEL_EXPORTER_OTLP_TRACES_HEADERS";
+    private static readonly string OtelExporterOtlpLogsHeadersConfig = "OTEL_EXPORTER_OTLP_LOGS_HEADERS";
+    private static readonly string OtelExporterOtlpMetricsHeadersConfig = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
+
     private static readonly string ResourceDetectorEnableConfig = "RESOURCE_DETECTORS_ENABLED";
     private static readonly string BackupSamplerEnabledConfig = "BACKUP_SAMPLER_ENABLED";
     private static readonly string BackupSamplerEnabled = System.Environment.GetEnvironmentVariable(BackupSamplerEnabledConfig) ?? "true";
@@ -93,13 +117,21 @@ public class Plugin
 
     private Sampler? sampler;
 
+    private enum OtlpSignal
+    {
+        Traces,
+        Logs,
+        Metrics,
+    }
+
     /// <summary>
     /// To configure plugin, before OTel SDK configuration is called.
-    /// </summary>public void Initializing()
+    /// </summary>
     public void Initializing()
     {
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
+        this.InitializeServiceEvents();
 #endif
     }
 
@@ -157,6 +189,30 @@ public class Plugin
             }
         }
 
+        // Adaptive sampling: parse config, create processor, wire AwsBatchUnsampledSpanProcessor for capture
+        var xraySampler = SamplerUtil.LastCreatedXRaySampler;
+        if (this.IsApplicationSignalsEnabled() && xraySampler != null)
+        {
+            var adaptiveConfig = AdaptiveSamplingConfigParser.Parse(
+                System.Environment.GetEnvironmentVariable(AdaptiveSamplingConfigParser.EnvVar));
+            if (adaptiveConfig != null)
+            {
+                var adaptiveSampler = new AdaptiveSampler(adaptiveConfig, xraySampler);
+
+                // Anomaly-captured spans are unsampled (traceFlags=0) so they need
+                // AwsBatchUnsampledSpanProcessor which exports regardless of sampling flag.
+                // Not registered on TracerProvider to avoid exporting ALL unsampled spans globally.
+                Resource captureResource = tracerProvider.GetResource();
+                var captureExporter = new XrayUdpExporter(captureResource, AwsXrayDaemonAddress, FormatOtelUnSampledTracesBinaryPrefix);
+                var captureProcessor = new AwsBatchUnsampledSpanExportProcessor(exporter: captureExporter);
+
+                adaptiveSampler.SetSpanBatcher(span => captureProcessor.OnEnd(span));
+                tracerProvider.AddProcessor(new AdaptiveSamplingSpanProcessor(adaptiveSampler));
+
+                Logger.Log(LogLevel.Information, "Adaptive sampling enabled with anomaly capture via AwsBatchUnsampledSpanExportProcessor");
+            }
+        }
+
         // We want to be adding the exporter as the last processor in the traceProvider since processors
         // are executed in the order they were added to the provider.
         if (AwsSpanProcessingUtil.IsLambdaEnvironment())
@@ -180,24 +236,43 @@ public class Plugin
             }
         }
 
-        if (this.IsSigV4AuthEnabled())
+        var tracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
+        if (tracesEndpoint != null
+            && this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath)
+            && isLegacyPath)
         {
-            OtlpExporterOptions options = new OtlpExporterOptions();
-#pragma warning disable CS8604 // Possible null reference argument.
-
-            // This is already checked in isSigV4Enabled predicate
-            options.Endpoint = new Uri(OtelExporterOtlpTracesEndpoint);
-#pragma warning restore CS8604 // Possible null reference argument.
-            options.TimeoutMilliseconds = this.GetTracesOtlpTimeout();
-            var otlpAwsSpanExporter = new OtlpAwsSpanExporter(options, tracerProvider.GetResource());
-
-            tracerProvider.AddProcessor(new BatchActivityExportProcessor(exporter: otlpAwsSpanExporter));
+            var options = new OtlpExporterOptions
+            {
+                Endpoint = new Uri(tracesEndpoint),
+                Protocol = OtlpExportProtocol.HttpProtobuf,
+            };
+            Logger.LogWarning(
+                "OTEL_AWS_SIG_V4_ENABLED is deprecated and will be ignored in future releases. Both configurations remain supported: OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true, or the recommended OTEL_TRACES_EXPORTER=otlp with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set to an X-Ray OTLP endpoint.");
+            tracerProvider.AddProcessor(new BatchActivityExportProcessor(OtlpAwsSpanExporter.Create(options)));
         }
 
 #if !NETFRAMEWORK
         // No-op unless Dynamic Instrumentation was initialized in Initializing().
         DynamicInstrumentationManager.OnTracerProviderInitialized(tracerProvider);
 #endif
+    }
+
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP trace exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP trace exporter options.</param>
+    public void ConfigureTracesOptions(OtlpExporterOptions options)
+    {
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath))
+        {
+            if (isLegacyPath)
+            {
+                Logger.LogWarning(
+                    "OTEL_AWS_SIG_V4_ENABLED is deprecated and will be ignored in future releases. Both configurations remain supported: OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true, or the recommended OTEL_TRACES_EXPORTER=otlp with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set to an X-Ray OTLP endpoint.");
+            }
+
+            OtlpAwsSpanExporter.Configure(options);
+        }
     }
 
     /// <summary>
@@ -246,8 +321,18 @@ public class Plugin
         if (this.IsApplicationSignalsEnabled())
         {
             Logger.Log(LogLevel.Information, "AWS Application Signals enabled");
-            var alwaysRecordSampler = AlwaysRecordSampler.Create(this.sampler);
-            builder.SetSampler(alwaysRecordSampler);
+        }
+
+        // AlwaysRecordSampler upgrades a Drop decision to RecordOnly so processors still observe
+        // the activity. Application Signals needs that for its span metrics; ServiceEvents needs it
+        // for exactly the same reason — EndpointActivityProcessor.OnEnd only runs for activities the
+        // SDK considers recorded, so without this a standalone ServiceEvents deployment using a
+        // sampling sampler (OTEL_TRACES_SAMPLER=traceidratio, always_off, ...) would silently thin
+        // out or lose its endpoint metrics. The customer's own sampling decision is untouched: the
+        // configured sampler still decides what gets exported as a trace.
+        if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
+        {
+            builder.SetSampler(AlwaysRecordSampler.Create(this.sampler));
         }
         else
         {
@@ -261,7 +346,7 @@ public class Plugin
         if (BackupSamplerEnabled == "true" && SamplerUtil.IsXraySampler())
         {
             var alwaysOnSampler = new ParentBasedSampler(new AlwaysOnSampler());
-            if (this.IsApplicationSignalsEnabled())
+            if (this.IsApplicationSignalsEnabled() || IsServiceEventsActive())
             {
                 builder.SetSampler(AlwaysRecordSampler.Create(alwaysOnSampler));
             }
@@ -271,7 +356,40 @@ public class Plugin
             }
         }
 
+#if !NETFRAMEWORK
+        // ServiceEvents registers its BaseProcessor<Activity> collectors last, so they observe
+        // activities after the distro's own processors. No-op when ServiceEvents is disabled
+        // (Current is null), and never allowed to break the customer's tracer pipeline.
+        try
+        {
+            // Gated on IsInitialized for the same reason as the RecordException site below:
+            // Current is non-null even when ServiceEvents is disabled. RegisterTracerProcessors
+            // also no-ops internally when the collectors were never created, but relying on that
+            // would be an implicit contract rather than an explicit gate.
+            if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+            {
+                ServiceEventsInstrumentation.Current.RegisterTracerProcessors(builder);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents processor registration failed; feature degraded.");
+        }
+#endif
+
         return builder;
+    }
+
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP metric exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP metric exporter options.</param>
+    public void ConfigureMetricsOptions(OtlpExporterOptions options)
+    {
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Metrics, out _))
+        {
+            OtlpAwsMetricExporter.Configure(options);
+        }
     }
 
     /// <summary>
@@ -309,9 +427,7 @@ public class Plugin
     }
 
     /// <summary>
-    /// To configure logs SDK. In Lambda, registers CompactConsoleLogRecordExporter for console
-    /// output and a SigV4-signed OTLP exporter (via SimpleLogRecordExportProcessor for
-    /// synchronous flush before Lambda freezes the container).
+    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
@@ -323,16 +439,25 @@ public class Plugin
 
         options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(
             new AutoInstrumentation.Exporter.Console.Logs.CompactConsoleLogRecordExporter()));
+    }
 
-        string? logsEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsEndpointConfig);
-        if (!string.IsNullOrEmpty(logsEndpoint) && System.Text.RegularExpressions.Regex.IsMatch(
-            logsEndpoint, CloudWatchLogsOtlpEndpointPattern))
+    /// <summary>
+    /// Adds SigV4 signing to the upstream OTLP log exporter after its options have been configured.
+    /// </summary>
+    /// <param name="options">The configured upstream OTLP log exporter options.</param>
+    public void ConfigureLogsOptions(OtlpExporterOptions options)
+    {
+        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
+        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
+            && AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
-            string region = new Uri(logsEndpoint).Host.Split('.')[1];
-            var headers = ParseOtlpHeaders(System.Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_HEADERS"));
-            var exporter = new SigV4OtlpLogExporter(new Uri(logsEndpoint), region, headers);
-            options.AddProcessor(new global::OpenTelemetry.SimpleLogRecordExportProcessor(exporter));
-            Logger.Log(LogLevel.Information, "Registered SigV4-signed OTLP log exporter for Lambda: {0}", logsEndpoint);
+            Logger.LogWarning(
+                "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
+        }
+
+        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
+        {
+            OtlpAwsLogRecordExporter.Configure(options);
         }
     }
 
@@ -425,6 +550,48 @@ public class Plugin
                 this.ShouldSampleParent(activity);
             }
         };
+
+        // Deliberately does NOT set options.RecordException, even though ServiceEvents wants the
+        // exception type for EndpointErrorMetrics' `exception` dimension.
+        //
+        // RecordException makes OTel attach an `exception` event carrying exception.message and
+        // exception.stacktrace to the customer's own server spans, which their trace pipeline then
+        // exports. Messages and stacks routinely contain connection strings, tokens and user
+        // identifiers, so switching it on would leak that into customer-visible telemetry — and
+        // because ServiceEvents is on by default with Application Signals, it would do so silently
+        // on upgrade, for customers who never asked for ServiceEvents at all. Self-telemetry must
+        // not change what the customer's spans contain.
+        //
+        // ServiceEvents gets the type from the `error.type` tag instead, which the ASP.NET Core
+        // instrumentation sets on the error path regardless of this option, and which is a type name
+        // rather than a message. See EndpointActivityProcessor.ReadExceptionDetails.
+        //
+        // IncidentSnapshot additionally needs the message and stack trace, which no span tag carries.
+        // Those are captured through EnrichWithException, which hands us the live Exception without
+        // touching the span, and stashed privately on the Activity for ServiceEvents' own collectors
+        // to read. Gated on ServiceEvents actually running, for the same reason CallPathCapture is
+        // gated on an incident trigger existing: otherwise this allocates per failed request for a
+        // consumer that is not there.
+        if (ServiceEventsInstrumentation.Current?.IsInitialized == true)
+        {
+            // Chain rather than assign. This is the customer's options object and they may have set
+            // their own enrichment; overwriting it would silently delete their callback.
+            var customerEnrich = options.EnrichWithException;
+            options.EnrichWithException = (activity, exception) =>
+            {
+                try
+                {
+                    ServiceEventsInstrumentation.Current?.CaptureException(activity, exception);
+                }
+                catch (Exception captureEx)
+                {
+                    // Telemetry must never interfere with the customer's request pipeline.
+                    Logger.LogWarning(captureEx, "ServiceEvents exception capture failed.");
+                }
+
+                customerEnrich?.Invoke(activity, exception);
+            };
+        }
     }
 #endif
 
@@ -463,6 +630,46 @@ public class Plugin
         };
     }
 #endif
+
+    /// <summary>
+    /// Read a boolean environment flag the way this distro reads every boolean environment flag:
+    /// case-insensitively.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Extracted so there is exactly one answer to "does this value mean true", because there being
+    /// two answers was a real bug. These comparisons used to be written inline and ordinally, so
+    /// <c>OTEL_AWS_APPLICATION_SIGNALS_ENABLED=True</c> read as disabled here while ServiceEvents
+    /// (<c>ServiceEventsConfig.GetBool</c>, case-insensitive, matching the Java/Python/JS distros)
+    /// read it as enabled. ServiceEvents then suppressed its own EndpointSummary on the grounds that
+    /// App Signals already carries that data, while this side never configured App Signals at all —
+    /// so the per-endpoint summary was emitted by neither pipeline, silently, and the customer's
+    /// sampler was swapped for AlwaysRecordSampler as well.
+    /// </para>
+    /// <para>
+    /// Use this rather than an inline comparison for any new flag, so the next reader cannot
+    /// reintroduce the disagreement.
+    /// </para>
+    /// </remarks>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>true</c> in any casing.</returns>
+    internal static bool IsEnvFlagTrue(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a boolean environment flag is explicitly set to <c>false</c>, in any casing. Used for
+    /// flags that default to on, where only an explicit false turns them off.
+    /// </summary>
+    /// <param name="envVar">Name of the environment variable to read.</param>
+    /// <returns><c>true</c> when the variable is set to <c>false</c> in any casing.</returns>
+    internal static bool IsEnvFlagFalse(string envVar) =>
+        string.Equals(
+            System.Environment.GetEnvironmentVariable(envVar),
+            "false",
+            StringComparison.OrdinalIgnoreCase);
 
     private static int GetMetricExportInterval()
     {
@@ -521,24 +728,20 @@ public class Plugin
             LogLevel.Debug, "AWS Application Signals export endpoint: %{0}", options.Endpoint);
     }
 
-    private static Dictionary<string, string> ParseOtlpHeaders(string? headersString)
+    // Whether ServiceEvents actually came up. Initializing() runs before AfterConfigureTracerProvider,
+    // so by the time the tracer pipeline is configured this reflects the real outcome of enablement
+    // (including the Lambda opt-out and the refusal-to-start path) rather than just the env flag.
+    //
+    // Deliberately declared outside the #if !NETFRAMEWORK region below. The sampler gate in
+    // AfterConfigureTracerProvider calls this unconditionally, so the method has to exist on every
+    // target framework — including net472, where ServiceEvents is not shipped and it returns false.
+    private static bool IsServiceEventsActive()
     {
-        var headers = new Dictionary<string, string>();
-        if (string.IsNullOrEmpty(headersString))
-        {
-            return headers;
-        }
-
-        foreach (var pair in headersString!.Split(','))
-        {
-            var parts = pair.Split(new[] { '=' }, 2);
-            if (parts.Length == 2)
-            {
-                headers[parts[0].Trim()] = parts[1].Trim();
-            }
-        }
-
-        return headers;
+#if !NETFRAMEWORK
+        return ServiceEventsInstrumentation.Current?.IsInitialized == true;
+#else
+        return false;
+#endif
     }
 
 #if !NETFRAMEWORK
@@ -546,7 +749,7 @@ public class Plugin
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
     // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
-    // DI is a modern-profiler feature not shipped in the net462 build.
+    // DI is a modern-profiler feature not shipped in the .NET Framework build.
     private void InitializeDynamicInstrumentation()
     {
         try
@@ -567,6 +770,48 @@ public class Plugin
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Dynamic Instrumentation initialization failed; feature disabled.");
+        }
+    }
+
+    // ServiceEvents is hosted by this plugin (rather than a separate plugin/DLL) so it ships and
+    // loads with the existing distribution, with no OTEL_DOTNET_AUTO_PLUGINS change. Enablement
+    // requires OTEL_AWS_SERVICE_EVENTS_ENABLED=true, and is always off in Lambda; that rule
+    // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
+    // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
+    // shipped in the .NET Framework build.
+    private void InitializeServiceEvents()
+    {
+        try
+        {
+            // The distro owns the authoritative version string; pass it in so ServiceEvents'
+            // resource reports the same telemetry.distro.version as DistroAttributes above.
+            var config = ServiceEventsConfig.FromEnvironment() with { DistroVersion = Version.version };
+            var instrumentation = ServiceEventsInstrumentation.GetOrCreate(config);
+            instrumentation.Initialize();
+
+            // Without this, Dispose() never runs outside tests: the agent does not own the
+            // providers ServiceEvents builds privately, so the final endpoint drain, the shutdown
+            // DeploymentEvent and any buffered logs are lost on a graceful exit. ProcessExit is the
+            // broadest hook available here — it covers a normal return from Main and SIGTERM on
+            // Linux (which the runtime surfaces as ProcessExit), though not SIGKILL or a crash,
+            // where no in-process hook could help anyway. The runtime allows only a couple of
+            // seconds in this handler, so Dispose must stay bounded; it is idempotent, so a later
+            // ResetForTests or explicit dispose is harmless.
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try
+                {
+                    instrumentation.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    Logger.LogWarning(disposeEx, "ServiceEvents shutdown flush failed.");
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ServiceEvents initialization failed; feature disabled.");
         }
     }
 #endif
@@ -613,15 +858,14 @@ public class Plugin
         }
     }
 
-    private bool IsApplicationSignalsEnabled()
-    {
-        return System.Environment.GetEnvironmentVariable(ApplicationSignalsEnabledConfig) == "true";
-    }
+    private bool IsApplicationSignalsEnabled() => IsEnvFlagTrue(ApplicationSignalsEnabledConfig);
 
     private bool IsApplicationSignalsRuntimeEnabled()
     {
+        // Defaults to on, so only an explicit false disables it. An operator writing
+        // RUNTIME_ENABLED=False plainly means off, and the previous ordinal comparison left it on.
         return this.IsApplicationSignalsEnabled() &&
-               !"false".Equals(System.Environment.GetEnvironmentVariable(ApplicationSignalsRuntimeEnabledConfig));
+               !IsEnvFlagFalse(ApplicationSignalsRuntimeEnabledConfig);
     }
 
     private ResourceBuilder ResourceBuilderCustomizer(ResourceBuilder builder, Resource? existingResource = null)
@@ -698,60 +942,124 @@ public class Plugin
         return OtelExporterOtlpTracesEndpoint != null || OtelExporterOtlpEndpoint != null;
     }
 
-    // The setup here requires OTEL_TRACES_EXPORTER to be set to none in order to avoid exporting the spans twice.
-    // However that introduces the problem of overriding the default behavior of when OTEL_TRACES_EXPORTER is set to none which is
-    // why we introduce a new environment variable that confirms traces are exported to the OTLP XRay endpoint.
-    private bool IsSigV4AuthEnabled()
+    private bool ShouldConfigureOtlpAwsExporter(OtlpSignal signal, out bool isLegacyPath)
     {
-        bool isXrayOtlpEndpoint = OtelExporterOtlpTracesEndpoint != null && new Regex(XRayOtlpEndpointPattern, RegexOptions.Compiled).IsMatch(OtelExporterOtlpTracesEndpoint);
+        var signalName = signal.ToString().ToUpperInvariant();
+        isLegacyPath = false;
 
-        if (isXrayOtlpEndpoint)
+        var exporter = System.Environment.GetEnvironmentVariable($"OTEL_{signalName}_EXPORTER");
+        var protocol = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_PROTOCOL")
+            ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
+        var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
+        var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
+        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
+        var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        var shouldConfigureExporter = false;
+        var hasSignalHeaders = false;
+
+        if (signal == OtlpSignal.Traces)
         {
-            Logger.Log(LogLevel.Information, "Detected using AWS OTLP XRay Endpoint.");
-            string? sigV4EnabledConfig = System.Environment.GetEnvironmentVariable(Plugin.SigV4EnabledConfig);
-
-            if (sigV4EnabledConfig == null || !sigV4EnabledConfig.Equals("true"))
+            // Should configure SigV4 for traces if:
+            // - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT matches a supported X-Ray OTLP endpoint.
+            // - OTEL_TRACES_EXPORTER includes "otlp" or is unset.
+            // - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, falling back to OTEL_EXPORTER_OTLP_PROTOCOL,
+            //   is "http/protobuf" or unset.
+            // - OTEL_EXPORTER_OTLP_TRACES_HEADERS, falling back to OTEL_EXPORTER_OTLP_HEADERS,
+            //   does not contain Authorization.
+            // Legacy traces also allow OTEL_TRACES_EXPORTER=none with OTEL_AWS_SIG_V4_ENABLED=true,
+            // subject to the same endpoint, protocol, and header checks.
+            var tracesHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(tracesHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(tracesHeaders).ContainsKey("Authorization"))
             {
-                Logger.Log(LogLevel.Information, $"Please enable SigV4 authentication when exporting traces to OTLP XRay Endpoint by setting {SigV4EnabledConfig}=true");
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpTracesHeadersConfig,
+                    signal);
                 return false;
             }
 
-            Logger.Log(LogLevel.Information, $"SigV4 authentication is enabled");
+            var isXRayOtlpEndpoint = endpoint != null
+                && new Regex(XRayOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+            var isLegacySigV4TracesExporterEnabled = exporter == "none"
+                && System.Environment.GetEnvironmentVariable(SigV4EnabledConfig) == "true"
+                && isXRayOtlpEndpoint
+                && isHttpProtobuf;
+            var isSigV4TracesExporterEnabled = isXRayOtlpEndpoint
+                && isHttpProtobuf
+                && isOtlpExporterEnabled;
 
-            string? tracesExporter = System.Environment.GetEnvironmentVariable(Plugin.TracesExporterConfig);
-
-            if (tracesExporter == null || tracesExporter != "none")
+            shouldConfigureExporter = isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
+            isLegacyPath = isLegacySigV4TracesExporterEnabled;
+        }
+        else if (signal == OtlpSignal.Logs)
+        {
+            // Should configure SigV4 for logs if:
+            // - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT matches a supported CloudWatch Logs OTLP endpoint.
+            // - OTEL_LOGS_EXPORTER includes "otlp" or is unset.
+            // - OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, falling back to OTEL_EXPORTER_OTLP_PROTOCOL,
+            //   is "http/protobuf" or unset.
+            // - OTEL_EXPORTER_OTLP_LOGS_HEADERS, falling back to OTEL_EXPORTER_OTLP_HEADERS,
+            //   does not contain Authorization.
+            var logsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpLogsHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(logsHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(logsHeaders).ContainsKey("Authorization"))
             {
-                Logger.Log(LogLevel.Information, $"Please disable other tracing exporters by setting {TracesExporterConfig}=none");
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpLogsHeadersConfig,
+                    signal);
                 return false;
             }
 
-            Logger.Log(LogLevel.Information, $"Proper configuration has been detected, now exporting spans to {OtelExporterOtlpTracesEndpoint}");
+            var isCloudWatchLogsOtlpEndpoint = endpoint != null
+                && new Regex(CloudWatchLogsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
 
-            return true;
+            shouldConfigureExporter = isCloudWatchLogsOtlpEndpoint
+                && isHttpProtobuf
+                && isOtlpExporterEnabled;
         }
-
-        return false;
-    }
-
-    // https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_timeout:~:text=traces%20in%20milliseconds.-,Default%20value%3A%2010000%20(10s),-Example%3A%20export
-    private int GetTracesOtlpTimeout()
-    {
-        string? timeout = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesTimeout);
-
-        if (timeout != null)
+        else if (signal == OtlpSignal.Metrics)
         {
-            try
+            // Should configure SigV4 for metrics if:
+            // - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT matches a supported CloudWatch Metrics OTLP endpoint.
+            // - OTEL_METRICS_EXPORTER includes "otlp" or is unset.
+            // - OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, falling back to OTEL_EXPORTER_OTLP_PROTOCOL,
+            //   is "http/protobuf" or unset.
+            // - OTEL_EXPORTER_OTLP_METRICS_HEADERS, falling back to OTEL_EXPORTER_OTLP_HEADERS,
+            //   does not contain Authorization.
+            var metricsHeaders = System.Environment.GetEnvironmentVariable(OtelExporterOtlpMetricsHeadersConfig);
+            hasSignalHeaders = !string.IsNullOrWhiteSpace(metricsHeaders);
+            if (hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(metricsHeaders).ContainsKey("Authorization"))
             {
-                return int.Parse(timeout);
+                Logger.LogInformation(
+                    "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                    OtelExporterOtlpMetricsHeadersConfig,
+                    signal);
+                return false;
             }
-            catch (Exception)
-            {
-                return DefaultOtlpTracesTimeoutMilli;
-            }
+
+            var isCloudWatchMetricsOtlpEndpoint = endpoint != null
+                && new Regex(CloudWatchMetricsOtlpEndpointPattern, regexOptions).IsMatch(endpoint);
+
+            shouldConfigureExporter = isCloudWatchMetricsOtlpEndpoint
+                && isHttpProtobuf
+                && isOtlpExporterEnabled;
         }
 
-        return DefaultOtlpTracesTimeoutMilli;
+        // Fall back to global headers only when the signal-specific headers are unset or blank.
+        if (!hasSignalHeaders && PluginUtils.ParseOtlpHeadersEnvVariable(
+            System.Environment.GetEnvironmentVariable(OtelExporterOtlpHeadersConfig)).ContainsKey("Authorization"))
+        {
+            Logger.LogInformation(
+                "Detected an Authorization header in {HeadersVariable}. Opting out of SigV4 signing for the OTLP {Signal} exporter.",
+                OtelExporterOtlpHeadersConfig,
+                signal);
+            isLegacyPath = false;
+            return false;
+        }
+
+        return shouldConfigureExporter;
     }
 
     private string GetFallbackServiceName()

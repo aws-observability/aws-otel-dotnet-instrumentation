@@ -77,7 +77,8 @@ class NetCoreTest(ContractTestBase):
     ) -> None:
         attributes_dict: Dict[str, AnyValue] = self._get_attributes_dict(attributes_list)
         port: str = self.application.get_exposed_port(self.get_application_port())
-        self._assert_str_attribute(attributes_dict, SpanAttributes.SERVER_ADDRESS, "localhost")
+        # The address the test called the app on: localhost on GitHub-hosted runners, the Docker host on CodeBuild.
+        self._assert_str_attribute(attributes_dict, SpanAttributes.SERVER_ADDRESS, self.application.get_container_host_ip())
         self._assert_int_attribute(attributes_dict, SpanAttributes.SERVER_PORT, int(port))
         self._assert_int_attribute(attributes_dict, SpanAttributes.HTTP_RESPONSE_STATUS_CODE, status_code)
         self._assert_str_attribute(attributes_dict, SpanAttributes.HTTP_ROUTE, path)

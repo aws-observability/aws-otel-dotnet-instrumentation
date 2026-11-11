@@ -4,6 +4,13 @@
 using System.Diagnostics;
 using System.Reflection;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation;
+#if !NETFRAMEWORK
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+#endif
 using Moq;
 using OpenTelemetry.Resources;
 using Xunit;
@@ -25,6 +32,7 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
 #pragma warning disable CS8604 // Possible null reference argument.
+[Collection("OperationPaths")]
 public class AwsMetricAttributesGeneratorTest
 {
     private readonly ActivitySource testSource = new ActivitySource("Test Source");
@@ -352,6 +360,58 @@ public class AwsMetricAttributesGeneratorTest
         spanDataMock.SetParentId(this.parentSpan.TraceId, this.parentSpan.SpanId);
         this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
     }
+
+#if !NETFRAMEWORK
+    // Verifies the end-to-end effect of OTEL_AWS_HTTP_OPERATION_PATHS on the emitted
+    // aws.local.operation metric attribute (not just DisplayName). The span carries a route
+    // template ("/api/contests/{id}") so that, without the config, GetIngressOperation would use
+    // the route template. The configured pattern uses a distinct wildcard name ("{contestId}") so
+    // the assertion can only pass if the configured path won — a multi-segment, wildcarded value
+    // that neither route-template resolution nor URL truncation would otherwise produce.
+    [Fact]
+    public void TestServerSpanLocalOperationUsesConfiguredOperationPath()
+    {
+        Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, "/api/contests/{contestId}");
+        AutoInstrumentation.AwsSpanProcessingUtil.ResetOperationPaths();
+        try
+        {
+            this.UpdateResourceWithServiceName();
+            List<KeyValuePair<string, object?>> expectAttributesList = new List<KeyValuePair<string, object?>>
+            {
+                new(AttributeAWSSpanKind, ActivityKind.Server.ToString().ToUpper()),
+                new(AttributeAWSLocalService, this.serviceNameValue),
+                new(AttributeAWSLocalOperation, "GET /api/contests/{contestId}"),
+            };
+            ActivityTagsCollection expectedAttributes = new ActivityTagsCollection(expectAttributesList);
+
+            var contextMock = new Mock<HttpContext>();
+            var featuresMock = new Mock<IFeatureCollection>();
+            var exceptionHandlerFeatureMock = new Mock<IExceptionHandlerPathFeature>();
+            var routePattern = RoutePatternFactory.Parse("/api/contests/{id}");
+            var routeEndpoint = new RouteEndpoint(
+                requestDelegate: (context) => Task.CompletedTask,
+                routePattern: routePattern,
+                order: 0,
+                metadata: new EndpointMetadataCollection(),
+                displayName: "RouteTemplateTest");
+            exceptionHandlerFeatureMock.Setup(f => f.Endpoint).Returns(routeEndpoint);
+            featuresMock.Setup(f => f.Get<IExceptionHandlerPathFeature>()).Returns(exceptionHandlerFeatureMock.Object);
+            contextMock.Setup(c => c.Features).Returns(featuresMock.Object);
+
+            Activity? spanDataMock = this.testSource.StartActivity("GET", ActivityKind.Server);
+            spanDataMock.SetTag(AutoInstrumentation.AwsSpanProcessingUtil.AttributeHttpRequestMethod, "GET");
+            spanDataMock.SetTag(AutoInstrumentation.AwsSpanProcessingUtil.AttributeUrlPath, "/api/contests/42");
+            spanDataMock.SetCustomProperty("HttpContextWeakRef", new WeakReference<HttpContext>(contextMock.Object));
+            spanDataMock.SetParentId(this.parentSpan.TraceId, this.parentSpan.SpanId);
+            this.ValidateAttributesProducedForNonLocalRootSpanOfKind(expectedAttributes, spanDataMock);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(OtelAwsHttpOperationPathsConfig, null);
+            AutoInstrumentation.AwsSpanProcessingUtil.ResetOperationPaths();
+        }
+    }
+#endif
 
     [Fact]
     public void TestProducerSpanWithAttributes()
@@ -743,6 +803,75 @@ public class AwsMetricAttributesGeneratorTest
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceType));
         Assert.False(dependencyMetric.ContainsKey(AttributeAWSRemoteResourceIdentifier));
         spanDataMock.Dispose();
+    }
+
+    [Fact]
+    public void TestDBClientSpanWithStableSemanticConventions()
+    {
+        // Stable names only, e.g. a MongoDB.Driver operation span
+        Dictionary<string, object?> attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbOperationName, "find" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "find");
+
+        // MongoDB.Driver command span: no db.operation.name, only db.command.name
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbCommandName, "getMore" },
+            { "db.query.summary", "getMore orders" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "getMore");
+
+        // db.operation.name takes precedence over db.command.name
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbOperationName, "find" },
+            { AttributeDbCommandName, "getMore" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mongodb", "find");
+
+        // db.query.text is parsed like db.statement
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystemName, "postgresql" },
+            { AttributeDbQueryText, "SELECT * FROM orders" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "postgresql", "SELECT");
+
+        // Legacy names win when both are present, so existing values don't change
+        attributesCombination = new Dictionary<string, object?>
+        {
+            { AttributeDbSystem, "mssql" },
+            { AttributeDbSystemName, "microsoft.sql_server" },
+            { AttributeDbOperation, "SELECT" },
+            { AttributeDbOperationName, "select" },
+        };
+        this.ValidateExpectedRemoteAttributes(attributesCombination, "mssql", "SELECT");
+
+        // db.namespace is used for the DB::Connection resource identifier
+        Dictionary<string, object> resourceAttributes = new Dictionary<string, object>
+        {
+            { AttributeDbSystemName, "mongodb" },
+            { AttributeDbNamespace, "db_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, 27017L },
+        };
+        this.ValidateRemoteResourceAttributes(resourceAttributes, "DB::Connection", "db_name|abc.com|27017", "db_name|abc.com|27017", false);
+
+        // db.name wins over db.namespace
+        resourceAttributes = new Dictionary<string, object>
+        {
+            { AttributeDbSystem, "mysql" },
+            { AttributeDbName, "db_name" },
+            { AttributeDbNamespace, "other_name" },
+            { AttributeServerAddress, "abc.com" },
+            { AttributeServerPort, 3306L },
+        };
+        this.ValidateRemoteResourceAttributes(resourceAttributes, "DB::Connection", "db_name|abc.com|3306", "db_name|abc.com|3306", false);
     }
 
     [Fact]

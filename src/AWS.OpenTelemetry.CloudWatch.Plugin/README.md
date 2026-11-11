@@ -1,0 +1,108 @@
+# AWS OpenTelemetry CloudWatch Plugin
+
+Amazon CloudWatch plugin for OpenTelemetry .NET.
+
+The NuGet package ID, assembly name, and namespace are
+`AWS.OpenTelemetry.CloudWatchPluginOtel`.
+
+> [!IMPORTANT]
+> `CloudWatchPlugin` must be the last plugin listed in
+> `OTEL_DOTNET_AUTO_PLUGINS`. A plugin listed after it can replace the required
+> sampler and cause span metrics to be undercounted.
+
+## OpenTelemetry .NET auto-instrumentation
+
+The `AWS.OpenTelemetry.CloudWatchPluginOtel` package extends the upstream
+OpenTelemetry .NET Automatic Instrumentation distribution.
+
+Its `0.1.x` package line supports OpenTelemetry SDK versions greater than or
+equal to `1.15.3` and less than `2.0.0`.
+
+For automatic instrumentation, use a distribution that contains a supported
+OpenTelemetry SDK. The convention-based adapter supports these released
+upstream OpenTelemetry .NET Automatic Instrumentation versions:
+
+| Automatic Instrumentation | OpenTelemetry SDK |
+|---------------------------|-------------------|
+| `1.15.0`                  | `1.15.3`          |
+| `1.16.0`                  | `1.16.0`          |
+| `1.16.0`                  | `1.17.0`          |
+
+Install the NuGet package by its package ID:
+
+```console
+dotnet add package AWS.OpenTelemetry.CloudWatchPluginOtel
+```
+
+Configure auto-instrumentation with the plugin's CLR assembly-qualified type:
+
+```sh
+export OTEL_DOTNET_AUTO_PLUGINS="AWS.OpenTelemetry.CloudWatchPluginOtel.CloudWatchPlugin, AWS.OpenTelemetry.CloudWatchPluginOtel"
+```
+
+For a deployment that cannot add an `AWS.OpenTelemetry.CloudWatchPluginOtel`
+package reference, extract the framework-specific
+`AWS.OpenTelemetry.CloudWatchPluginOtel.dll` from the NuGet package into the
+upstream distribution's managed assemblies directory under
+`OTEL_DOTNET_AUTO_HOME` (`net` for .NET or `netfx` for .NET Framework), then set
+`OTEL_DOTNET_AUTO_PLUGINS` as shown above.
+
+When combining this with another plugin, separate assembly-qualified names with
+`:`, keeping `CloudWatchPlugin` last. Standard upstream sampler configuration
+through `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` is supported.
+Unsupported `OTEL_TRACES_SAMPLER` values are rejected rather than replaced with
+a different sampling policy.
+
+## Manual OpenTelemetry SDK registration
+
+After adding an `AWS.OpenTelemetry.CloudWatchPluginOtel` package reference,
+import its `AWS.OpenTelemetry.CloudWatchPluginOtel` namespace. The span metrics
+connector emits `traces.span.metrics.calls` and `traces.span.metrics.duration`
+from recorded spans. Wire it into the application's existing OpenTelemetry
+builders:
+
+```csharp
+using AWS.OpenTelemetry.CloudWatchPluginOtel;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+
+var sampler = new ParentBasedSampler(new TraceIdRatioBasedSampler(0.1));
+
+tracerBuilder
+    .AddCloudWatchSpanMetrics(sampler);
+
+meterBuilder.AddCloudWatchSpanMetrics();
+```
+
+The meter provider's resource must include `service.name`. When configuring
+resources manually, configure it on `meterBuilder`; configuring
+`service.name` only on `tracerBuilder` does not add it to the emitted metrics.
+
+To generate complete span metrics, the plugin records every span in-process.
+The configured sampler's export decisions are preserved, so spans it drops are
+not exported.
+
+Do not combine manual registration with the auto-instrumentation plugin.
+
+## Metrics
+
+The plugin emits:
+
+- `traces.span.metrics.calls`, a counter of completed spans.
+- `traces.span.metrics.duration`, a histogram of span duration in seconds.
+
+Both metrics include `span.name`, `span.kind`, `status.code`, schema version,
+and plugin version when available. They also include applicable HTTP, RPC,
+database, error, and messaging attributes from the source span. While OTLP span
+metrics are active, recorded spans also include the schema and plugin version
+attributes so the backend can avoid deriving duplicate metrics.
+
+Metric dimensions create a distinct CloudWatch time series for each unique
+combination of values. In particular, `span.name`, `http.route`, database
+collection or table names, and messaging destinations can have high
+cardinality. Keep those values bounded to control CloudWatch metric volume and
+cost.
+
+## License
+
+This project is licensed under the Apache-2.0 License.

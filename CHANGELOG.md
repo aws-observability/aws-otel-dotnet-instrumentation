@@ -11,6 +11,71 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Application Signals now recognizes database spans that use the stable semantic conventions
+  (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
+  MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
+  The legacy attributes still take precedence when both are present.
+  ([#495](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/495))
+
+- Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
+  CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
+  endpoints because the detection patterns required `.amazonaws.com`, so those exports failed with
+  HTTP 403. Note the signed OTLP log exporter is only registered in AWS Lambda, so the logs half of
+  this applies to Lambda workloads
+
+- Windows installer (`AWS.Otel.DotNet.Auto.psm1`) no longer registers `AWSSDK.*` assemblies in the GAC,
+  and removes ones registered by earlier versions. GAC'd copies replaced the AWS SDK of every .NET Framework
+  application on the host, which crashed applications using newer AWS SDK packages
+  (e.g. `MissingMethodException`), even when not instrumented.
+  ([#487](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/487))
+
+- Add SigV4 signing to the upstream OTLP metric exporter.
+  To enable it, set `OTEL_METRICS_EXPORTER=otlp`,
+  `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://monitoring.<region>.amazonaws.com/v1/metrics`,
+  and `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf`.
+  ([#484](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/484)).
+
+- **(Breaking Change)** Reuse the upstream OTLP log exporter for SigV4.
+  In AWS Lambda, you must explicitly set `OTEL_LOGS_EXPORTER=otlp` to enable
+  SigV4 log export. Setting `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` alone no longer
+  enables SigV4 log export.
+  ([#477](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/477)).
+
+- Reuse the upstream OTLP trace exporter for SigV4
+  ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).
+- Fix `XrayUdpExporter` crashing with `MissingMethodException: WriteTraceData not found` when
+  `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.18.0 or later is resolved
+  ([#483](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/483)).
+
+## v1.15.0 - 2026-08-25
+- Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
+  incident snapshots, and per-function duration histograms to power Application Signals'
+  service investigation experience. Targets modern .NET (net8.0/net9.0/net10.0); does not
+  initialize on .NET Framework apps. Disabled by default and never enabled in AWS Lambda:
+  set `OTEL_AWS_SERVICE_EVENTS_ENABLED=true` to turn it on. Enabling it alongside AWS
+  Application Signals needs nothing further, since Application Signals supplies the
+  endpoints; enabling it without Application Signals additionally requires
+  `OTEL_AWS_OTLP_LOGS_ENDPOINT` and `OTEL_AWS_OTLP_METRICS_ENDPOINT`. Per-function
+  instrumentation stays off until `OTEL_AWS_SERVICE_EVENTS_PACKAGES_INCLUDE` names at least
+  one package
+  ([#443](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/443),
+  [#447](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/447))
+- Attribute presigned S3 URLs as `AWS::S3` dependencies in Application Signals, opt-in via
+  `OTEL_AWS_APPLICATION_SIGNALS_PRESIGNED_URL_ATTRIBUTION_ENABLED`
+  ([#440](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/440))
+
+- Apply OTEL_AWS_HTTP_OPERATION_PATHS to aws.local.operation for ASP.NET Core spans
+  ([#441](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/441))
+
+- Add adaptive sampling support for anomaly detection and trace capture
+  ([#410](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/410))
+
+- **(Breaking Change)** Migrate AWS SDK for .NET dependency from v3 to v4. Since AWS SDK v4 targets .NET Framework 4.7.2 and above, this change drops support for .NET Framework 4.6.2.
+  ([#436](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/436))
+
+  **Note: this release drops support for AWS SDK for .NET v3.** Users should upgrade their applications to AWS SDK v4 to continue using the latest distribution.
+
+## v1.14.0 - 2026-07-15
 - Fix Linux arm64 image being built with the x64 payload, which caused the shared
   store and native profiler to not match the image architecture and made .NET
   applications fail to start on arm64. Images are now built per architecture.

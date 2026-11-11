@@ -20,6 +20,9 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="fluentassertions" Version="6.12.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.0" PrivateAssets="all" />
+    <!-- Generate OTLP message types so tests can decode and validate delivered HTTP payloads. -->
+    <PackageReference Include="Grpc.Tools" Version="2.63.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
     <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
@@ -46,7 +49,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Protobuf Include="../images/MockCollector/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto;
+                       ../images/MockCollector/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto"
+              ProtoRoot="../images/MockCollector/opentelemetry-proto"
+              GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj" />
+    <!-- The main project references ServiceEvents with PrivateAssets="All", so its types do not
+         flow transitively. Referenced directly here so ServiceEventsGateTest can assert that a
+         disabled ServiceEvents leaves customer telemetry untouched. -->
+    <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.ServiceEvents\AWS.Distro.OpenTelemetry.ServiceEvents.csproj" />
+    <!-- Also referenced with PrivateAssets="All" by the main project. Referenced directly here so
+         OtlpExporterUtilsTest can exercise the reflection binding against the resolved OTLP exporter. -->
+    <ProjectReference Include="..\..\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

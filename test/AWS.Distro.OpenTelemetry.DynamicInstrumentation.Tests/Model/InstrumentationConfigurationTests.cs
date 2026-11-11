@@ -259,6 +259,34 @@ public class InstrumentationConfigurationTests
     }
 
     [Fact]
+    public void Parse_FlatCaptureConfiguration_WithoutCodeCaptureWrapper_ReadsFlatFields()
+    {
+        // Legacy/older backends send the capture fields flat on "CaptureConfiguration" with no
+        // "CodeCapture" wrapper. The flat fields must still be honored (not dropped to Default).
+        var json = """
+        {
+            "InstrumentationType": "BREAKPOINT",
+            "LocationHash": "hash1",
+            "Location": { "CodeLocation": { "CodeUnit": "A", "ClassName": "B", "MethodName": "C" } },
+            "CaptureConfiguration": {
+                "CaptureReturn": true,
+                "CaptureStackTrace": true,
+                "CaptureArguments": ["orderId"],
+                "CaptureLimits": { "MaxStringLength": 200 }
+            }
+        }
+        """;
+
+        var config = InstrumentationConfiguration.Parse(Parse(json));
+
+        config.Should().NotBeNull();
+        config!.Capture.CaptureReturn.Should().BeTrue("flat CaptureReturn must be read");
+        config.Capture.CaptureStackTrace.Should().BeTrue("flat CaptureStackTrace must be read");
+        config.Capture.CaptureArguments.Should().Equal("orderId");
+        config.Capture.MaxStringLength.Should().Be(200);
+    }
+
+    [Fact]
     public void Parse_ProbeMaxHits_IsUnlimited()
     {
         var json = """
@@ -323,6 +351,48 @@ public class InstrumentationConfigurationTests
         var config = InstrumentationConfiguration.Parse(Parse(json));
 
         config.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_MissingClassName_ReturnsNull()
+    {
+        var json = """
+        {
+            "InstrumentationType": "BREAKPOINT",
+            "LocationHash": "hash1",
+            "Location": { "CodeLocation": { "CodeUnit": "A", "MethodName": "C" } }
+        }
+        """;
+
+        InstrumentationConfiguration.Parse(Parse(json)).Should().BeNull("class name is required");
+    }
+
+    [Fact]
+    public void Parse_MissingMethodName_ReturnsNull()
+    {
+        var json = """
+        {
+            "InstrumentationType": "BREAKPOINT",
+            "LocationHash": "hash1",
+            "Location": { "CodeLocation": { "CodeUnit": "A", "ClassName": "B" } }
+        }
+        """;
+
+        InstrumentationConfiguration.Parse(Parse(json)).Should().BeNull("method name is required");
+    }
+
+    [Fact]
+    public void Parse_NegativeLineNumber_ReturnsNull()
+    {
+        var json = """
+        {
+            "InstrumentationType": "BREAKPOINT",
+            "LocationHash": "hash1",
+            "Location": { "CodeLocation": { "CodeUnit": "A", "ClassName": "B", "MethodName": "C", "LineNumber": -5 } }
+        }
+        """;
+
+        InstrumentationConfiguration.Parse(Parse(json)).Should().BeNull("a negative line number is never valid");
     }
 
     // Regression: GetBoolean()/GetInt32()/GetInt64() throw if the field is the wrong JSON kind,
