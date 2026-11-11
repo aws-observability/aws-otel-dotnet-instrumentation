@@ -11,6 +11,10 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
+  and distribution versions synchronized
+  ([#500](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/500))
+
 - Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1
   includes OpenTelemetry.OpAmp.Client 0.10.0-alpha.1 and requires Google.Protobuf >= 3.31.1.
   NuGet consumers with an older direct Protobuf pin must update it.
