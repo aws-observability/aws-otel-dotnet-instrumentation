@@ -7,6 +7,8 @@ using System.Reflection;
 using Amazon.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using OpenTelemetry.AutoInstrumentation.PluginApi;
+using OpenTelemetry.AutoInstrumentation.PluginApi.Telemetry;
 using OpenTelemetry.Context.Propagation;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Extensions.AWS.Trace;
@@ -43,7 +45,19 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 /// <summary>
 /// AWS SDK Plugin
 /// </summary>
-public class Plugin
+public class Plugin :
+    IPlugin,
+    ITelemetryPlugin,
+    IConfigureTracesOptions<OtlpExporterOptions>,
+    IConfigureTracesOptions<HttpClientTraceInstrumentationOptions>,
+#if !NETFRAMEWORK
+    IConfigureTracesOptions<AspNetCoreTraceInstrumentationOptions>,
+#else
+    IConfigureTracesOptions<AspNetTraceInstrumentationOptions>,
+#endif
+    IConfigureMetricsOptions<OtlpExporterOptions>,
+    IConfigureLogsOptions<global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions>,
+    IConfigureLogsOptions<OtlpExporterOptions>
 {
     /// <summary>
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
@@ -133,6 +147,21 @@ public class Plugin
         this.InitializeDynamicInstrumentation();
         this.InitializeServiceEvents();
 #endif
+    }
+
+    /// <summary>
+    /// Called after automatic instrumentation has finished initializing.
+    /// </summary>
+    public void Initialized()
+    {
+    }
+
+    /// <summary>
+    /// Called after the automatic instrumentation meter provider has been built.
+    /// </summary>
+    /// <param name="meterProvider">The initialized meter provider.</param>
+    public void MeterProviderInitialized(MeterProvider meterProvider)
+    {
     }
 
     /// <summary>
@@ -390,6 +419,16 @@ public class Plugin
         {
             OtlpAwsMetricExporter.Configure(options);
         }
+    }
+
+    /// <summary>
+    /// Preserves the meter provider builder before automatic instrumentation configures it.
+    /// </summary>
+    /// <param name="builder">The meter provider builder.</param>
+    /// <returns>The unmodified meter provider builder.</returns>
+    public MeterProviderBuilder BeforeConfigureMeterProvider(MeterProviderBuilder builder)
+    {
+        return builder;
     }
 
     /// <summary>

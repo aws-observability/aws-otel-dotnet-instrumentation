@@ -20,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="fluentassertions" Version="6.12.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.27.0" PrivateAssets="all" />
+    <PackageReference Include="Google.Protobuf" Version="3.31.1" PrivateAssets="all" />
     <!-- Generate OTLP message types so tests can decode and validate delivered HTTP payloads. -->
     <PackageReference Include="Grpc.Tools" Version="2.63.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
@@ -31,10 +31,10 @@
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="Xunit.Repeat" Version="1.1.26" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
-    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Contrib.Extensions.AWSXRay" Version="1.2.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="NSubstitute" Version="5.1.0" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">

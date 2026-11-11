@@ -11,6 +11,9 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1
+  ([#465](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/465))
+
 - Application Signals now recognizes database spans that use the stable semantic conventions
   (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
   MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
