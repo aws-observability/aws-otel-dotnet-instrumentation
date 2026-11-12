@@ -72,7 +72,9 @@ public class OtlpExporterUtils
         object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
         if (WriteTraceDataMaxBufferSize != null)
         {
-            args = args.Append(WriteTraceDataMaxBufferSize).ToArray();
+            // The newer serializer returns resized buffers to ArrayPool.Shared. Our fixed UDP
+            // buffer is not pooled, so reject overflow instead of letting the serializer grow it.
+            args = args.Append(Math.Min(buffer.Length, (int)WriteTraceDataMaxBufferSize)).ToArray();
         }
 
         // Invoke static method (null target) :contentReference[oaicite:2]{index=2}

@@ -13,6 +13,8 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 ## Unreleased
 - Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
   and distribution versions synchronized. Select the matching macOS native profiler architecture
+  and handle oversized X-Ray UDP trace batches with the upgraded serializer.
+  Include the AWS sampler DLL in NuGet packages so plugin initialization succeeds
   ([#500](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/500))
 
 - Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1

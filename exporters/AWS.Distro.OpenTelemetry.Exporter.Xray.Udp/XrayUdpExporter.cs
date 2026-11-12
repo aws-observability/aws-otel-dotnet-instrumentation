@@ -52,15 +52,15 @@ public class XrayUdpExporter : BaseExporter<Activity>
         // Chose 65,527 because this is the max size of the data in UDP Datagram
         byte[] serializedData = new byte[65527];
 
-        int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
-        
-        if (serializedData == null || serializedDataLength == -1)
-        {
-            return ExportResult.Failure;
-        }
-
         try
         {
+            int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
+
+            if (serializedData == null || serializedDataLength == -1)
+            {
+                return ExportResult.Failure;
+            }
+
             this.udpExporter.SendData(serializedData, 0, serializedDataLength, this.signalPrefix);
             return ExportResult.Success;
         }
