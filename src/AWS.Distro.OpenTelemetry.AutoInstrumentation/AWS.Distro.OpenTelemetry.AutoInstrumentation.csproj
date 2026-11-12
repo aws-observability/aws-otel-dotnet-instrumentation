@@ -92,24 +92,6 @@
       <PrivateAssets>none</PrivateAssets> <!-- Ensures that content and build transitive dependencies are properly delivered -->
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
-    <!-- The private sampler project reference needs explicit DLL entries for NuGet consumers.
-         Use this project's output so the net462 sampler is packaged under the net472 host target. -->
-    <Content Include="./bin/Release/net8.0/OpenTelemetry.Sampler.AWS.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net8.0</PackagePath>
-    </Content>
-    <Content Include="./bin/Release/net9.0/OpenTelemetry.Sampler.AWS.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net9.0</PackagePath>
-    </Content>
-    <Content Include="./bin/Release/net10.0/OpenTelemetry.Sampler.AWS.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net10.0</PackagePath>
-    </Content>
-    <Content Include="./bin/Release/net472/OpenTelemetry.Sampler.AWS.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net472</PackagePath>
-    </Content>
     <!-- TODO: Once upstream release is done, remove the logic below -->
     <Content Include="./bin/Release/net8.0/OpenTelemetry.Instrumentation.AWS.dll">
         <Pack>true</Pack>
