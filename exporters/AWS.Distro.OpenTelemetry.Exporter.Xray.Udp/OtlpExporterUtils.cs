@@ -72,8 +72,8 @@ public class OtlpExporterUtils
         object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
         if (WriteTraceDataMaxBufferSize != null)
         {
-            // The newer serializer returns resized buffers to ArrayPool.Shared. Our fixed UDP
-            // buffer is not pooled, so reject overflow instead of letting the serializer grow it.
+            // Upstream switched buffer growth to ArrayPool.
+            // https://github.com/open-telemetry/opentelemetry-dotnet/pull/7451
             args = args.Append(Math.Min(buffer.Length, (int)WriteTraceDataMaxBufferSize)).ToArray();
         }
 
