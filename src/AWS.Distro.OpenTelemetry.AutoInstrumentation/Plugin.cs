@@ -470,9 +470,7 @@ public class Plugin :
     }
 
     /// <summary>
-    /// In Lambda, registers CompactConsoleLogRecordExporter when OTEL_LOGS_EXPORTER includes console. It takes the
-    /// place of the upstream console exporter, which <see cref="ConfigureLogsOptions(ConsoleExporterOptions)"/> keeps
-    /// off stdout.
+    /// In AWS Lambda, adds the compact console log exporter when OTEL_LOGS_EXPORTER includes console.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
@@ -487,15 +485,13 @@ public class Plugin :
     }
 
     /// <summary>
-    /// When the compact exporter replaces it, turns off the upstream console log exporter's output, so the compact
-    /// exporter is the only console output.
+    /// When the compact exporter replaces it, turns off the upstream console log exporter's output when OTEL_LOGS_EXPORTER includes console.
     /// </summary>
     /// <param name="options">The upstream console log exporter options.</param>
     public void ConfigureLogsOptions(ConsoleExporterOptions options)
     {
         if (AwsSpanProcessingUtil.IsLambdaEnvironment() && IsLogExporterSelected(ConsoleExporterName))
         {
-            // No target flag: the exporter writes nowhere.
             options.Targets = 0;
         }
     }
