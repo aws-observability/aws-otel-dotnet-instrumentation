@@ -45,7 +45,7 @@ def update_file_dependencies(file_path, otel_dotnet_core_version):
         
         return updated
             
-    except (OSError, IOError) as file_error:
+    except OSError as file_error:
         print(f"Error updating {file_path}: {file_error}")
         return False
 
@@ -168,7 +168,7 @@ def update_instrumentation_versions(csproj_path, build_cs_path, instrumentation_
 
         return updated
             
-    except (OSError, IOError) as file_error:
+    except OSError as file_error:
         print(f"Error updating automatic instrumentation version: {file_error}")
         raise
 
