@@ -674,6 +674,18 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
     }
 
+    // OTEL_LOGS_EXPORTER is restored after each test by PluginTests.Dispose.
+    [Fact]
+    public void ShouldKeepConsoleLogsOnStdoutOutsideLambda()
+    {
+        Environment.SetEnvironmentVariable("OTEL_LOGS_EXPORTER", "console");
+        var options = new ConsoleExporterOptions();
+
+        new Plugin().ConfigureLogsOptions(options);
+
+        Assert.Equal(ConsoleExporterOutputTargets.Console, options.Targets);
+    }
+
     private static Dictionary<string, string?> CreateSigV4LogsConfig(
         string? otelExporterOtlpLogsEndpoint,
         string? otelExporterOtlpLogsHeaders = null,

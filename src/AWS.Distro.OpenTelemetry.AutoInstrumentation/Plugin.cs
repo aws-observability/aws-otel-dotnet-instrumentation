@@ -57,7 +57,8 @@ public class Plugin :
 #endif
     IConfigureMetricsOptions<OtlpExporterOptions>,
     IConfigureLogsOptions<global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions>,
-    IConfigureLogsOptions<OtlpExporterOptions>
+    IConfigureLogsOptions<OtlpExporterOptions>,
+    IConfigureLogsOptions<ConsoleExporterOptions>
 {
     /// <summary>
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
@@ -90,6 +91,9 @@ public class Plugin :
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string ApplicationSignalsRuntimeEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED";
     private static readonly string MetricExporterConfig = "OTEL_METRICS_EXPORTER";
+    private static readonly string LogExporterConfig = "OTEL_LOGS_EXPORTER";
+    private static readonly string ConsoleExporterName = "console";
+    private static readonly string OtlpExporterName = "otlp";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
@@ -466,12 +470,14 @@ public class Plugin :
     }
 
     /// <summary>
-    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
+    /// In Lambda, registers CompactConsoleLogRecordExporter when OTEL_LOGS_EXPORTER includes console. It takes the
+    /// place of the upstream console exporter, which <see cref="ConfigureLogsOptions(ConsoleExporterOptions)"/> keeps
+    /// off stdout.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
     {
-        if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
+        if (!AwsSpanProcessingUtil.IsLambdaEnvironment() || !IsLogExporterSelected(ConsoleExporterName))
         {
             return;
         }
@@ -481,14 +487,26 @@ public class Plugin :
     }
 
     /// <summary>
+    /// When the compact exporter replaces it, turns off the upstream console log exporter's output, so the compact
+    /// exporter is the only console output.
+    /// </summary>
+    /// <param name="options">The upstream console log exporter options.</param>
+    public void ConfigureLogsOptions(ConsoleExporterOptions options)
+    {
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment() && IsLogExporterSelected(ConsoleExporterName))
+        {
+            // No target flag: the exporter writes nowhere.
+            options.Targets = 0;
+        }
+    }
+
+    /// <summary>
     /// Adds SigV4 signing to the upstream OTLP log exporter after its options have been configured.
     /// </summary>
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        var logsExporter = System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
-        if (logsExporter?.Split(',').Any(exporter => exporter.Trim() == "otlp") == true
-            && AwsSpanProcessingUtil.IsLambdaEnvironment())
+        if (IsLogExporterSelected(OtlpExporterName) && AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
             Logger.LogWarning(
                 "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
@@ -709,6 +727,9 @@ public class Plugin :
             System.Environment.GetEnvironmentVariable(envVar),
             "false",
             StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLogExporterSelected(string exporter) =>
+        System.Environment.GetEnvironmentVariable(LogExporterConfig)?.Split(',').Any(value => value.Trim() == exporter) == true;
 
     private static int GetMetricExportInterval()
     {
@@ -991,7 +1012,7 @@ public class Plugin :
             ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
         var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
         var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
-        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == "otlp");
+        var isOtlpExporterEnabled = exporter == null || exporter.Split(',').Any(value => value.Trim() == OtlpExporterName);
         var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
         var shouldConfigureExporter = false;
         var hasSignalHeaders = false;

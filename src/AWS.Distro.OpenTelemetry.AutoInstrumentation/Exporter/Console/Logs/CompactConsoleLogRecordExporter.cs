@@ -150,6 +150,21 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
         }
     }
 
+    // Same as the OpenTelemetry SDK's internal ToInvariantString, which the OTLP exporter uses for exception.stacktrace.
+    private static string ToInvariantString(Exception exception)
+    {
+        var originalUICulture = Thread.CurrentThread.CurrentUICulture;
+        try
+        {
+            Thread.CurrentThread.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+            return exception.ToString();
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentUICulture = originalUICulture;
+        }
+    }
+
     private string ToCompactJson(LogRecord logRecord)
     {
         using var stream = new MemoryStream();
@@ -194,6 +209,15 @@ public class CompactConsoleLogRecordExporter : BaseExporter<LogRecord>
             {
                 WriteAttributeValue(writer, attr.Key, attr.Value);
             }
+        }
+
+        // The .NET SDK keeps the exception on the record rather than in attributes; write it as the semantic-convention
+        // exception attributes.
+        if (logRecord.Exception != null)
+        {
+            writer.WriteString("exception.type", logRecord.Exception.GetType().Name);
+            writer.WriteString("exception.message", logRecord.Exception.Message);
+            writer.WriteString("exception.stacktrace", ToInvariantString(logRecord.Exception));
         }
 
         writer.WriteEndObject();
