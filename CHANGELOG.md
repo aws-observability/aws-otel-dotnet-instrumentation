@@ -11,6 +11,14 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- **(Breaking Change)** In AWS Lambda, the compact JSON console log exporter is no longer added to every function,
+  which printed `ILogger` logs twice. It now replaces the upstream console exporter when `OTEL_LOGS_EXPORTER`
+  includes `console`. Functions that log only through `ILogger`, with no logging provider of their own, must set
+  `OTEL_LOGS_EXPORTER=console` to keep their logs on stdout. Compact log lines now include logged exceptions.
+  With `console`, logs from the log4net and NLog bridges are no longer printed to stdout; use the library's own
+  console appender or target instead.
+  ([#501](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/501))
+
 - Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1
   ([#465](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/465))
 
