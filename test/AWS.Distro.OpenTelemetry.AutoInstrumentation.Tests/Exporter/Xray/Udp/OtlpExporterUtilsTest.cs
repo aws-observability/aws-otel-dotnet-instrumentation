@@ -13,6 +13,26 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Xray.Udp;
 public class OtlpExporterUtilsTest
 {
     [Fact]
+    public void ExportRejectsOversizedBatchWithoutAffectingNextBatch()
+    {
+        using var exporter = new XrayUdpExporter(Resource.Empty);
+        using var normalActivity = new Activity("normal span").Start();
+        normalActivity.Stop();
+
+        Assert.Equal(ExportResult.Success, exporter.Export(new Batch<Activity>(normalActivity)));
+
+        using var activity = new Activity("oversized span").Start();
+        activity.SetTag("large.attribute", new string('x', 100_000));
+        activity.Stop();
+
+        Assert.Equal(ExportResult.Failure, exporter.Export(new Batch<Activity>(activity)));
+
+        using var nextActivity = new Activity("following span").Start();
+        nextActivity.Stop();
+        Assert.Equal(ExportResult.Success, exporter.Export(new Batch<Activity>(nextActivity)));
+    }
+
+    [Fact]
     public void WriteTraceDataSerializesBatchWithResolvedOtlpExporter()
     {
         using var source = new ActivitySource($"Xray.Udp.Tests.{Guid.NewGuid()}");
