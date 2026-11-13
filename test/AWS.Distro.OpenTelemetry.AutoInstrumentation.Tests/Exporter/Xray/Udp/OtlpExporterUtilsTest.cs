@@ -15,21 +15,21 @@ public class OtlpExporterUtilsTest
     [Fact]
     public void ExportRejectsOversizedBatchWithoutAffectingNextBatch()
     {
+        using var exporter = new XrayUdpExporter(Resource.Empty);
+        using var normalActivity = new Activity("normal span").Start();
+        normalActivity.Stop();
+
+        Assert.Equal(ExportResult.Success, exporter.Export(new Batch<Activity>(normalActivity)));
+
         using var activity = new Activity("oversized span").Start();
         activity.SetTag("large.attribute", new string('x', 100_000));
         activity.Stop();
-        using var exporter = new XrayUdpExporter(Resource.Empty);
 
         Assert.Equal(ExportResult.Failure, exporter.Export(new Batch<Activity>(activity)));
 
         using var nextActivity = new Activity("following span").Start();
         nextActivity.Stop();
-        byte[] buffer = new byte[65527];
-        int length = OtlpExporterUtils.WriteTraceData(ref buffer, 0, Resource.Empty, new Batch<Activity>(nextActivity));
-        var exported = ExportTraceServiceRequest.Parser.ParseFrom(buffer, 0, length);
-        var span = Assert.Single(Assert.Single(Assert.Single(exported.ResourceSpans).ScopeSpans).Spans);
-
-        Assert.Equal("following span", span.Name);
+        Assert.Equal(ExportResult.Success, exporter.Export(new Batch<Activity>(nextActivity)));
     }
 
     [Fact]
