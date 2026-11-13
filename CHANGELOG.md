@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Register otlp/sigv4 exporters for traces, metrics, and logs ([#497](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/497)).
+
 - Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
   and distribution versions synchronized. Select the matching macOS native profiler architecture
   and handle oversized X-Ray UDP trace batches with the upgraded serializer.

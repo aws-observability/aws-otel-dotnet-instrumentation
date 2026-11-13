@@ -25,15 +25,13 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests.Exporter.Otlp.Aws;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
 {
-    private readonly string serviceName;
     private readonly ImmutableCredentials credentials = new("AKIDEXAMPLE", "test-secret", "session-token");
     private readonly List<byte[]> signedPayloads = new();
-    private string region;
 
     protected AbstractOtlpAwsExporterTest(Uri endpoint, string region, string serviceName)
     {
-        this.region = region;
-        this.serviceName = serviceName;
+        this.Region = region;
+        this.ServiceName = serviceName;
         this.Options = new OtlpExporterOptions
         {
             Endpoint = endpoint,
@@ -53,6 +51,10 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
                 new DefaultAwsAuthenticator().Sign(request, config, snapshot);
             });
     }
+
+    protected string Region { get; set; }
+
+    protected string ServiceName { get; set; }
 
     protected OtlpExporterOptions Options { get; }
 
@@ -95,14 +97,17 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
     [InlineData("cn-northwest-1", "amazonaws.com.cn")]
     public void ShouldDefaultCompressionToNone(string region, string domain)
     {
-        this.region = region;
-        this.Options.Endpoint = new UriBuilder(this.Options.Endpoint) { Host = $"{this.serviceName}.{region}.{domain}" }.Uri;
+        this.Region = region;
+        this.Options.Endpoint = new UriBuilder(this.Options.Endpoint) { Host = $"{this.ServiceName}.{region}.{domain}" }.Uri;
         this.ValidateOtlpRequest(compression: null);
     }
 
     [Fact]
     public void ShouldAllowGzipCompression()
     {
+        this.ServiceName = "custom-service";
+        this.Region = "eu-central-1";
+        this.Options.Endpoint = new UriBuilder(this.Options.Endpoint) { Host = "example.com" }.Uri;
         this.ValidateOtlpRequest(OtlpExportCompression.GZip);
     }
 
@@ -301,7 +306,7 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
         Assert.Equal(expectedCredentials.Token, delivered.Headers["x-amz-security-token"]);
         Assert.Equal("test-value", delivered.Headers["x-test-header"]);
         Assert.Contains($"Credential={expectedCredentials.AccessKey}/", delivered.Headers["Authorization"]);
-        Assert.Contains($"/{this.region}/{this.serviceName}/aws4_request", delivered.Headers["Authorization"]);
+        Assert.Contains($"/{this.Region}/{this.ServiceName}/aws4_request", delivered.Headers["Authorization"]);
         Assert.DoesNotContain("x-test-header", delivered.Headers["Authorization"]);
         Assert.DoesNotContain("content-length", delivered.Headers["Authorization"]);
         Assert.DoesNotContain("content-encoding", delivered.Headers["Authorization"]);
@@ -334,7 +339,7 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
             credentials.AccessKey,
             signedAt,
             "host;x-amz-date;x-amz-security-token",
-            $"20260101/{this.region}/{this.serviceName}/aws4_request",
+            $"20260101/{this.Region}/{this.ServiceName}/aws4_request",
             new byte[32],
             signature);
         this.Authenticator.Setup(a => a.GetCredentialsAsync()).ReturnsAsync(credentials);
@@ -342,8 +347,8 @@ public abstract class AbstractOtlpAwsExporterTest<TExpectedPayload>
             .Callback<IRequest, IClientConfig, ImmutableCredentials>((request, config, snapshot) =>
             {
                 Assert.Same(credentials, snapshot);
-                Assert.Equal(this.region, config.AuthenticationRegion);
-                Assert.Equal(this.serviceName, config.AuthenticationServiceName);
+                Assert.Equal(this.Region, config.AuthenticationRegion);
+                Assert.Equal(this.ServiceName, config.AuthenticationServiceName);
                 request.Headers["x-amz-date"] = date;
                 request.AWS4SignerResult = signingResult;
             });

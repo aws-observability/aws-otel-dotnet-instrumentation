@@ -9,6 +9,23 @@ public class PluginUtilsTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
+    [InlineData(" , , ")]
+    public void ParseOtelExporterEnvVariable_MissingSelectionReturnsEmptyList(string? exporters)
+    {
+        Assert.Empty(PluginUtils.ParseOtelExporterEnvVariable(exporters));
+    }
+
+    [Fact]
+    public void ParseOtelExporterEnvVariable_ReturnsExporterNames()
+    {
+        Assert.Equal(
+            new[] { "otlp/sigv4", "console", "otlp", "custom-exporter" },
+            PluginUtils.ParseOtelExporterEnvVariable(" otlp/sigv4 , console, , otlp , custom-exporter "));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
     [InlineData(" , invalid, =value")]
     public void TestParseOtlpHeadersEnvVariableShouldReturnEmptyMapForMissingOrMalformedHeaders(string? headers)
     {
