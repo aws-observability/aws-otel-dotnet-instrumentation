@@ -313,6 +313,15 @@ public class AwsSpanProcessingUtilTest
     }
 
     [Fact]
+    public void TestIsDBSpanTrueWithStableSemanticConventions()
+    {
+        var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Client);
+        spanDataMock.SetTag("db.system.name", "mongodb");
+        spanDataMock.Start();
+        Assert.True(AwsSpanProcessingUtil.IsDBSpan(spanDataMock));
+    }
+
+    [Fact]
     public void TestIsDBSpanFalse()
     {
         var spanDataMock = this.testSource.StartActivity("test", ActivityKind.Server);

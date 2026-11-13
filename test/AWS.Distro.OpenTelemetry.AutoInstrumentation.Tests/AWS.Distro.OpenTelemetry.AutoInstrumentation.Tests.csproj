@@ -20,7 +20,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="fluentassertions" Version="6.12.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.27.0" PrivateAssets="all" />
+    <PackageReference Include="Google.Protobuf" Version="3.31.1" PrivateAssets="all" />
     <!-- Generate OTLP message types so tests can decode and validate delivered HTTP payloads. -->
     <PackageReference Include="Grpc.Tools" Version="2.63.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.2.7" />
@@ -31,10 +31,10 @@
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="Xunit.Repeat" Version="1.1.26" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
-    <PackageReference Include="OpenTelemetry" Version="1.16.0" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Contrib.Extensions.AWSXRay" Version="1.2.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
     <PackageReference Include="NSubstitute" Version="5.1.0" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
@@ -58,11 +58,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj" />
+    <!-- Both projects define Logging.ConsoleLogger; aliases let ConsoleLoggerTest pick each copy. -->
+    <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.AutoInstrumentation\AWS.Distro.OpenTelemetry.AutoInstrumentation.csproj" Aliases="global,DistroAutoInstrumentation" />
     <!-- The main project references ServiceEvents with PrivateAssets="All", so its types do not
          flow transitively. Referenced directly here so ServiceEventsGateTest can assert that a
          disabled ServiceEvents leaves customer telemetry untouched. -->
     <ProjectReference Include="..\..\src\AWS.Distro.OpenTelemetry.ServiceEvents\AWS.Distro.OpenTelemetry.ServiceEvents.csproj" />
+    <!-- Also referenced with PrivateAssets="All" by the main project. Referenced directly here so
+         OtlpExporterUtilsTest can exercise the reflection binding against the resolved OTLP exporter. -->
+    <ProjectReference Include="..\..\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" Aliases="global,XrayUdpExporter" />
   </ItemGroup>
 
   <ItemGroup>

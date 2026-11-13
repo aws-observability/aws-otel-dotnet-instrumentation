@@ -12,6 +12,14 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 ## Unreleased
 - Register otlp/sigv4 exporters for traces, metrics, and logs ([#497](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/497)).
+- Nightly dependency update: Core 1.20.1, Instrumentation v1.19.1
+  ([#465](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/465))
+
+- Application Signals now recognizes database spans that use the stable semantic conventions
+  (`db.system.name`, `db.operation.name`, `db.query.text`, `db.namespace`), such as spans from
+  MongoDB.Driver's native tracing. Previously they showed up as `UnknownRemoteService`.
+  The legacy attributes still take precedence when both are present.
+  ([#495](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/495))
 
 - Support the AWS China partition (`cn-north-1`, `cn-northwest-1`) when detecting the X-Ray and
   CloudWatch Logs OTLP endpoints. SigV4 signing was previously skipped for `*.amazonaws.com.cn`
@@ -39,6 +47,9 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 
 - Reuse the upstream OTLP trace exporter for SigV4
   ([#475](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/475)).
+- Fix `XrayUdpExporter` crashing with `MissingMethodException: WriteTraceData not found` when
+  `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.18.0 or later is resolved
+  ([#483](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/483)).
 
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,

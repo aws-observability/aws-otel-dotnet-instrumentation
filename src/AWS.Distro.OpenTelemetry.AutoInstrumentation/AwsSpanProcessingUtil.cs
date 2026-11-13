@@ -315,6 +315,12 @@ internal sealed class AwsSpanProcessingUtil
         return span.GetTagItem(key) != null;
     }
 
+    // Returns legacyKey if it is present on the span, otherwise stableKey.
+    internal static string GetLegacyOrStableKey(Activity span, string legacyKey, string stableKey)
+    {
+        return IsKeyPresent(span, legacyKey) ? legacyKey : stableKey;
+    }
+
     internal static bool IsAwsSDKSpan(Activity span)
     {
         // https://opentelemetry.io/docs/specs/semconv/cloud-providers/aws-sdk/
@@ -325,7 +331,8 @@ internal sealed class AwsSpanProcessingUtil
     internal static bool IsDBSpan(Activity span)
     {
         return IsKeyPresent(span, AttributeDbSystem) || IsKeyPresent(span, AttributeDbOperation) ||
-               IsKeyPresent(span, AttributeDbStatement);
+               IsKeyPresent(span, AttributeDbStatement) || IsKeyPresent(span, AttributeDbSystemName) ||
+               IsKeyPresent(span, AttributeDbOperationName) || IsKeyPresent(span, AttributeDbQueryText);
     }
 
     internal static bool ShouldGenerateServiceMetricAttributes(Activity span)
