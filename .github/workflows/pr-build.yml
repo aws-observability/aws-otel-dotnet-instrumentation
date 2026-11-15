@@ -91,7 +91,7 @@ jobs:
           
           echo "It looks like you didn't add an entry to CHANGELOG.md. If this change affects the SDK behavior, please update CHANGELOG.md and link this PR in your entry. If this PR does not need a CHANGELOG entry, you can add the 'Skip Changelog' label to this PR."
           exit 1
-          
+
       - name: Check for versioned GitHub actions
         if: always()
         run: |
@@ -192,6 +192,10 @@ jobs:
       - name: Test on macOS
         if: runner.os == 'macOS'
         run: dotnet test
+
+      - name: Validate release package dependencies on Windows
+        if: runner.os == 'Windows'
+        run: dotnet restore ./src/AWS.Distro.OpenTelemetry.AutoInstrumentation /p:_IsPacking=true
 
       - name: Upload Artifact on X64 Linux
         if: runner.os == 'Linux'

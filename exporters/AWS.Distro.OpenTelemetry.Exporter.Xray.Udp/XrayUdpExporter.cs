@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Logging;
 using Microsoft.Extensions.Logging;
@@ -52,17 +53,22 @@ public class XrayUdpExporter : BaseExporter<Activity>
         // Chose 65,527 because this is the max size of the data in UDP Datagram
         byte[] serializedData = new byte[65527];
 
-        int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
-        
-        if (serializedData == null || serializedDataLength == -1)
-        {
-            return ExportResult.Failure;
-        }
-
         try
         {
+            int serializedDataLength = OtlpExporterUtils.WriteTraceData(ref serializedData, 0, this.processResource, batch);
+
+            if (serializedData == null || serializedDataLength == -1)
+            {
+                return ExportResult.Failure;
+            }
+
             this.udpExporter.SendData(serializedData, 0, serializedDataLength, this.signalPrefix);
             return ExportResult.Success;
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is IndexOutOfRangeException or ArgumentException)
+        {
+            Logger.LogWarning("Dropped batch of {SpanCount} spans: exceeds UDP size limit", batch.Count);
+            return ExportResult.Failure;
         }
         catch (Exception ex)
         {

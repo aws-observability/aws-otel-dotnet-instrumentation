@@ -72,7 +72,11 @@ public class OtlpExporterUtils
         object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
         if (WriteTraceDataMaxBufferSize != null)
         {
-            args = args.Append(WriteTraceDataMaxBufferSize).ToArray();
+            // Upstream grows the buffer by renting from ArrayPool.Shared and returning the old array.
+            // Our new byte[65527] buffer is not pooled, so returning it would throw ArgumentException.
+            // Cap the maximum to the supplied buffer length so this method never grows the buffer.
+            // https://github.com/open-telemetry/opentelemetry-dotnet/pull/7451
+            args = args.Append(Math.Min(buffer.Length, (int)WriteTraceDataMaxBufferSize)).ToArray();
         }
 
         // Invoke static method (null target) :contentReference[oaicite:2]{index=2}

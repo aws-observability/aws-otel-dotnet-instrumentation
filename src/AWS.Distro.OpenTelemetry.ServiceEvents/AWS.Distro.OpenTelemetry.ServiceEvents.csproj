@@ -26,8 +26,8 @@
 
   <ItemGroup>
     <!-- OpenTelemetry SDK + OTLP exporter (logs + metrics + traces).
-         Pinned to 1.16.0 to match AWS.Distro.OpenTelemetry.AutoInstrumentation, which this
-         project references; a lower floor here resolves as a package downgrade (NU1605). -->
+         These are minimum versions for this project. AWS.Distro.OpenTelemetry.AutoInstrumentation
+         references ServiceEvents and selects newer SDK versions when hosting it. -->
     <PackageReference Include="OpenTelemetry" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
