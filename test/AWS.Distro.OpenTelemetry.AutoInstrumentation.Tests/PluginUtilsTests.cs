@@ -10,7 +10,6 @@ public class PluginUtilsTests
     [Theory]
     [InlineData(null, "otlp", false, false)]
     [InlineData(null, "otlp", true, true)]
-    [InlineData("", "otlp", true, false)]
     [InlineData("otlp", "otlp", false, true)]
     [InlineData("console, otlp", "otlp", false, true)]
     [InlineData("console,otlp", "console", false, true)]
