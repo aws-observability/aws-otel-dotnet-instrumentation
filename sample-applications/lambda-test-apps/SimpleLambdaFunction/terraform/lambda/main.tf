@@ -5,7 +5,7 @@ locals {
 resource "aws_lambda_layer_version" "sdk_layer" {
   layer_name          = var.sdk_layer_name
   filename            = "${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip"
-  compatible_runtimes = ["dotnet8", "dotnet10"]
+  compatible_runtimes = ["dotnet10"]
   license_info        = "Apache-2.0"
   source_code_hash    = filebase64sha256("${path.module}/../../../../../bin/aws-distro-opentelemetry-dotnet-instrumentation-linux-glibc-${local.architecture}.zip")
 }
@@ -19,7 +19,7 @@ module "test-function" {
   runtime       = var.runtime
 
   create_package         = false
-  local_existing_package = "${path.module}/../../src/SimpleLambdaFunction/bin/Release/net8.0/SimpleLambdaFunction.zip"
+  local_existing_package = "${path.module}/../../src/SimpleLambdaFunction/bin/Release/net10.0/SimpleLambdaFunction.zip"
 
   memory_size = 512
   timeout     = 30

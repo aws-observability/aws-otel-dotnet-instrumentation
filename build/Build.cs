@@ -119,33 +119,27 @@ internal partial class Build : NukeBuild
         .After(this.Compile)
         .Executes(() =>
         {
-            FileSystemTasks.CopyDirectoryRecursively(
-                    RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                    "net8.0",
+            (RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                    "net10.0").Copy(
                     this.openTelemetryDistributionFolder / "net",
-                    DirectoryExistsPolicy.Merge,
-                    FileExistsPolicy.Skip);
+                    ExistsPolicy.MergeAndSkip);
 
             // Bundle ServiceEvents.dll into the distribution. It is not a separate plugin and gets
             // no OTEL_DOTNET_AUTO_PLUGINS entry — the distro's own Plugin references its types
             // directly, so the assembly just has to sit beside it on disk.
             // Merge + Skip so the distro's dependency versions copied above win on any
             // overlap; this only adds ServiceEvents.dll and any deps not already present.
-            FileSystemTasks.CopyDirectoryRecursively(
-                    RootDirectory / "src" / "AWS.Distro.OpenTelemetry.ServiceEvents" / "bin" / this.configuration /
-                    "net8.0",
+            (RootDirectory / "src" / "AWS.Distro.OpenTelemetry.ServiceEvents" / "bin" / this.configuration /
+                    "net10.0").Copy(
                     this.openTelemetryDistributionFolder / "net",
-                    DirectoryExistsPolicy.Merge,
-                    FileExistsPolicy.Skip);
+                    ExistsPolicy.MergeAndSkip);
 
             if (EnvironmentInfo.IsWin)
             {
-                FileSystemTasks.CopyDirectoryRecursively(
-                    RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
-                    "net472",
+                (RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "bin" / this.configuration /
+                    "net472").Copy(
                     this.openTelemetryDistributionFolder / "netfx",
-                    DirectoryExistsPolicy.Merge,
-                    FileExistsPolicy.Skip);
+                    ExistsPolicy.MergeAndSkip);
 
                 // No ServiceEvents copy here: the plugin targets modern .NET only, so it
                 // is not bundled into the .NET Framework (netfx) distribution.
@@ -158,11 +152,11 @@ internal partial class Build : NukeBuild
         {
             var source = RootDirectory / "instrument.sh";
             var dest = this.openTelemetryDistributionFolder;
-            FileSystemTasks.CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
+            source.CopyToDirectory(dest, ExistsPolicy.FileOverwrite);
 
             var otelInstrumentSource = RootDirectory / "otel-instrument";
             var otelInstrumentDest = this.openTelemetryDistributionFolder;
-            FileSystemTasks.CopyFileToDirectory(otelInstrumentSource, otelInstrumentDest, FileExistsPolicy.Overwrite);
+            otelInstrumentSource.CopyToDirectory(otelInstrumentDest, ExistsPolicy.FileOverwrite);
         });
 
     private Target CopyConfiguration => _ => _
@@ -171,7 +165,7 @@ internal partial class Build : NukeBuild
         {
             var source = RootDirectory / "src" / "AWS.Distro.OpenTelemetry.AutoInstrumentation" / "configuration";
             var dest = this.openTelemetryDistributionFolder / "configuration";
-            FileSystemTasks.CopyDirectoryRecursively(source, dest, DirectoryExistsPolicy.Merge, FileExistsPolicy.Skip);
+            source.Copy(dest, ExistsPolicy.MergeAndSkip);
         });
 
     private Target ExtendLicenseFile => _ => _

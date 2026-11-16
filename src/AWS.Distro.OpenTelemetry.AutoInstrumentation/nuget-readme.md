@@ -1,5 +1,7 @@
 # Using the AWS.Distro.OpenTelemetry.AutoInstrumentation NuGet package
 
+This package supports .NET 10, .NET 11, and .NET Framework 4.7.2 or later.
+
 ## When to use the NuGet package
 
 Use the NuGet package in the following scenarios:

@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling;
 using AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.SpanMetrics;
 using OpenTelemetry.Trace;
+using AlwaysRecordSampler = AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling.AlwaysRecordSampler;
 
 namespace AWS.OpenTelemetry.CloudWatchPluginOtel;
 

@@ -17,6 +17,7 @@ public class OtlpExporterUtils
 
     private static readonly MethodInfo? WriteTraceDataMethod;
     private static readonly object? WriteTraceDataMaxBufferSize;
+    private static readonly bool WriteTraceDataHasDirtyLength;
     private static readonly object? SdkLimitOptions;
 
     static OtlpExporterUtils() {
@@ -46,16 +47,14 @@ public class OtlpExporterUtils
                 typeof(Resource),                  // Resource?
                 typeof(Batch<Activity>).MakeByRefType() // in Batch<Activity>
             },
-            out WriteTraceDataMaxBufferSize)
+            out WriteTraceDataMaxBufferSize,
+            out WriteTraceDataHasDirtyLength)
             ?? throw new MissingMethodException("WriteTraceData not found");
 
         SdkLimitOptions = GetSdkLimitOptions();
     }
 
-    // The WriteTraceData function builds writes data to the buffer byte[] object by calling private "WriteTraceData" function
-    // using reflection. "WriteTraceData" is based on the latest v1.11.2 version of the OpenTelemetry.Exporter.OpenTelemetryProtocol
-    // depedency specifically found at https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Exporter.OpenTelemetryProtocol/Implementation/Serializer/ProtobufOtlpTraceSerializer.cs#L23
-    // and used the by the OTLP Exporters.
+    // Serialize through the resolved OTLP exporter's internal WriteTraceData method.
     public static int WriteTraceData(
         ref byte[] buffer,
         int writePosition,
@@ -70,6 +69,11 @@ public class OtlpExporterUtils
         
         // Pack arguments (ref/in remain by-ref in the args array)
         object[] args = { buffer, writePosition, SdkLimitOptions, resource!, batch! };
+        if (WriteTraceDataHasDirtyLength)
+        {
+            args = args.Append(0).ToArray();
+        }
+
         if (WriteTraceDataMaxBufferSize != null)
         {
             // Upstream grows the buffer by renting from ArrayPool.Shared and returning the old array.
@@ -79,7 +83,7 @@ public class OtlpExporterUtils
             args = args.Append(Math.Min(buffer.Length, (int)WriteTraceDataMaxBufferSize)).ToArray();
         }
 
-        // Invoke static method (null target) :contentReference[oaicite:2]{index=2}
+        // Invoke the static method.
         var result = (int)WriteTraceDataMethod?.Invoke(obj: null, parameters: args)!;
 
         // Unpack ref-buffer
@@ -88,14 +92,15 @@ public class OtlpExporterUtils
         return result;
     }
 
-    // v1.18.0 appended "int maxBufferSize = ProtobufSerializer.MaxBufferSize" to the serializer methods. Reflection
-    // binds and invokes on exact arity and ignores default values, so probe for that overload first and return its
-    // declared default for the caller to pass explicitly.
-    private static MethodInfo? GetSerializerMethod(Type serializerType, string name, Type[] parameterTypes, out object? maxBufferSize)
+    // v1.21.0 added out int dirtyLength before maxBufferSize. Probe the newest signature first,
+    // then retain compatibility with the older serializers.
+    private static MethodInfo? GetSerializerMethod(Type serializerType, string name, Type[] parameterTypes, out object? maxBufferSize, out bool hasDirtyLength)
     {
         const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
-        MethodInfo? method = serializerType.GetMethod(name, flags, null, parameterTypes.Append(typeof(int)).ToArray(), null);
-        maxBufferSize = method?.GetParameters()[parameterTypes.Length].DefaultValue;
+        MethodInfo? method = serializerType.GetMethod(name, flags, null, parameterTypes.Concat(new[] { typeof(int).MakeByRefType(), typeof(int) }).ToArray(), null);
+        hasDirtyLength = method != null;
+        method ??= serializerType.GetMethod(name, flags, null, parameterTypes.Append(typeof(int)).ToArray(), null);
+        maxBufferSize = method?.GetParameters().Last().DefaultValue;
         return method ?? serializerType.GetMethod(name, flags, null, parameterTypes, null);
     }
 

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <TargetFrameworks Condition="$(OS) == 'Windows_NT'">$(TargetFrameworks);net472</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -17,9 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.5" Condition="'$(TargetFramework)' != 'net472'" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" Condition="'$(TargetFramework)' == 'net8.0'" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" Condition="'$(TargetFramework)' == 'net11.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" Condition="'$(TargetFramework)' == 'net472'" />
     <!-- Floor pinned to 4.0.3.3 for CVE-2026-22611 (matches upstream opentelemetry-dotnet-contrib). -->
     <PackageReference Include="AWSSDK.Core" Version="[4.0.3.3, 5.0.0)" />
@@ -56,12 +55,12 @@
   <ItemGroup>
     <ProjectReference Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.csproj" PrivateAssets="All" />
   </ItemGroup>
-  <!-- DI targets net8.0+ only (modern profiler feature); exclude it from the net472 build. -->
+  <!-- DI targets net10.0+ only (modern profiler feature); exclude it from the net472 build. -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
     <ProjectReference Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/AWS.Distro.OpenTelemetry.DynamicInstrumentation.csproj" PrivateAssets="All" />
   </ItemGroup>
   <!-- ServiceEvents is hosted by this project's Plugin, so it ships and loads with the existing
-       distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry for customers. Targets net8.0+ only;
+       distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry for customers. Targets net10.0+ only;
        excluded from the net472 build (the classic ASP.NET hooks were never implemented). -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
     <ProjectReference Include="../AWS.Distro.OpenTelemetry.ServiceEvents/AWS.Distro.OpenTelemetry.ServiceEvents.csproj" PrivateAssets="All" />
@@ -93,13 +92,9 @@
     </PackageReference>
     <None Include="nuget-readme.md" Pack="true" PackagePath="\docs\readme.md" />
     <!-- TODO: Once upstream release is done, remove the logic below -->
-    <Content Include="./bin/Release/net8.0/OpenTelemetry.Instrumentation.AWS.dll">
+    <Content Include="./bin/Release/net11.0/OpenTelemetry.Instrumentation.AWS.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net8.0</PackagePath>
-    </Content>
-    <Content Include="./bin/Release/net9.0/OpenTelemetry.Instrumentation.AWS.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net9.0</PackagePath>
+        <PackagePath>lib\net11.0</PackagePath>
     </Content>
     <Content Include="./bin/Release/net10.0/OpenTelemetry.Instrumentation.AWS.dll">
         <Pack>true</Pack>
@@ -118,16 +113,12 @@
       while the distribution zip works fine, because it copies build output rather than package content. That
       asymmetry is why it went unnoticed: every E2E runs against the zip.
 
-      net472 is deliberately absent, matching the ProjectReference condition above: DI is net8.0+ only, and the
+      net472 is deliberately absent, matching the ProjectReference condition above: DI is net10.0+ only, and the
       call sites are behind #if !NETFRAMEWORK.
     -->
-    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net8.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
+    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net11.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net8.0</PackagePath>
-    </Content>
-    <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net9.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net9.0</PackagePath>
+        <PackagePath>lib\net11.0</PackagePath>
     </Content>
     <Content Include="../AWS.Distro.OpenTelemetry.DynamicInstrumentation/bin/Release/net10.0/AWS.Distro.OpenTelemetry.DynamicInstrumentation.dll">
         <Pack>true</Pack>
@@ -135,13 +126,9 @@
     </Content>
     <!-- Add AWS.Distro.OpenTelemetry.Exporter.Xray.Udp DLLs -->
     <!-- TODO: Remove once UDP Exporter is published to NuGet -->
-    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net8.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
+    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net11.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net8.0</PackagePath>
-    </Content>
-    <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net9.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net9.0</PackagePath>
+        <PackagePath>lib\net11.0</PackagePath>
     </Content>
     <Content Include="../../exporters/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp/bin/Release/net10.0/AWS.Distro.OpenTelemetry.Exporter.Xray.Udp.dll">
         <Pack>true</Pack>
@@ -154,16 +141,12 @@
     <!-- Add AWS.Distro.OpenTelemetry.ServiceEvents DLLs.
          The ProjectReference above uses PrivateAssets="All", which keeps the assembly out of lib/
          and out of the nuspec dependency list. The zip distribution copies the whole bin directory
-         so it is unaffected, but Plugin.cs references ServiceEvents types directly on net8.0+, so a
+         so it is unaffected, but Plugin.cs references ServiceEvents types directly on net10.0+, so a
          NuGet consumer would fail to load the plugin without these entries. No net472 entry: the
          ProjectReference is excluded from that build. -->
-    <Content Include="../AWS.Distro.OpenTelemetry.ServiceEvents/bin/Release/net8.0/AWS.Distro.OpenTelemetry.ServiceEvents.dll">
+    <Content Include="../AWS.Distro.OpenTelemetry.ServiceEvents/bin/Release/net11.0/AWS.Distro.OpenTelemetry.ServiceEvents.dll">
         <Pack>true</Pack>
-        <PackagePath>lib\net8.0</PackagePath>
-    </Content>
-    <Content Include="../AWS.Distro.OpenTelemetry.ServiceEvents/bin/Release/net9.0/AWS.Distro.OpenTelemetry.ServiceEvents.dll">
-        <Pack>true</Pack>
-        <PackagePath>lib\net9.0</PackagePath>
+        <PackagePath>lib\net11.0</PackagePath>
     </Content>
     <Content Include="../AWS.Distro.OpenTelemetry.ServiceEvents/bin/Release/net10.0/AWS.Distro.OpenTelemetry.ServiceEvents.dll">
         <Pack>true</Pack>

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+* **BREAKING:** Target .NET 10 and 11 instead of .NET 8 and 9; retain .NET Framework 4.7.2.
+  Fix the sampler type-name conflict when compiling against OpenTelemetry SDK 1.21.
+  ([#502](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/502))
+
 * Fix unbounded span metrics cardinality on SERVER spans: the legacy fallback for
   `server.address`/`server.port` now uses `net.host.name`/`net.host.port` on SERVER
   spans instead of `net.peer.name`/`net.peer.port`, which describe the client

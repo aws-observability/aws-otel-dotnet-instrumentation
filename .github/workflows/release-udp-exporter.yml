@@ -56,14 +56,13 @@ jobs:
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # The exporter targets net8.0/net9.0/net10.0; CodeBuild's Windows image only preinstalls the .NET 10 SDK.
+      # The exporter targets net10.0/net11.0; install both SDKs for builds and tests.
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       - name: Install dependencies
         run: dotnet restore .\exporters\AWS.Distro.OpenTelemetry.Exporter.Xray.Udp /p:_IsPacking=true

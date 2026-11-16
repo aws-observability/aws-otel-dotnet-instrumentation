@@ -11,6 +11,12 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Update OpenTelemetry Core to 1.21.0 and align modern .NET targets with upstream:
+  support .NET 10 and 11; drop .NET 8 and 9. .NET Framework 4.7.2 remains supported.
+  Lambda layer compatibility is now .NET 10 only. Adapt the X-Ray UDP exporter to
+  the SDK's updated serializer signature.
+  ([#502](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/502))
+
 - Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
   and distribution versions synchronized. Select the matching macOS native profiler architecture
   and handle oversized X-Ray UDP trace batches with the upgraded serializer.
@@ -60,7 +66,7 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
-  service investigation experience. Targets modern .NET (net8.0/net9.0/net10.0); does not
+  service investigation experience. Targets modern .NET (net10.0/net11.0); does not
   initialize on .NET Framework apps. Disabled by default and never enabled in AWS Lambda:
   set `OTEL_AWS_SERVICE_EVENTS_ENABLED=true` to turn it on. Enabling it alongside AWS
   Application Signals needs nothing further, since Application Signals supplies the
