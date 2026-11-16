@@ -1,3 +1,4 @@
+# The base image includes the .NET 10 SDK and runtime.
 FROM mcr.microsoft.com/dotnet/sdk:10.0.103-alpine3.23
 RUN apk update \
     && apk upgrade \
