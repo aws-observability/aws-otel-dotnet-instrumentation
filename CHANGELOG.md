@@ -66,7 +66,7 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
 ## v1.15.0 - 2026-08-25
 - Add ServiceEvents, which emits per-endpoint summaries, error metrics, deployment events,
   incident snapshots, and per-function duration histograms to power Application Signals'
-  service investigation experience. Targets modern .NET (net10.0/net11.0); does not
+  service investigation experience. Targets modern .NET (net8.0/net9.0/net10.0); does not
   initialize on .NET Framework apps. Disabled by default and never enabled in AWS Lambda:
   set `OTEL_AWS_SERVICE_EVENTS_ENABLED=true` to turn it on. Enabling it alongside AWS
   Application Signals needs nothing further, since Application Signals supplies the

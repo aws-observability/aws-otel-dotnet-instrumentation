@@ -16,11 +16,13 @@ This guide provides step-by-step instructions for enabling Application Signals i
   chmod 400 "<customer_key_pair_name>.pem"
   ssh -i "<customer_key_pair_name>.pem" ec2-user@ec2-XX-XXX-XXX-XXX.compute-1.amazonaws.com
   ```
-* Install .NET 10
+* Install the .NET 10 and 11 SDKs
   ```sh
   sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
   sudo wget -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
   sudo dnf install -y dotnet-sdk-10.0
+  curl -sSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh
+  sudo bash dotnet-install.sh --version 11.0.100 --install-dir "$(dirname "$(readlink -f "$(command -v dotnet)")")" --no-path
   dotnet --version > /tmp/dotnet-version
   ```
 * Install AWS CLI
@@ -93,11 +95,12 @@ unzip AWS-opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip -d $INSTALL_D
   * Add [CloudWatchAgentServerPolicy](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchAgentServerPolicy.html) to instance IAM role
 * Log into the instance using RDP tools
   * Open a PowerShell session
-* Install .NET 10
+* Install the .NET 10 and 11 SDKs
   * In powershell session
     ```ps
     wget -O dotnet-install.ps1 https://dot.net/v1/dotnet-install.ps1
-    .\dotnet-install.ps1 -Version 8.0.302
+    .\dotnet-install.ps1 -Channel 10.0
+    .\dotnet-install.ps1 -Version 11.0.100
     ```
 * Install AWS CLI
   * Install following [AWS CLI user guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
