@@ -5,6 +5,8 @@ Amazon CloudWatch plugin for OpenTelemetry .NET.
 The NuGet package ID, assembly name, and namespace are
 `AWS.OpenTelemetry.CloudWatchPluginOtel`.
 
+The package targets .NET 10, .NET 11, and .NET Framework 4.7.2.
+
 > [!IMPORTANT]
 > `CloudWatchPlugin` must be the last plugin listed in
 > `OTEL_DOTNET_AUTO_PLUGINS`. A plugin listed after it can replace the required
@@ -27,6 +29,7 @@ upstream OpenTelemetry .NET Automatic Instrumentation versions:
 | `1.15.0`                  | `1.15.3`          |
 | `1.16.0`                  | `1.16.0`          |
 | `1.16.0`                  | `1.17.0`          |
+| `1.16.0`                  | `1.21.0`          |
 
 Install the NuGet package by its package ID:
 

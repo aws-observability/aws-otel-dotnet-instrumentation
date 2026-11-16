@@ -7,7 +7,7 @@ dotnet add package AWS.Distro.OpenTelemetry.Exporter.Xray.Udp
 ```
 
 ## Prerequisites
-- .NET 8.0 or higher
+- .NET 10.0 or 11.0
 
 ## Usage Example
 ```c#

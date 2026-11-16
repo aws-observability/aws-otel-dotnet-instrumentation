@@ -38,9 +38,8 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       - name: Build layer artifact
         run: bash build.sh
@@ -145,7 +144,7 @@ jobs:
             aws lambda publish-layer-version \
               --layer-name ${{ env.LAYER_NAME }} \
               --content S3Bucket=${{ env.BUCKET_NAME }},S3Key=${{ env.LAYER_ARTIFACT_NAME }} \
-              --compatible-runtimes dotnet8 dotnet10 \
+              --compatible-runtimes dotnet10 \
               --compatible-architectures "x86_64" \
               --license-info "Apache-2.0" \
               --description "AWS Distro of OpenTelemetry Lambda Layer for .Net Runtime v$VERSION" \

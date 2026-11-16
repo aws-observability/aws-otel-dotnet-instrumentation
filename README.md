@@ -10,7 +10,7 @@ apply some small configuration changes, and our OpenTelemetry friends takes care
 ## Prerequisites
 
 1. Having one of [VSCode](https://code.visualstudio.com/docs/languages/dotnet), Visual Studio, or ReSharper installed
-2. Having dotnet cli installed.
+2. Having the .NET 11 SDK installed (see `global.json`).
 
 ## Important
 
@@ -20,7 +20,7 @@ Although this repository is released under the Apache-2.0 license, some Dockerfi
 
 ## Supported Versions
 
-This project ensures compatibility with the following supported .NET versions: .NET 8.0, 9.0, and 10.0.
+This project ensures compatibility with the following supported .NET versions: .NET 10.0 and 11.0, matching OpenTelemetry SDK 1.21.0. .NET 8.0 and 9.0 are no longer supported.
 
 For .NET Framework, the minimum supported version is 4.7.2.
 
@@ -34,7 +34,7 @@ To build the dll files for the `AWS.Distro.OpenTelemetry.AutoInstrumentation` pr
 dotnet build
 ```
 
-This will build the dll under `src/AWS.Distro.OpenTelemetry.AutoInstrumentation/bin/Debug/net10.0` (and also for `net8.0` and `net9.0`).
+This will build the dll under `src/AWS.Distro.OpenTelemetry.AutoInstrumentation/bin/Debug/net10.0` (and also for `net11.0`).
 
 ### Building For Release
 

@@ -156,28 +156,6 @@ jobs:
   # PACKAGED DISTRIBUTION LANGUAGE VERSION COVERAGE
   # DEFAULT SETTING: {Dotnet Version}, EC2
   #
-  default-v8:
-    needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
-    secrets: inherit
-    with:
-      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
-      aws-region: us-east-1
-      caller-workflow-name: 'main-build'
-      staging_distro_name: ${{ inputs.ec2-default-image-name }}
-      dotnet-version: '8.0'
-
-  default-v9:
-    needs: [ upload-main-build ]
-    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
-    secrets: inherit
-    with:
-      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
-      aws-region: us-east-1
-      caller-workflow-name: 'main-build'
-      staging_distro_name: ${{ inputs.ec2-default-image-name }}
-      dotnet-version: '9.0'
-
   default-v10:
     needs: [ upload-main-build ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
@@ -188,6 +166,17 @@ jobs:
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
       dotnet-version: '10.0'
+
+  default-v11:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-default-test.yml@main
+    secrets: inherit
+    with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '11.0'
       
   dotnet-ec2-windows-test:
     needs: [ upload-main-build ]
@@ -207,6 +196,7 @@ jobs:
       runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
       caller-workflow-name: 'main-build'
       staging_distro_name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '10.0'
   
   dotnet-asg-linux-test:
     needs: [ upload-main-build ]
@@ -289,9 +279,8 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d #v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       - name: Setup .NET Lambda Tools
         shell: bash
@@ -301,7 +290,6 @@ jobs:
       - name: Build Lambda Sample App
         shell: bash
         run: |
-          dotnet lambda package --framework net8.0 -pl ./src/SimpleLambdaFunction -o ./function-net8.0.zip
           dotnet lambda package --framework net10.0 -pl ./src/SimpleLambdaFunction -o ./function-net10.0.zip
         working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
 
@@ -309,10 +297,9 @@ jobs:
         shell: bash
         run: |
           # Runtime-specific artifacts consumed by the dotnet-lambda-test matrix.
-          aws s3 cp ./function-net8.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}-dotnet8.zip
           aws s3 cp ./function-net10.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}-dotnet10.zip
-          # Legacy artifact kept for backward compatibility with the default (dotnet8) runtime.
-          aws s3 cp ./function-net8.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
+          # Legacy artifact kept for backward compatibility with the default (dotnet10) runtime.
+          aws s3 cp ./function-net10.0.zip s3://adot-autoinstrumentation-dotnet-staging/function-${{ github.run_id }}.zip
         working-directory: sample-applications/lambda-test-apps/SimpleLambdaFunction
 
   dotnet-lambda-test:
@@ -320,7 +307,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [ dotnet8, dotnet10 ]
+        runtime: [ dotnet10 ]
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-lambda-test.yml@main
     secrets: inherit
     with:

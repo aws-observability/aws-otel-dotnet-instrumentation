@@ -17,7 +17,7 @@ After executing these commands, using your browser you can navigate to <http://l
 
 ## Option 2
 
-> Prerequisite: .NET 8 SDK installed and configured
+> Prerequisite: .NET 10 SDK installed and configured
 
 Execute the following commands
 

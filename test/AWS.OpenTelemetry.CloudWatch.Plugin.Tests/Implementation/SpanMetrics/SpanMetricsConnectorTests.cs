@@ -9,6 +9,7 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using AlwaysRecordSampler = AWS.OpenTelemetry.CloudWatchPluginOtel.Implementation.Sampling.AlwaysRecordSampler;
 
 namespace AWS.OpenTelemetry.CloudWatchPluginOtel.Tests.Implementation.SpanMetrics;
 

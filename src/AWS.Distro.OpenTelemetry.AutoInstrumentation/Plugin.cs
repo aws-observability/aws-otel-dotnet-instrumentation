@@ -787,7 +787,7 @@ public class Plugin :
     // Dynamic Instrumentation is hosted by this plugin (rather than a separate plugin/DLL) so it
     // ships and loads with the existing distribution — no extra OTEL_DOTNET_AUTO_PLUGINS entry.
     // Gated by the ENABLED flag (off by default); an opt-in feature must never abort startup, so
-    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net8.0+ only —
+    // failures are logged, not thrown. Skipped in Lambda (no CloudWatch Agent). net10.0+ only —
     // DI is a modern-profiler feature not shipped in the .NET Framework build.
     private void InitializeDynamicInstrumentation()
     {
@@ -816,7 +816,7 @@ public class Plugin :
     // loads with the existing distribution, with no OTEL_DOTNET_AUTO_PLUGINS change. Enablement
     // requires OTEL_AWS_SERVICE_EVENTS_ENABLED=true, and is always off in Lambda; that rule
     // lives in ServiceEventsConfig.DetermineEnabled, which Initialize() applies. Telemetry must
-    // never abort startup, so failures are logged, not thrown. net8.0+ only — ServiceEvents is not
+    // never abort startup, so failures are logged, not thrown. net10.0+ only — ServiceEvents is not
     // shipped in the .NET Framework build.
     private void InitializeServiceEvents()
     {

@@ -12,7 +12,7 @@ the next call. Captured data is exported as OTLP logs (snapshots) to CloudWatch.
 
 ## Prerequisites
 
-- **.NET 8, 9, or 10.** .NET Framework is not supported.
+- **.NET 10 or 11.** .NET Framework is not supported.
 - Your application runs with the **AWS Distro for OpenTelemetry (ADOT) .NET auto-instrumentation**
   (the native profiler + plugin). DI ships as part of that distribution.
 

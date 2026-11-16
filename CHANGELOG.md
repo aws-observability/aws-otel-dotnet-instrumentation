@@ -11,6 +11,12 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Update OpenTelemetry Core to 1.21.0 and align modern .NET targets with upstream:
+  support .NET 10 and 11; drop .NET 8 and 9. .NET Framework 4.7.2 remains supported.
+  Lambda layer compatibility is now .NET 10 only. Adapt the X-Ray UDP exporter to
+  the SDK's updated serializer signature.
+  ([#502](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/502))
+
 - Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
   and distribution versions synchronized. Select the matching macOS native profiler architecture
   and handle oversized X-Ray UDP trace batches with the upgraded serializer.

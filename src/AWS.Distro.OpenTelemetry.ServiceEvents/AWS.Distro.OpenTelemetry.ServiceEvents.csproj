@@ -9,7 +9,7 @@
          DateTime.UnixEpoch) that net462 does not provide. On a .NET Framework app the
          ADOT distro still loads; ServiceEvents simply does not initialize. Supporting
          it is tracked as follow-up work and needs its own test coverage. -->
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -39,9 +39,8 @@
     <!-- ASP.NET Core instrumentation hooks -->
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
     <!-- Logging abstractions, version-pinned per target framework to match the AWS distro's pattern. -->
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" Condition="'$(TargetFramework)' == 'net8.0'" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" Condition="'$(TargetFramework)' == 'net11.0'" />
 
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

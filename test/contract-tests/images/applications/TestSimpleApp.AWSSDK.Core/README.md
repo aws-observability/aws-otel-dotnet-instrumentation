@@ -1,6 +1,6 @@
 # AppSignals.NetCore
 
-This project is a sample .Net 8.0 Web API that integrates with Dynamo DB through
+This project is a sample .NET 10.0 Web API that integrates with Dynamo DB through
 the official AWS SDK for .Net
 
 ## Prerequisites

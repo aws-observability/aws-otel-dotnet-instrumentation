@@ -36,7 +36,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
 
       - name: Validate release version
         shell: bash
@@ -77,11 +77,11 @@ jobs:
             auto: 1.15.0
           - otel: 1.17.0
             auto: 1.16.0
+          - otel: 1.21.0
+            auto: 1.16.0
         platform:
           - os: ubuntu-latest
-            tfm: net8.0
-          - os: ubuntu-latest
-            tfm: net9.0
+            tfm: net11.0
           - os: ubuntu-latest
             tfm: net10.0
           - os: windows-2022
@@ -100,9 +100,8 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       # The CodeBuild Windows workspace path is long enough that .NET Framework hits MAX_PATH loading test
       # dependencies from bin\, so net472 tests build into a short directory there. TreatNoTestsAsError fails
@@ -148,9 +147,8 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       - name: Setup Python
         uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
@@ -166,8 +164,8 @@ jobs:
           retry-backoff-multiplier: 2
           command: |
             docker pull python:3.10
-            docker pull mcr.microsoft.com/dotnet/sdk:8.0
-            docker pull mcr.microsoft.com/dotnet/aspnet:8.0
+            docker pull mcr.microsoft.com/dotnet/sdk:10.0
+            docker pull mcr.microsoft.com/dotnet/aspnet:10.0
             docker pull localstack/localstack:4.0.0
             docker pull redis:7
 
@@ -217,9 +215,8 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
+            11.0.x
 
       - name: Restore plugin
         shell: pwsh
@@ -266,8 +263,8 @@ jobs:
               -Recurse
           )
 
-          if ($assemblies.Count -ne 4) {
-            throw "Expected 4 plugin assemblies to be signed, found $($assemblies.Count)."
+          if ($assemblies.Count -ne 3) {
+            throw "Expected 3 plugin assemblies to be signed, found $($assemblies.Count)."
           }
 
           foreach ($assembly in $assemblies) {
@@ -303,7 +300,7 @@ jobs:
           $archive = [System.IO.Compression.ZipFile]::OpenRead($packages[0].FullName)
           try {
             $entries = @($archive.Entries | ForEach-Object { $_.FullName })
-            foreach ($framework in @("net472", "net8.0", "net9.0", "net10.0")) {
+            foreach ($framework in @("net472", "net10.0", "net11.0")) {
               $expectedAssembly = "lib/$framework/$env:ASSEMBLY_NAME.dll"
               if ($expectedAssembly -notin $entries) {
                 throw "Package is missing $expectedAssembly."
