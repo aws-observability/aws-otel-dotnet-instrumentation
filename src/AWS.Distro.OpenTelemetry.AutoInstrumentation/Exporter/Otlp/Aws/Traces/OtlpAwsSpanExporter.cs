@@ -53,7 +53,7 @@ public static class OtlpAwsSpanExporter
             throw new ArgumentException("The AWS OTLP span exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Traces, options);
+        var awsOptions = new OtlpAwsExporterOptions(PluginUtils.OtlpSignal.Traces, options);
         Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
     }
 

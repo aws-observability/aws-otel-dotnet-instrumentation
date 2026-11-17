@@ -60,21 +60,11 @@ internal sealed class OtlpAwsExporterOptions
     /// <param name="options">The configured upstream exporter options.</param>
     /// <param name="sdkRegionProvider">An optional replacement for the cached SDK region provider.</param>
     /// <exception cref="ArgumentException">No signing region can be resolved.</exception>
-    internal OtlpAwsExporterOptions(OtlpSignal signal, OtlpExporterOptions options, Func<string?>? sdkRegionProvider = null)
+    internal OtlpAwsExporterOptions(PluginUtils.OtlpSignal signal, OtlpExporterOptions options, Func<string?>? sdkRegionProvider = null)
     {
         this.Service = GetAwsService(signal);
         this.Region = GetAwsRegion(options.Endpoint, sdkRegionProvider)
             ?? throw new ArgumentException("The AWS OTLP exporter requires a signing region.", nameof(options));
-    }
-
-    /// <summary>
-    /// The OTLP signals supported by AWS exporter configuration.
-    /// </summary>
-    internal enum OtlpSignal
-    {
-        Traces,
-        Logs,
-        Metrics,
     }
 
     /// <summary>
@@ -92,21 +82,21 @@ internal sealed class OtlpAwsExporterOptions
     /// </summary>
     /// <param name="signal">The OTLP signal.</param>
     /// <returns>The SigV4 service name.</returns>
-    internal static string GetAwsService(OtlpSignal signal)
+    internal static string GetAwsService(PluginUtils.OtlpSignal signal)
     {
         string serviceEnvironmentVariable;
         string defaultService;
         switch (signal)
         {
-            case OtlpSignal.Traces:
+            case PluginUtils.OtlpSignal.Traces:
                 serviceEnvironmentVariable = TracesExporterServiceEnvironmentVariable;
                 defaultService = DefaultTracesService;
                 break;
-            case OtlpSignal.Metrics:
+            case PluginUtils.OtlpSignal.Metrics:
                 serviceEnvironmentVariable = MetricsExporterServiceEnvironmentVariable;
                 defaultService = DefaultMetricsService;
                 break;
-            case OtlpSignal.Logs:
+            case PluginUtils.OtlpSignal.Logs:
                 serviceEnvironmentVariable = LogsExporterServiceEnvironmentVariable;
                 defaultService = DefaultLogsService;
                 break;

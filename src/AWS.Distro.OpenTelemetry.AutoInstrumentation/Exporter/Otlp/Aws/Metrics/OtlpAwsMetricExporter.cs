@@ -53,7 +53,7 @@ public static class OtlpAwsMetricExporter
             throw new ArgumentException("The AWS OTLP metric exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Metrics, options);
+        var awsOptions = new OtlpAwsExporterOptions(PluginUtils.OtlpSignal.Metrics, options);
         Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
     }
 

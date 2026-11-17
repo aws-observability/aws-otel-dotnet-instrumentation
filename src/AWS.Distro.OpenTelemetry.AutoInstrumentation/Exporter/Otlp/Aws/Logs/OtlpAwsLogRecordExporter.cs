@@ -53,7 +53,7 @@ public static class OtlpAwsLogRecordExporter
             throw new ArgumentException("The AWS OTLP log exporter requires HTTP/protobuf (OtlpExportProtocol.HttpProtobuf).", nameof(options));
         }
 
-        var awsOptions = new OtlpAwsExporterOptions(OtlpAwsExporterOptions.OtlpSignal.Logs, options);
+        var awsOptions = new OtlpAwsExporterOptions(PluginUtils.OtlpSignal.Logs, options);
         Configure(options, awsOptions.Service, awsOptions.Region, authenticator, transportFactory);
     }
 

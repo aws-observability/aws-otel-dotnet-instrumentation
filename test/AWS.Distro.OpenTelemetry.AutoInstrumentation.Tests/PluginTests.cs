@@ -4,9 +4,11 @@
 using System.Diagnostics;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.Loader;
 using AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using OpenTelemetry.AutoInstrumentation.PluginApi.Telemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -475,14 +477,20 @@ public class OtlpAwsSpanExporterConfigurationTests : PluginTests
 }
 
 /// <summary>
-/// Validates SigV4 log exporter customization and preservation of upstream log settings.
+/// Validates SigV4 log exporter customization, preservation of upstream log settings, and console log output.
 /// </summary>
 [Collection("AWS credential providers")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
 public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
 {
     private const string CloudWatchLogsEndpoint = "https://logs.us-east-1.amazonaws.com/v1/logs";
+    private const string InfoLogMessage = "console-info-log-test";
+    private const string TraceLogInSpanMessage = "console-trace-log-in-span-test";
+    private static readonly string[] ConsoleLogMessages = { InfoLogMessage, TraceLogInSpanMessage };
     private static readonly Uri Endpoint = new(CloudWatchLogsEndpoint);
+
+    // configurePlugin calls the plugin's ConfigureLogsOptions hook for the given options.
+    private delegate void ConfigureLogger(Action<object> configurePlugin, OpenTelemetryLoggerOptions options);
 
     [Theory]
     [InlineData(/* configuredExporters: */ "otlp/sigv4", /* expectedExporters: */ new[] { "otlp" }, /* expectSigning: */ true)]
@@ -750,7 +758,114 @@ public class OtlpAwsLogRecordExporterConfigurationTests : PluginTests
         CustomizeExporterTest(config, "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", new Plugin().ConfigureLogsOptions, expectSigning: true);
     }
 
+    [Theory]
+    [InlineData(true, "console", false)]
+    [InlineData(true, "console,otlp", false)]
+    [InlineData(true, "console,otlp/sigv4", false)]
+    [InlineData(true, "otlp,console", false)]
+    [InlineData(false, "console", true)]
+    [InlineData(false, "console,otlp", true)]
+    public void ShouldPrintUpstreamConsoleLogsOnlyOutsideLambda(bool isLambda, string exporters, bool expectPrinted)
+    {
+        var output = LogWithPlugin(isLambda, exporters, (configurePlugin, options) =>
+            options.AddConsoleExporter(consoleOptions => configurePlugin(consoleOptions)));
+
+        Assert.All(ConsoleLogMessages, message => Assert.Equal(expectPrinted, output.Contains(message)));
+    }
+
+    [Theory]
+    [InlineData(true, "console", true)]
+    [InlineData(true, "console,otlp", true)]
+    [InlineData(true, "console,otlp/sigv4", true)]
+    [InlineData(true, "otlp,console", true)]
+    [InlineData(true, "otlp", false)]
+    [InlineData(true, "otlp/sigv4", false)]
+    [InlineData(true, "none", false)]
+    [InlineData(true, null, false)]
+    [InlineData(false, "console", false)]
+    public void ShouldPrintCompactConsoleLogsOnlyInLambdaWithConsoleExporter(bool isLambda, string? exporters, bool expectPrinted)
+    {
+        var output = LogWithPlugin(isLambda, exporters, (configurePlugin, options) => configurePlugin(options));
+
+        Assert.All(ConsoleLogMessages, message => Assert.Equal(expectPrinted, output.Contains(message)));
+    }
+
+    [Theory]
+    [InlineData("console")]
+    [InlineData("console,otlp")]
+    [InlineData("console,otlp/sigv4")]
+    [InlineData("otlp,console")]
+    [InlineData("otlp, console")]
+    public void ShouldPrintEachLogOnceInLambda(string exporters)
+    {
+        // Mirrors upstream: logger options hook first, then the console exporter if upstream's parsing (no trim) selects it.
+        var output = LogWithPlugin(isLambda: true, exporters, (configurePlugin, options) =>
+        {
+            configurePlugin(options);
+            if (exporters.Split(',').Contains("console"))
+            {
+                options.AddConsoleExporter(consoleOptions => configurePlugin(consoleOptions));
+            }
+        });
+
+        var lines = output.Split('\n');
+        Assert.All(ConsoleLogMessages, message => Assert.Single(lines, line => line.Contains(message)));
+    }
+
     protected override Dictionary<string, string?> CreateEnvironment() => CreateEnvironment(CloudWatchLogsEndpoint);
+
+    // Loads a fresh copy of the plugin so its cached Lambda check sees AWS_LAMBDA_FUNCTION_NAME. Returns stdout before
+    // shutdown, since Lambda can freeze the function before buffered logs are written.
+    private static string LogWithPlugin(bool isLambda, string? exporters, ConfigureLogger configure)
+    {
+        SetEnvironmentVariables(new Dictionary<string, string?>
+        {
+            ["AWS_LAMBDA_FUNCTION_NAME"] = isLambda ? "test-function" : null,
+            ["OTEL_LOGS_EXPORTER"] = exporters,
+        });
+        var context = new AssemblyLoadContext(nameof(LogWithPlugin), isCollectible: true);
+        var originalOut = Console.Out;
+        var output = new StringWriter();
+        try
+        {
+            var assembly = context.LoadFromAssemblyPath(typeof(Plugin).Assembly.Location);
+
+            var isLambdaEnvironment = assembly.GetType(typeof(AwsSpanProcessingUtil).FullName!)!.GetMethod(
+                nameof(AwsSpanProcessingUtil.IsLambdaEnvironment), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+            Assert.True(
+                Equals(isLambda, isLambdaEnvironment.Invoke(null, null)),
+                "Lambda detection moved out of the plugin assembly.");
+
+            var pluginType = assembly.GetType(typeof(Plugin).FullName!)!;
+            var plugin = Activator.CreateInstance(pluginType);
+            pluginType.GetMethod(nameof(Plugin.Initializing))!.Invoke(plugin, null);
+            void ConfigurePlugin(object options)
+            {
+                var hook = typeof(IConfigureLogsOptions<>).MakeGenericType(options.GetType());
+                if (hook.IsInstanceOfType(plugin))
+                {
+                    hook.GetMethod(nameof(Plugin.ConfigureLogsOptions))!.Invoke(plugin, new[] { options });
+                }
+            }
+
+            Console.SetOut(output);
+            using var loggerFactory = LoggerFactory.Create(builder => builder
+                .SetMinimumLevel(LogLevel.Trace)
+                .AddOpenTelemetry(options => configure(ConfigurePlugin, options)));
+            loggerFactory.CreateLogger("test").LogInformation(InfoLogMessage);
+            using (new Activity("invocation").Start())
+            {
+                loggerFactory.CreateLogger("Microsoft.Extensions.Hosting").LogTrace(TraceLogInSpanMessage);
+            }
+
+            return output.ToString();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            context.Unload();
+        }
+    }
 
     private static Dictionary<string, string?> CreateEnvironment(
         string? otelExporterOtlpLogsEndpoint,

@@ -40,7 +40,6 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Sampler.AWS;
 using OpenTelemetry.Trace;
 using B3Propagator = OpenTelemetry.Extensions.Propagators.B3Propagator;
-using OtlpSignal = AWS.Distro.OpenTelemetry.AutoInstrumentation.Exporter.Otlp.Aws.Common.OtlpAwsExporterOptions.OtlpSignal;
 
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 
@@ -59,7 +58,8 @@ public class Plugin :
 #endif
     IConfigureMetricsOptions<OtlpExporterOptions>,
     IConfigureLogsOptions<global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions>,
-    IConfigureLogsOptions<OtlpExporterOptions>
+    IConfigureLogsOptions<OtlpExporterOptions>,
+    IConfigureLogsOptions<ConsoleExporterOptions>
 {
     /// <summary>
     /// OTEL_AWS_APPLICATION_SIGNALS_ENABLED
@@ -90,6 +90,8 @@ public class Plugin :
     private static readonly string ApplicationSignalsExporterEndpointConfig = "OTEL_AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT";
     private static readonly string ApplicationSignalsRuntimeEnabledConfig = "OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED";
     private static readonly string MetricExporterConfig = "OTEL_METRICS_EXPORTER";
+    private static readonly string ConsoleExporterName = "console";
+    private static readonly string OtlpExporterName = "otlp";
     private static readonly string MetricExportIntervalConfig = "OTEL_METRIC_EXPORT_INTERVAL";
     private static readonly int DefaultMetricExportInterval = 60000;
     private static readonly string DefaultProtocolEnvVarName = "OTEL_EXPORTER_OTLP_PROTOCOL";
@@ -140,9 +142,9 @@ public class Plugin :
     public void Initializing()
     {
         // Upstream reads its lazy exporter settings after this hook returns.
-        this.shouldUseSigV4TracesExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Traces);
-        this.shouldUseSigV4MetricsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Metrics);
-        this.shouldUseSigV4LogsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(OtlpSignal.Logs);
+        this.shouldUseSigV4TracesExporter |= this.NormalizeOtelExportersIfSigV4Enabled(PluginUtils.OtlpSignal.Traces);
+        this.shouldUseSigV4MetricsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(PluginUtils.OtlpSignal.Metrics);
+        this.shouldUseSigV4LogsExporter |= this.NormalizeOtelExportersIfSigV4Enabled(PluginUtils.OtlpSignal.Logs);
 
 #if !NETFRAMEWORK
         this.InitializeDynamicInstrumentation();
@@ -268,7 +270,7 @@ public class Plugin :
 
         var tracesEndpoint = System.Environment.GetEnvironmentVariable(OtelExporterOtlpTracesEndpointConfig);
         if (tracesEndpoint != null
-            && this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath)
+            && this.ShouldConfigureOtlpAwsExporter(PluginUtils.OtlpSignal.Traces, out var isLegacyPath)
             && isLegacyPath)
         {
             var options = new OtlpExporterOptions
@@ -293,7 +295,7 @@ public class Plugin :
     /// <param name="options">The configured upstream OTLP trace exporter options.</param>
     public void ConfigureTracesOptions(OtlpExporterOptions options)
     {
-        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Traces, out var isLegacyPath))
+        if (this.ShouldConfigureOtlpAwsExporter(PluginUtils.OtlpSignal.Traces, out var isLegacyPath))
         {
             if (isLegacyPath)
             {
@@ -416,7 +418,7 @@ public class Plugin :
     /// <param name="options">The configured upstream OTLP metric exporter options.</param>
     public void ConfigureMetricsOptions(OtlpExporterOptions options)
     {
-        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Metrics, out _))
+        if (this.ShouldConfigureOtlpAwsExporter(PluginUtils.OtlpSignal.Metrics, out _))
         {
             OtlpAwsMetricExporter.Configure(options);
         }
@@ -467,12 +469,12 @@ public class Plugin :
     }
 
     /// <summary>
-    /// Registers CompactConsoleLogRecordExporter for console output in Lambda.
+    /// In AWS Lambda, adds the compact console log exporter when OTEL_LOGS_EXPORTER includes console.
     /// </summary>
     /// <param name="options">The OpenTelemetry logger options</param>
     public void ConfigureLogsOptions(global::OpenTelemetry.Logs.OpenTelemetryLoggerOptions options)
     {
-        if (!AwsSpanProcessingUtil.IsLambdaEnvironment())
+        if (!AwsSpanProcessingUtil.IsLambdaEnvironment() || !PluginUtils.IsExporterSelected(PluginUtils.OtlpSignal.Logs, ConsoleExporterName))
         {
             return;
         }
@@ -482,20 +484,30 @@ public class Plugin :
     }
 
     /// <summary>
+    /// When the compact exporter replaces it, turns off the upstream console log exporter's output when OTEL_LOGS_EXPORTER includes console.
+    /// </summary>
+    /// <param name="options">The upstream console log exporter options.</param>
+    public void ConfigureLogsOptions(ConsoleExporterOptions options)
+    {
+        if (AwsSpanProcessingUtil.IsLambdaEnvironment() && PluginUtils.IsExporterSelected(PluginUtils.OtlpSignal.Logs, ConsoleExporterName))
+        {
+            options.Targets = 0;
+        }
+    }
+
+    /// <summary>
     /// Adds SigV4 signing to the upstream OTLP log exporter after its options have been configured.
     /// </summary>
     /// <param name="options">The configured upstream OTLP log exporter options.</param>
     public void ConfigureLogsOptions(OtlpExporterOptions options)
     {
-        var logsExporters = PluginUtils.ParseOtelExporterEnvVariable(System.Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER"));
-        if (logsExporters.Contains("otlp")
-            && AwsSpanProcessingUtil.IsLambdaEnvironment())
+        if (PluginUtils.IsExporterSelected(PluginUtils.OtlpSignal.Logs, OtlpExporterName) && AwsSpanProcessingUtil.IsLambdaEnvironment())
         {
             Logger.LogWarning(
                 "The OTLP logs exporter is not supported for AWS Lambda. Enabling it may cause telemetry loss because the Lambda instrumentation does not force-flush logs or metrics at invocation completion.");
         }
 
-        if (this.ShouldConfigureOtlpAwsExporter(OtlpSignal.Logs, out _))
+        if (this.ShouldConfigureOtlpAwsExporter(PluginUtils.OtlpSignal.Logs, out _))
         {
             OtlpAwsLogRecordExporter.Configure(options);
         }
@@ -995,18 +1007,18 @@ public class Plugin :
     /// </remarks>
     /// <param name="signal">The OTLP signal.</param>
     /// <returns>Whether the signed exporter was selected.</returns>
-    private bool NormalizeOtelExportersIfSigV4Enabled(OtlpSignal signal)
+    private bool NormalizeOtelExportersIfSigV4Enabled(PluginUtils.OtlpSignal signal)
     {
         string variable;
         switch (signal)
         {
-            case OtlpSignal.Traces:
+            case PluginUtils.OtlpSignal.Traces:
                 variable = "OTEL_TRACES_EXPORTER";
                 break;
-            case OtlpSignal.Metrics:
+            case PluginUtils.OtlpSignal.Metrics:
                 variable = MetricExporterConfig;
                 break;
-            case OtlpSignal.Logs:
+            case PluginUtils.OtlpSignal.Logs:
                 variable = "OTEL_LOGS_EXPORTER";
                 break;
             default:
@@ -1049,16 +1061,16 @@ public class Plugin :
         return useSigV4;
     }
 
-    private bool ShouldConfigureOtlpAwsExporter(OtlpSignal signal, out bool isLegacyPath)
+    private bool ShouldConfigureOtlpAwsExporter(PluginUtils.OtlpSignal signal, out bool isLegacyPath)
     {
         isLegacyPath = false;
 
         // An explicit otlp/sigv4 choice requests signing regardless of endpoint detection.
         switch (signal)
         {
-            case OtlpSignal.Traces when this.shouldUseSigV4TracesExporter:
-            case OtlpSignal.Metrics when this.shouldUseSigV4MetricsExporter:
-            case OtlpSignal.Logs when this.shouldUseSigV4LogsExporter:
+            case PluginUtils.OtlpSignal.Traces when this.shouldUseSigV4TracesExporter:
+            case PluginUtils.OtlpSignal.Metrics when this.shouldUseSigV4MetricsExporter:
+            case PluginUtils.OtlpSignal.Logs when this.shouldUseSigV4LogsExporter:
                 return true;
         }
 
@@ -1069,12 +1081,12 @@ public class Plugin :
             ?? System.Environment.GetEnvironmentVariable(DefaultProtocolEnvVarName);
         var endpoint = System.Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{signalName}_ENDPOINT");
         var isHttpProtobuf = protocol == null || protocol == "http/protobuf";
-        var isOtlpExporterEnabled = exporterValue == null || exporters.Contains("otlp");
+        var isOtlpExporterEnabled = PluginUtils.IsExporterSelected(signal, OtlpExporterName, selectedWhenUnset: true);
         var regexOptions = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
         var shouldConfigureExporter = false;
         var hasSignalHeaders = false;
 
-        if (signal == OtlpSignal.Traces)
+        if (signal == PluginUtils.OtlpSignal.Traces)
         {
             // Should configure SigV4 for traces if:
             // - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT matches a supported X-Ray OTLP endpoint.
@@ -1109,7 +1121,7 @@ public class Plugin :
             shouldConfigureExporter = isLegacySigV4TracesExporterEnabled || isSigV4TracesExporterEnabled;
             isLegacyPath = isLegacySigV4TracesExporterEnabled;
         }
-        else if (signal == OtlpSignal.Logs)
+        else if (signal == PluginUtils.OtlpSignal.Logs)
         {
             // Should configure SigV4 for logs if:
             // - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT matches a supported CloudWatch Logs OTLP endpoint.
@@ -1136,7 +1148,7 @@ public class Plugin :
                 && isHttpProtobuf
                 && isOtlpExporterEnabled;
         }
-        else if (signal == OtlpSignal.Metrics)
+        else if (signal == PluginUtils.OtlpSignal.Metrics)
         {
             // Should configure SigV4 for metrics if:
             // - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT matches a supported CloudWatch Metrics OTLP endpoint.
