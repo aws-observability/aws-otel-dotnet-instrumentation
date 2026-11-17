@@ -17,7 +17,6 @@ If your change does not need a CHANGELOG entry, add the "skip changelog" label t
   that writes to stdout, for example only `AddDebug()` or after `ClearProviders()`) must add `console` to
   `OTEL_LOGS_EXPORTER` (for example `console` or `console,otlp`) to keep their logs on stdout. Compact log lines
   now include logged exceptions.
-  `OTEL_LOGS_EXPORTER=console` to keep their logs on stdout. Compact log lines now include logged exceptions.
   With `console`, logs from the log4net and NLog bridges are no longer printed to stdout; use the library's own
   console appender or target instead.
   ([#501](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/501))
