@@ -11,6 +11,15 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- **(Breaking Change)** In AWS Lambda, the compact JSON console log exporter is no longer added to every function,
+  which printed `ILogger` logs twice. It now replaces the upstream console exporter when `OTEL_LOGS_EXPORTER`
+  includes `console`. Functions whose `ILogger` logs reached stdout only through this distro (no logging provider
+  that writes to stdout, for example only `AddDebug()` or after `ClearProviders()`) must add `console` to
+  `OTEL_LOGS_EXPORTER` (for example `console` or `console,otlp`) to keep their logs on stdout. Compact log lines
+  now include logged exceptions.
+  With `console`, logs from the log4net and NLog bridges are no longer printed to stdout; use the library's own
+  console appender or target instead.
+  ([#501](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/501))
 - Fix .NET Framework release package restore and keep the upstream PluginApi, NuGet loader,
   and distribution versions synchronized. Select the matching macOS native profiler architecture
   and handle oversized X-Ray UDP trace batches with the upgraded serializer.

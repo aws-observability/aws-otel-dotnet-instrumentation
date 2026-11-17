@@ -4,8 +4,33 @@
 namespace AWS.Distro.OpenTelemetry.AutoInstrumentation.Tests;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Tests")]
+[Collection("AWS credential providers")]
 public class PluginUtilsTests
 {
+    [Theory]
+    [InlineData(null, "otlp", false, false)]
+    [InlineData(null, "otlp", true, true)]
+    [InlineData("otlp", "otlp", false, true)]
+    [InlineData("console, otlp", "otlp", false, true)]
+    [InlineData("console,otlp", "console", false, true)]
+    [InlineData("none", "otlp", true, false)]
+    [InlineData("OTLP", "otlp", false, false)]
+    [InlineData("otlpx", "otlp", false, false)]
+    public void TestIsExporterSelected(string? exporters, string exporterName, bool selectedWhenUnset, bool expected)
+    {
+        var original = Environment.GetEnvironmentVariable("OTEL_LOGS_EXPORTER");
+        try
+        {
+            Environment.SetEnvironmentVariable("OTEL_LOGS_EXPORTER", exporters);
+
+            Assert.Equal(expected, PluginUtils.IsExporterSelected(Plugin.OtlpSignal.Logs, exporterName, selectedWhenUnset));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_LOGS_EXPORTER", original);
+        }
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
