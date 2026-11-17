@@ -16,6 +16,7 @@ def update_file_dependencies(file_path, otel_dotnet_core_version):
         core_packages = [
             'OpenTelemetry',
             'OpenTelemetry.Api', 
+            'OpenTelemetry.Exporter.Console',
             'OpenTelemetry.Exporter.OpenTelemetryProtocol',
             'OpenTelemetry.Extensions.Propagators'
         ]
