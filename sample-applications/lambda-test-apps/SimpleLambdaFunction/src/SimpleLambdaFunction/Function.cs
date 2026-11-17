@@ -3,7 +3,6 @@ using Amazon.Lambda.APIGatewayEvents;
 using Amazon.S3;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry;
 using OpenTelemetry.Logs;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
@@ -15,13 +14,11 @@ public class Function
 {
     private static readonly HttpClient httpClient = new HttpClient();
     private static readonly AmazonS3Client s3Client = new AmazonS3Client();
-    private static readonly LogRecordProcessor logRecordProcessor = new LogRecordProcessor();
-    private static readonly ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-    {
-        builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
-        builder.Services.Configure<OpenTelemetryLoggerOptions>(options => options.AddProcessor(logRecordProcessor));
-    });
-    private static readonly ILogger<Function> logger = loggerFactory.CreateLogger<Function>();
+    // Keep the container so we can flush the logger provider added by auto-instrumentation.
+    private static readonly ServiceProvider loggingServices = new ServiceCollection()
+        .AddLogging(builder => builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug))
+        .BuildServiceProvider();
+    private static readonly ILogger<Function> logger = loggingServices.GetRequiredService<ILoggerFactory>().CreateLogger<Function>();
 
     /// <summary>
     /// This function handles API Gateway requests and returns results from an HTTP request and S3 call.
@@ -55,8 +52,10 @@ public class Function
         }
         finally
         {
-            // Export buffered logs before Lambda freezes the process after this invocation.
-            if (logRecordProcessor.ParentProvider is LoggerProvider provider && !provider.ForceFlush(5000))
+            // Temporary workaround: AWSLambdaWrapper only flushes traces before Lambda freezes.
+            // Remove when the upstream fix is available through auto-instrumentation:
+            // https://github.com/open-telemetry/opentelemetry-dotnet-contrib/issues/5404
+            if (loggingServices.GetService<LoggerProvider>() is { } provider && !provider.ForceFlush(5000))
             {
                 context.Logger.LogLine("OpenTelemetry log force flush failed or timed out.");
             }
@@ -71,9 +70,5 @@ public class Function
     {
         var response = await s3Client.ListBucketsAsync();
         return response.Buckets.Count;
-    }
-
-    private sealed class LogRecordProcessor : BaseProcessor<LogRecord>
-    {
     }
 }
