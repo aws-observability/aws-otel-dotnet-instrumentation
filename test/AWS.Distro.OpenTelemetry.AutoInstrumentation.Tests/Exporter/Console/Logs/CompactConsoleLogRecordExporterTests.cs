@@ -117,7 +117,11 @@ public class CompactConsoleLogRecordExporterTests
         var originalCulture = CultureInfo.CurrentCulture;
         try
         {
-            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            // A modified copy of the invariant culture, because CI runs in globalization-invariant mode,
+            // where named cultures such as de-DE can't be created.
+            var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            culture.DateTimeFormat.ShortDatePattern = "dd.MM.yyyy";
+            CultureInfo.CurrentCulture = culture;
 
             var record = Export(logger => logger.LogInformation(
                 "{Date}", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc))).Single();
