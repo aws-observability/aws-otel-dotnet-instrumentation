@@ -250,6 +250,20 @@ jobs:
       caller-workflow-name: 'main-build'
       adot-image-name: ${{ inputs.adot-linux-image-name }}-${{ needs.upload-main-build-image.outputs.short_sha }}
 
+  # Service Events EC2 cell. distro-source must be staging so the cell exercises the build staged by
+  # upload-main-build; the workflow's default is the latest release.
+  dotnet-ec2-service-events-test:
+    needs: [ upload-main-build ]
+    uses: aws-observability/aws-application-signals-test-framework/.github/workflows/dotnet-ec2-service-events-test.yml@main
+    secrets: inherit
+    with:
+      runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:large"]'
+      aws-region: us-east-1
+      caller-workflow-name: 'main-build'
+      distro-source: 'staging'
+      staging-distro-name: ${{ inputs.ec2-default-image-name }}
+      dotnet-version: '8.0'
+
   # Service Events EKS cell. adot-image-name is required for this to exercise the image staged by
   # upload-main-build-image; left empty, the operator's own default ADOT image is validated instead.
   #
@@ -346,7 +360,4 @@ jobs:
     uses: aws-observability/aws-application-signals-test-framework/.github/workflows/validate-e2e-tests-are-accounted-for.yml@main
     with:
       runs-on: '["codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}", "image:ubuntu-8.0", "instance-size:small"]'
-      # dotnet-ec2-service-events-test.yml is temporarily excluded: the test framework added this
-      # .NET EC2 service-events e2e test, but it is not yet wired into this workflow. Remove this
-      # exclusion once the corresponding job is added here.
-      exclusions: dotnet-ec2-nuget-test.yml,dotnet-ec2-service-events-test.yml
+      exclusions: dotnet-ec2-nuget-test.yml
