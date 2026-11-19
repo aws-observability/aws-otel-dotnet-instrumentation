@@ -11,6 +11,8 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+
+## v1.16.0 - 2026-11-19
 - **(Breaking Change)** In AWS Lambda, the compact JSON console log exporter is no longer added to every function,
   which printed `ILogger` logs twice. It now replaces the upstream console exporter when `OTEL_LOGS_EXPORTER`
   includes `console`. Functions whose `ILogger` logs reached stdout only through this distro (no logging provider
