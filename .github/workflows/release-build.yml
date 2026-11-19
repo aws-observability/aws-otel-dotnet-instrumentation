@@ -35,10 +35,7 @@ jobs:
   # so downstream jobs keep consuming them by name with no changes.
   download-artifacts:
     environment: Release
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     # This job selects another workflow run and downloads its artifacts cross-run; both the
     # workflow-run query and the cross-run artifact download require actions: read. Because the
     # workflow-level permissions block is declared, unlisted scopes default to none, so grant it
@@ -124,10 +121,7 @@ jobs:
   build-release-nuget:
     needs: download-artifacts
     environment: Release
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:windows-ec2-2022
-      - instance-size:large
+    runs-on: windows-2022
     env:
       # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
       # without them. Set through env because checkout runs before any setup step can.
@@ -227,7 +221,7 @@ jobs:
 
   release-image:
     needs: build-release-nuget
-    runs-on: ${{ fromJSON(format('["codebuild-adot-dotnet-runner-{0}-{1}", {2}]', github.run_id, github.run_attempt, startsWith(matrix.os, 'windows') && '"image:windows-ec2-2022", "instance-size:large"' || '"image:ubuntu-8.0", "instance-size:large"')) }}
+    runs-on: ${{ matrix.os }}
     env:
       # CodeBuild Windows images do not enable git long paths like GitHub's images do, and checkout fails
       # without them. Set through env because checkout runs before any setup step can.
@@ -328,10 +322,7 @@ jobs:
 
   release-multi-platform-image:
     needs: release-image
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials for private ECR
         uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838 #v5.0.0
@@ -372,10 +363,7 @@ jobs:
           docker manifest push ${{ env.RELEASE_PUBLIC_REPOSITORY }}:v$VERSION
 
   setup-regions-matrix:
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     needs: release-multi-platform-image
     outputs:
       aws_regions_json: ${{ steps.set-matrix.outputs.aws_regions_json }}
@@ -398,10 +386,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
 
   publish-layer-prod:
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     needs: setup-regions-matrix
     strategy:
       matrix:
@@ -505,10 +490,7 @@ jobs:
         run: |
           aws s3 rb --force s3://${{ env.BUCKET_NAME }}
   generate-lambda-release-note:
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     needs: publish-layer-prod
     outputs:
       layer-note: ${{ steps.layer-note.outputs.layer-note }}
@@ -575,10 +557,7 @@ jobs:
 
   publish-github:
     needs: generate-lambda-release-note
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Contrib Repo @ SHA - ${{ github.sha }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
@@ -733,10 +712,7 @@ jobs:
             --clobber
 
   sign-public-ecr-image:
-    runs-on:
-      - codebuild-adot-dotnet-runner-${{ github.run_id }}-${{ github.run_attempt }}
-      - image:ubuntu-8.0
-      - instance-size:large
+    runs-on: ubuntu-latest
     needs: publish-github
     steps:
       - name: Configure AWS Credentials for public ECR
