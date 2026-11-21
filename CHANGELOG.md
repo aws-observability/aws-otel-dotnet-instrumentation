@@ -11,6 +11,7 @@ For any change that affects end users of this package, please add an entry under
 If your change does not need a CHANGELOG entry, add the "skip changelog" label to your PR.
 
 ## Unreleased
+- Register otlp/sigv4 exporters for traces, metrics, and logs ([#497](https://github.com/aws-observability/aws-otel-dotnet-instrumentation/pull/497)).
 - **(Breaking Change)** In AWS Lambda, the compact JSON console log exporter is no longer added to every function,
   which printed `ILogger` logs twice. It now replaces the upstream console exporter when `OTEL_LOGS_EXPORTER`
   includes `console`. Functions whose `ILogger` logs reached stdout only through this distro (no logging provider

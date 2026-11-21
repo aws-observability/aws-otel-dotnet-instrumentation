@@ -23,12 +23,29 @@ public class PluginUtilsTests
         {
             Environment.SetEnvironmentVariable("OTEL_LOGS_EXPORTER", exporters);
 
-            Assert.Equal(expected, PluginUtils.IsExporterSelected(Plugin.OtlpSignal.Logs, exporterName, selectedWhenUnset));
+            Assert.Equal(expected, PluginUtils.IsExporterSelected(PluginUtils.OtlpSignal.Logs, exporterName, selectedWhenUnset));
         }
         finally
         {
             Environment.SetEnvironmentVariable("OTEL_LOGS_EXPORTER", original);
         }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" , , ")]
+    public void ParseOtelExporterEnvVariable_MissingSelectionReturnsEmptyList(string? exporters)
+    {
+        Assert.Empty(PluginUtils.ParseOtelExporterEnvVariable(exporters));
+    }
+
+    [Fact]
+    public void ParseOtelExporterEnvVariable_ReturnsExporterNames()
+    {
+        Assert.Equal(
+            new[] { "otlp/sigv4", "console", "otlp", "custom-exporter" },
+            PluginUtils.ParseOtelExporterEnvVariable(" otlp/sigv4 , console, , otlp , custom-exporter "));
     }
 
     [Theory]

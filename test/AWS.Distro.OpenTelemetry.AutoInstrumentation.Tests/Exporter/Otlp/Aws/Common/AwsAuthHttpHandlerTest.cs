@@ -137,7 +137,7 @@ public class AwsAuthHttpHandlerTest
             Protocol = OtlpExportProtocol.HttpProtobuf,
             TimeoutMilliseconds = timeoutMilliseconds,
         };
-        return OtlpAwsSpanExporter.Create(options, authenticator, () => transport);
+        return OtlpAwsSpanExporter.Create(options, "xray", "us-east-1", authenticator, () => transport);
     }
 
     private static Mock<IAwsAuthenticator> CreateAuthenticator(ImmutableCredentials credentials)

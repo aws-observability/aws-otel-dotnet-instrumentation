@@ -93,7 +93,7 @@ public class OtlpAwsMetricExporterTests : AbstractOtlpAwsExporterTest<OtlpAwsMet
         // Create the exporter after the test selects compression; reuse the same meter provider.
         if (this.provider == null)
         {
-            var exporter = OtlpAwsMetricExporter.Create(this.Options, this.Authenticator.Object, () => this.Transport);
+            var exporter = OtlpAwsMetricExporter.Create(this.Options, this.ServiceName, this.Region, this.Authenticator.Object, () => this.Transport);
             this.reader = new BaseExportingMetricReader(exporter)
             {
                 TemporalityPreference = MetricReaderTemporalityPreference.Delta,

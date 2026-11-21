@@ -9,6 +9,41 @@ namespace AWS.Distro.OpenTelemetry.AutoInstrumentation;
 internal static class PluginUtils
 {
     /// <summary>
+    /// The OTLP signals supported by exporter configuration.
+    /// </summary>
+    internal enum OtlpSignal
+    {
+        Traces,
+        Logs,
+        Metrics,
+    }
+
+    /// <summary>
+    /// Parses a comma-separated OpenTelemetry exporter selection.
+    /// </summary>
+    /// <param name="exporters">The value of an OTEL_*_EXPORTER environment variable.</param>
+    /// <returns>The trimmed exporter names, excluding empty entries.</returns>
+    internal static List<string> ParseOtelExporterEnvVariable(string? exporters)
+    {
+        var parsedExporters = new List<string>();
+        if (string.IsNullOrWhiteSpace(exporters))
+        {
+            return parsedExporters;
+        }
+
+        foreach (var exporter in exporters.Split(','))
+        {
+            var name = exporter.Trim();
+            if (name.Length > 0)
+            {
+                parsedExporters.Add(name);
+            }
+        }
+
+        return parsedExporters;
+    }
+
+    /// <summary>
     /// Parses comma-separated OTLP headers in key=value format.
     /// </summary>
     /// <remarks>
@@ -53,7 +88,7 @@ internal static class PluginUtils
     /// <param name="exporterName">The exporter name, such as otlp or console.</param>
     /// <param name="selectedWhenUnset">The result when the variable is unset.</param>
     /// <returns>Whether the exporter is selected.</returns>
-    internal static bool IsExporterSelected(Plugin.OtlpSignal signal, string exporterName, bool selectedWhenUnset = false)
+    internal static bool IsExporterSelected(OtlpSignal signal, string exporterName, bool selectedWhenUnset = false)
     {
         var exporters = Environment.GetEnvironmentVariable($"OTEL_{signal.ToString().ToUpperInvariant()}_EXPORTER");
         if (exporters == null)
